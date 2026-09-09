@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2B2A28">
+<title>Partezettel Archiv</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Partezettel">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Partezettel Archiv</h1>
+  <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Bereiche">
+  <button class="tab-btn is-active" data-tab="erfassen" role="tab" aria-selected="true">Neu erfassen</button>
+  <button class="tab-btn" data-tab="liste" role="tab" aria-selected="false">Personen</button>
+</nav>
+
+<main>
+
+  <!-- ===================== TAB: NEU ERFASSEN ===================== -->
+  <section id="tab-erfassen" class="tab-panel is-active">
+
+    <form id="person-form" autocomplete="off">
+
+      <fieldset class="field-group">
+        <legend>Person</legend>
+
+        <label class="field">
+          <span>Vorname *</span>
+          <input type="text" id="vorname" required>
+        </label>
+
+        <label class="field">
+          <span>Nachname *</span>
+          <input type="text" id="nachname" required>
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span>Geburtsdatum</span>
+            <input type="date" id="geburtsdatum">
+          </label>
+          <label class="field">
+            <span>Sterbedatum</span>
+            <input type="date" id="sterbedatum">
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Notiz</span>
+          <textarea id="notiz" rows="3" placeholder="z. B. Herkunft, besondere Erinnerungen, Kontext des Fundes …"></textarea>
+        </label>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Foto des Partezettels</legend>
+        <div class="capture-row">
+          <label class="btn btn--secondary capture-btn">
+            <span>📷 Foto aufnehmen</span>
+            <input type="file" id="foto-input" accept="image/*" capture="environment" hidden>
+          </label>
+          <span id="foto-status" class="capture-status">Kein Foto ausgewählt</span>
+        </div>
+        <img id="foto-preview" class="preview-img" hidden>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Sprachnotiz</legend>
+        <div class="capture-row">
+          <button type="button" id="audio-record-btn" class="btn btn--secondary">🎙️ Aufnahme starten</button>
+          <span id="audio-status" class="capture-status">Keine Aufnahme</span>
+        </div>
+        <audio id="audio-preview" controls hidden></audio>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Verwandtschaft / Beziehung (optional)</legend>
+        <label class="field">
+          <span>Verknüpfte Person</span>
+          <select id="beziehung-person">
+            <option value="">— keine —</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Beziehungstyp</span>
+          <input type="text" id="beziehung-typ" placeholder="z. B. Vater, Mutter, Pate, Geschwister …">
+        </label>
+      </fieldset>
+
+      <button type="submit" class="btn btn--primary btn--full">Speichern</button>
+      <p id="form-message" class="form-message" role="status"></p>
+    </form>
+
+  </section>
+
+  <!-- ===================== TAB: PERSONEN-LISTE ===================== -->
+  <section id="tab-liste" class="tab-panel">
+    <div class="list-toolbar">
+      <input type="search" id="search-input" placeholder="Person suchen …">
+      <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
+    </div>
+    <div id="pending-banner" class="pending-banner" hidden></div>
+    <ul id="personen-list" class="personen-list"></ul>
+    <p id="list-empty" class="list-empty" hidden>Noch keine Personen erfasst.</p>
+  </section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
