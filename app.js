@@ -164,26 +164,45 @@ function resetForm() {
   audioStatus.textContent = "Keine Aufnahme";
 }
 
+function mitTimeout(promise, ms, meldung) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(meldung)), ms)),
+  ]);
+}
+
 // ---------- Eintrag an Supabase senden ----------
 async function sendEintrag(eintrag) {
   try {
-    await ensureSession();
+    await mitTimeout(
+      ensureSession(),
+      15000,
+      "Zeitüberschreitung bei der Anmeldung (Netzwerk antwortet nicht)"
+    );
 
     // 1. Person anlegen
-    const { error: personError } = await sb.from("personen").insert({
-      id: eintrag.id,
-      vorname: eintrag.vorname,
-      nachname: eintrag.nachname,
-      geburtsdatum: eintrag.geburtsdatum,
-      sterbedatum: eintrag.sterbedatum,
-      notiz: eintrag.notiz,
-    });
+    const { error: personError } = await mitTimeout(
+      sb.from("personen").insert({
+        id: eintrag.id,
+        vorname: eintrag.vorname,
+        nachname: eintrag.nachname,
+        geburtsdatum: eintrag.geburtsdatum,
+        sterbedatum: eintrag.sterbedatum,
+        notiz: eintrag.notiz,
+      }),
+      15000,
+      "Zeitüberschreitung beim Speichern der Person (Netzwerk antwortet nicht)"
+    );
     if (personError) throw personError;
 
     // 2. Foto hochladen
     if (eintrag.foto) {
       const path = `${eintrag.id}/${Date.now()}.jpg`;
-      const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, eintrag.foto);
+      const { error: uploadError } = await mitTimeout(
+        sb.storage.from(BUCKET_FOTOS).upload(path, eintrag.foto),
+        20000,
+        "Zeitüberschreitung beim Foto-Upload (Netzwerk antwortet nicht)"
+      );
       if (uploadError) throw uploadError;
       await sb.from("fotos").insert({ person_id: eintrag.id, dateipfad: path });
     }
@@ -194,7 +213,11 @@ async function sendEintrag(eintrag) {
         : eintrag.audio.type && eintrag.audio.type.includes("ogg") ? "ogg"
         : "webm";
       const path = `${eintrag.id}/${Date.now()}.${ext}`;
-      const { error: uploadError } = await sb.storage.from(BUCKET_AUDIO).upload(path, eintrag.audio);
+      const { error: uploadError } = await mitTimeout(
+        sb.storage.from(BUCKET_AUDIO).upload(path, eintrag.audio),
+        20000,
+        "Zeitüberschreitung beim Audio-Upload (Netzwerk antwortet nicht)"
+      );
       if (uploadError) throw uploadError;
       await sb.from("sprachnotizen").insert({
         person_id: eintrag.id,
