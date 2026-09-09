@@ -11,7 +11,7 @@
 // nicht über Geheimhaltung dieser Werte.
 
 const SUPABASE_URL = "https://dqjuzgqigronucpanszn.supabase.co";
-const SUPABASE_ANON_KEY = "HIER_DEINEN_ANON_PUBLIC_KEY_EINFÜGEN";
+const SUPABASE_ANON_KEY = "sb_publishable_mY7pbflNLOpqesjsJwkKSg_vj-UYc4G";
 
 // Namen der Storage-Buckets (müssen exakt mit Supabase übereinstimmen)
 const BUCKET_FOTOS = "partezettel-fotos";
