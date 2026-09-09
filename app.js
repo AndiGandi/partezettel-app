@@ -56,15 +56,37 @@ const audioBtn = document.getElementById("audio-record-btn");
 const audioStatus = document.getElementById("audio-status");
 const audioPreview = document.getElementById("audio-preview");
 
+function pickAudioMimeType() {
+  const candidates = [
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+  ];
+  for (const type of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return ""; // Browser-Standard verwenden, falls keiner der obigen unterstützt wird
+}
+
+let currentAudioMimeType = "audio/webm";
+let currentAudioExt = "webm";
+
 audioBtn.addEventListener("click", async () => {
   if (!isRecording) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorder = new MediaRecorder(stream);
+      const chosenType = pickAudioMimeType();
+      mediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
       audioChunks = [];
       mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
       mediaRecorder.onstop = () => {
-        currentAudioBlob = new Blob(audioChunks, { type: "audio/webm" });
+        // tatsächlich verwendeten Typ nehmen, nicht den gewünschten – manche Browser weichen ab
+        currentAudioMimeType = mediaRecorder.mimeType || chosenType || "audio/webm";
+        currentAudioExt = currentAudioMimeType.includes("mp4") ? "m4a"
+          : currentAudioMimeType.includes("ogg") ? "ogg"
+          : "webm";
+        currentAudioBlob = new Blob(audioChunks, { type: currentAudioMimeType });
         const url = URL.createObjectURL(currentAudioBlob);
         audioPreview.src = url;
         audioPreview.hidden = false;
@@ -168,7 +190,10 @@ async function sendEintrag(eintrag) {
 
     // 3. Sprachnotiz hochladen
     if (eintrag.audio) {
-      const path = `${eintrag.id}/${Date.now()}.webm`;
+      const ext = eintrag.audio.type && eintrag.audio.type.includes("mp4") ? "m4a"
+        : eintrag.audio.type && eintrag.audio.type.includes("ogg") ? "ogg"
+        : "webm";
+      const path = `${eintrag.id}/${Date.now()}.${ext}`;
       const { error: uploadError } = await sb.storage.from(BUCKET_AUDIO).upload(path, eintrag.audio);
       if (uploadError) throw uploadError;
       await sb.from("sprachnotizen").insert({
