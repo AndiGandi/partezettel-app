@@ -138,13 +138,13 @@ form.addEventListener("submit", async (e) => {
   }
 
   if (navigator.onLine) {
-    const ok = await sendEintrag(eintrag);
-    if (ok) {
+    const result = await sendEintrag(eintrag);
+    if (result.ok) {
       formMessage.textContent = "Gespeichert ✓";
       resetForm();
     } else {
       await queueEintrag(eintrag);
-      formMessage.textContent = "Kein Upload möglich – in Warteschlange gespeichert, wird automatisch gesendet.";
+      formMessage.textContent = `Fehler: ${result.error} — In Warteschlange gespeichert, wird später erneut versucht.`;
       resetForm();
     }
   } else {
@@ -212,10 +212,11 @@ async function sendEintrag(eintrag) {
       });
     }
 
-    return true;
+    return { ok: true };
   } catch (err) {
     console.error("Senden fehlgeschlagen:", err);
-    return false;
+    const meldung = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";
+    return { ok: false, error: meldung };
   }
 }
 
@@ -275,8 +276,8 @@ async function flushQueue() {
   banner.textContent = `${queue.length} wartende Einträge werden gesendet …`;
 
   for (const eintrag of queue) {
-    const ok = await sendEintrag(eintrag);
-    if (ok) await removeFromQueue(eintrag.id);
+    const result = await sendEintrag(eintrag);
+    if (result.ok) await removeFromQueue(eintrag.id);
   }
 
   const remaining = await getQueue();
