@@ -38,18 +38,21 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
 
 // ---------- Foto-Aufnahme ----------
 const fotoInput = document.getElementById("foto-input");
+const fotoInputGalerie = document.getElementById("foto-input-galerie");
 const fotoStatus = document.getElementById("foto-status");
 const fotoPreview = document.getElementById("foto-preview");
 
-fotoInput.addEventListener("change", () => {
-  const file = fotoInput.files[0];
+function handleFotoAuswahl(file) {
   if (!file) return;
   currentFotoBlob = file;
-  fotoStatus.textContent = "Foto aufgenommen ✓";
+  fotoStatus.textContent = "Foto ausgewählt ✓";
   const url = URL.createObjectURL(file);
   fotoPreview.src = url;
   fotoPreview.hidden = false;
-});
+}
+
+fotoInput.addEventListener("change", () => handleFotoAuswahl(fotoInput.files[0]));
+fotoInputGalerie.addEventListener("change", () => handleFotoAuswahl(fotoInputGalerie.files[0]));
 
 // ---------- Sprachaufnahme (kein Zeitlimit) ----------
 const audioBtn = document.getElementById("audio-record-btn");
@@ -138,7 +141,7 @@ form.addEventListener("submit", async (e) => {
   }
 
   if (navigator.onLine) {
-    const result = await sendEintrag(eintrag);
+    const result = await sendEintrag(eintrag, (msg) => { formMessage.textContent = msg; });
     if (result.ok) {
       formMessage.textContent = "Gespeichert ✓";
       resetForm();
@@ -172,15 +175,17 @@ function mitTimeout(promise, ms, meldung) {
 }
 
 // ---------- Eintrag an Supabase senden ----------
-async function sendEintrag(eintrag) {
+async function sendEintrag(eintrag, onProgress) {
+  const step = (msg) => { if (onProgress) onProgress(msg); console.log("[Partezettel]", msg); };
   try {
+    step("Schritt 1/4: Anmelden …");
     await mitTimeout(
       ensureSession(),
       15000,
       "Zeitüberschreitung bei der Anmeldung (Netzwerk antwortet nicht)"
     );
 
-    // 1. Person anlegen
+    step("Schritt 2/4: Person speichern …");
     const { error: personError } = await mitTimeout(
       sb.from("personen").insert({
         id: eintrag.id,
@@ -197,6 +202,7 @@ async function sendEintrag(eintrag) {
 
     // 2. Foto hochladen
     if (eintrag.foto) {
+      step("Schritt 3/4: Foto hochladen …");
       const path = `${eintrag.id}/${Date.now()}.jpg`;
       const { error: uploadError } = await mitTimeout(
         sb.storage.from(BUCKET_FOTOS).upload(path, eintrag.foto),
@@ -209,6 +215,7 @@ async function sendEintrag(eintrag) {
 
     // 3. Sprachnotiz hochladen
     if (eintrag.audio) {
+      step("Schritt 4/4: Sprachnotiz hochladen …");
       const ext = eintrag.audio.type && eintrag.audio.type.includes("mp4") ? "m4a"
         : eintrag.audio.type && eintrag.audio.type.includes("ogg") ? "ogg"
         : "webm";
