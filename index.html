@@ -68,6 +68,12 @@
             <span>📷 Foto aufnehmen</span>
             <input type="file" id="foto-input" accept="image/*" capture="environment" hidden>
           </label>
+          <label class="btn btn--secondary capture-btn">
+            <span>🖼️ Aus Fotos wählen</span>
+            <input type="file" id="foto-input-galerie" accept="image/*" hidden>
+          </label>
+        </div>
+        <div class="capture-row">
           <span id="foto-status" class="capture-status">Kein Foto ausgewählt</span>
         </div>
         <img id="foto-preview" class="preview-img" hidden>
@@ -99,6 +105,12 @@
       <button type="submit" class="btn btn--primary btn--full">Speichern</button>
       <p id="form-message" class="form-message" role="status"></p>
     </form>
+
+    <details class="debug-panel">
+      <summary>Technisches Protokoll (bei Problemen hier nachschauen)</summary>
+      <pre id="debug-log"></pre>
+      <button type="button" id="debug-clear" class="btn btn--ghost">Protokoll leeren</button>
+    </details>
 
   </section>
 

@@ -2,7 +2,37 @@
 // Partezettel Archiv – App-Logik
 // ==========================================================
 
+// ---------- Sichtbares Debug-Log (funktioniert ohne Mac/Web-Inspector) ----------
+function debugLog(msg) {
+  const el = document.getElementById("debug-log");
+  const zeit = new Date().toLocaleTimeString("de-DE");
+  console.log("[Partezettel]", msg);
+  if (el) {
+    el.textContent += `[${zeit}] ${msg}\n`;
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+window.addEventListener("error", (e) => {
+  debugLog(`❌ JS-FEHLER: ${e.message} (${e.filename}:${e.lineno})`);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  debugLog(`❌ UNBEHANDELTER FEHLER: ${e.reason && e.reason.message ? e.reason.message : e.reason}`);
+});
+
+debugLog("App-Skript gestartet.");
+
+document.addEventListener("DOMContentLoaded", () => {
+  const clearBtn = document.getElementById("debug-clear");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      document.getElementById("debug-log").textContent = "";
+    });
+  }
+});
+
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+debugLog("Supabase-Client initialisiert.");
 
 let currentFotoBlob = null;
 let currentAudioBlob = null;
@@ -119,6 +149,7 @@ const formMessage = document.getElementById("form-message");
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  debugLog("Formular abgeschickt – Verarbeitung startet.");
   formMessage.textContent = "Speichere …";
 
   const eintrag = {
@@ -176,7 +207,7 @@ function mitTimeout(promise, ms, meldung) {
 
 // ---------- Eintrag an Supabase senden ----------
 async function sendEintrag(eintrag, onProgress) {
-  const step = (msg) => { if (onProgress) onProgress(msg); console.log("[Partezettel]", msg); };
+  const step = (msg) => { if (onProgress) onProgress(msg); debugLog(msg); };
   try {
     step("Schritt 1/4: Anmelden …");
     await mitTimeout(
@@ -246,6 +277,7 @@ async function sendEintrag(eintrag, onProgress) {
   } catch (err) {
     console.error("Senden fehlgeschlagen:", err);
     const meldung = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";
+    debugLog(`❌ Fehler: ${meldung}`);
     return { ok: false, error: meldung };
   }
 }
