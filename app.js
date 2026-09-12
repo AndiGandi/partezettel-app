@@ -33,6 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 debugLog("Supabase-Client initialisiert.");
+debugLog(`Anon-Key: ${SUPABASE_ANON_KEY.slice(0, 12)}…${SUPABASE_ANON_KEY.slice(-6)} (Länge: ${SUPABASE_ANON_KEY.length} Zeichen)`);
 
 let currentFotoBlob = null;
 let currentAudioBlob = null;
@@ -44,10 +45,11 @@ let personenCache = []; // {id, vorname, nachname, ...}
 
 // ---------- Anonyme Anmeldung sicherstellen ----------
 async function ensureSession() {
-  const { data: { session } } = await sb.auth.getSession();
+  const { data: { session }, error: getSessionError } = await sb.auth.getSession();
+  if (getSessionError) throw getSessionError;
   if (!session) {
     const { error } = await sb.auth.signInAnonymously();
-    if (error) console.error("Anonyme Anmeldung fehlgeschlagen:", error.message);
+    if (error) throw error; // vorher wurde das hier nur geloggt und ignoriert
   }
 }
 
@@ -224,7 +226,7 @@ async function sendEintrag(eintrag, onProgress) {
         nachname: eintrag.nachname,
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
-        notiz: eintrag.notiz,
+        Notiz: eintrag.notiz,
       }),
       15000,
       "Zeitüberschreitung beim Speichern der Person (Netzwerk antwortet nicht)"
@@ -241,7 +243,7 @@ async function sendEintrag(eintrag, onProgress) {
         "Zeitüberschreitung beim Foto-Upload (Netzwerk antwortet nicht)"
       );
       if (uploadError) throw uploadError;
-      await sb.from("fotos").insert({ person_id: eintrag.id, dateipfad: path });
+      await sb.from("fotos").insert({ personen_id: eintrag.id, dateipfad: path });
     }
 
     // 3. Sprachnotiz hochladen
@@ -266,9 +268,9 @@ async function sendEintrag(eintrag, onProgress) {
 
     // 4. Beziehung anlegen
     if (eintrag.beziehung_person_id && eintrag.beziehung_typ) {
-      await sb.from("beziehungen").insert({
-        person_a_id: eintrag.id,
-        person_b_id: eintrag.beziehung_person_id,
+      await sb.from("beziehung").insert({
+        personen_a_id: eintrag.id,
+        personen_b_id: eintrag.beziehung_person_id,
         beziehungstyp: eintrag.beziehung_typ,
       });
     }
@@ -359,7 +361,7 @@ async function loadPersonen() {
   const empty = document.getElementById("list-empty");
   const { data, error } = await sb
     .from("personen")
-    .select("id, vorname, nachname, geburtsdatum, sterbedatum, notiz")
+    .select("id, vorname, nachname, geburtsdatum, sterbedatum, Notiz")
     .order("nachname", { ascending: true });
 
   if (error) {
@@ -384,7 +386,7 @@ function renderPersonenList(personen) {
     li.innerHTML = `
       <div class="person-card__name">${p.vorname} ${p.nachname}</div>
       ${jahre ? `<div class="person-card__years">${jahre}</div>` : ""}
-      ${p.notiz ? `<div class="person-card__note">${p.notiz}</div>` : ""}
+      ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
     `;
     list.appendChild(li);
   });

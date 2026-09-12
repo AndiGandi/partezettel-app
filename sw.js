@@ -1,4 +1,4 @@
-const CACHE_NAME = "partezettel-shell-v9";
+const CACHE_NAME = "partezettel-shell-v11";
 const SHELL_FILES = [
   "./index.html",
   "./style.css",
@@ -23,12 +23,20 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-// App-Hülle aus Cache, alles andere (Supabase-API) normal übers Netz
+// Network-First: Immer zuerst versuchen, die aktuelle Version aus dem Netz zu holen.
+// Nur wenn gar keine Verbindung besteht, wird auf den Cache zurückgegriffen.
+// So wirken Code-Änderungen sofort, ohne dass Nutzer manuell den Cache löschen müssen.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request).then((cached) => cached || fetch(event.request))
+      fetch(event.request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
     );
   }
 });
