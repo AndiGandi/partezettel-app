@@ -62,11 +62,19 @@
         <div class="field-row">
           <label class="field">
             <span>Geburtsdatum</span>
-            <input type="date" id="geburtsdatum">
+            <div class="date-parts">
+              <select id="geburtsdatum-tag"><option value="">Tag</option></select>
+              <select id="geburtsdatum-monat"><option value="">Monat</option></select>
+              <select id="geburtsdatum-jahr"><option value="">Jahr</option></select>
+            </div>
           </label>
           <label class="field">
             <span>Sterbedatum</span>
-            <input type="date" id="sterbedatum">
+            <div class="date-parts">
+              <select id="sterbedatum-tag"><option value="">Tag</option></select>
+              <select id="sterbedatum-monat"><option value="">Monat</option></select>
+              <select id="sterbedatum-jahr"><option value="">Jahr</option></select>
+            </div>
           </label>
         </div>
 
@@ -198,6 +206,7 @@
         <legend>Person</legend>
         <label class="field"><span>Vorname *</span><input type="text" id="d-vorname"></label>
         <label class="field"><span>Nachname *</span><input type="text" id="d-nachname"></label>
+        <label class="field"><span>Ledigenname</span><input type="text" id="d-ledigenname"></label>
         <label class="field"><span>Geschlecht</span>
           <select id="d-geschlecht">
             <option value="">— unbekannt —</option>
@@ -205,13 +214,19 @@
             <option value="weiblich">weiblich</option>
           </select>
         </label>
-        <label class="field"><span>Ledigenname</span><input type="text" id="d-ledigenname"></label>
         <div class="field-row">
-          <label class="field"><span>Geburtsdatum</span><input type="date" id="d-geburtsdatum"></label>
-          <label class="field"><span>Sterbedatum</span><input type="date" id="d-sterbedatum"></label>
+          <label class="field"><span>Geburtsdatum</span><div class="date-parts">
+            <select id="d-geburtsdatum-tag"><option value="">Tag</option></select>
+            <select id="d-geburtsdatum-monat"><option value="">Monat</option></select>
+            <select id="d-geburtsdatum-jahr"><option value="">Jahr</option></select>
+          </div></label>
+          <label class="field"><span>Sterbedatum</span><div class="date-parts">
+            <select id="d-sterbedatum-tag"><option value="">Tag</option></select>
+            <select id="d-sterbedatum-monat"><option value="">Monat</option></select>
+            <select id="d-sterbedatum-jahr"><option value="">Jahr</option></select>
+          </div></label>
         </div>
         <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
-        <button type="button" id="d-save-person-btn" class="btn btn--primary btn--full">Änderungen speichern</button>
         <p id="d-person-message" class="form-message"></p>
       </fieldset>
 
@@ -282,8 +297,26 @@
         <p id="d-beziehung-message" class="form-message"></p>
       </fieldset>
 
+      <button type="button" id="d-save-person-btn" class="btn btn--primary btn--full" style="margin-top:1rem;">Änderungen speichern</button>
+      <p id="d-save-bottom-message" class="form-message"></p>
       <button type="button" id="d-delete-person-btn" class="btn btn--full detail-delete-btn">Person vollständig löschen</button>
       <p id="d-delete-message" class="form-message"></p>
+    </div>
+  </div>
+</div>
+
+<div id="photo-editor" class="photo-editor" hidden>
+  <div class="photo-editor__sheet">
+    <h2>Foto anpassen</h2>
+    <div class="photo-editor__canvas-wrap"><canvas id="photo-editor-canvas"></canvas></div>
+    <div class="capture-row">
+      <button type="button" id="photo-rotate-left" class="btn btn--secondary">↶ Drehen</button>
+      <button type="button" id="photo-rotate-right" class="btn btn--secondary">↷ Drehen</button>
+      <button type="button" id="photo-reset" class="btn btn--ghost">Zurücksetzen</button>
+    </div>
+    <div class="capture-row">
+      <button type="button" id="photo-cancel" class="btn btn--ghost">Abbrechen</button>
+      <button type="button" id="photo-apply" class="btn btn--primary">Übernehmen</button>
     </div>
   </div>
 </div>

@@ -68,24 +68,153 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
   });
 });
 
-// ---------- Foto-Aufnahme ----------
+// ---------- Foto-Aufnahme + Bearbeitung ----------
 const fotoInput = document.getElementById("foto-input");
 const fotoInputGalerie = document.getElementById("foto-input-galerie");
 const fotoStatus = document.getElementById("foto-status");
 const fotoPreview = document.getElementById("foto-preview");
 
-function handleFotoAuswahl(files) {
+let fotoEditorQueue = [];
+let fotoEditorResolve = null;
+let fotoEditorImage = null;
+let fotoEditorRotation = 0;
+let fotoEditorCrop = { x: 0, y: 0, w: 1, h: 1 };
+let fotoEditorDragging = false;
+let fotoEditorDragStart = null;
+
+const photoEditor = document.getElementById("photo-editor");
+const photoCanvas = document.getElementById("photo-editor-canvas");
+const photoCtx = photoCanvas.getContext("2d");
+
+function bildZuDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function drawPhotoEditor() {
+  if (!fotoEditorImage) return;
+  const img = fotoEditorImage;
+  const maxW = 1000;
+  const scale = Math.min(1, maxW / img.naturalWidth);
+  const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+  const rotated = Math.abs(fotoEditorRotation % 180) === 90;
+  photoCanvas.width = rotated ? h : w;
+  photoCanvas.height = rotated ? w : h;
+  photoCtx.save();
+  photoCtx.translate(photoCanvas.width / 2, photoCanvas.height / 2);
+  photoCtx.rotate(fotoEditorRotation * Math.PI / 180);
+  photoCtx.drawImage(img, -w / 2, -h / 2, w, h);
+  photoCtx.restore();
+  const cw = photoCanvas.width * fotoEditorCrop.w, ch = photoCanvas.height * fotoEditorCrop.h;
+  const cx = photoCanvas.width * fotoEditorCrop.x, cy = photoCanvas.height * fotoEditorCrop.y;
+  photoCtx.save();
+  photoCtx.fillStyle = "rgba(0,0,0,.48)";
+  photoCtx.fillRect(0,0,photoCanvas.width,photoCanvas.height);
+  photoCtx.globalCompositeOperation = "destination-out";
+  photoCtx.fillRect(cx,cy,cw,ch);
+  photoCtx.globalCompositeOperation = "source-over";
+  photoCtx.strokeStyle = "white";
+  photoCtx.lineWidth = Math.max(2, photoCanvas.width/300);
+  photoCtx.strokeRect(cx,cy,cw,ch);
+  photoCtx.restore();
+}
+
+function openPhotoEditor(file) {
+  return new Promise(async resolve => {
+    fotoEditorResolve = resolve;
+    fotoEditorRotation = 0;
+    fotoEditorCrop = { x: .05, y: .05, w: .9, h: .9 };
+    fotoEditorImage = await loadImage(await bildZuDataURL(file));
+    photoEditor.hidden = false;
+    drawPhotoEditor();
+  });
+}
+
+function closePhotoEditor(result) {
+  photoEditor.hidden = true;
+  const resolve = fotoEditorResolve;
+  fotoEditorResolve = null;
+  fotoEditorImage = null;
+  if (resolve) resolve(result);
+}
+
+function exportEditedPhoto() {
+  if (!fotoEditorImage) return null;
+  const src = photoCanvas;
+  const x = Math.round(src.width * fotoEditorCrop.x), y = Math.round(src.height * fotoEditorCrop.y);
+  const w = Math.round(src.width * fotoEditorCrop.w), h = Math.round(src.height * fotoEditorCrop.h);
+  const out = document.createElement("canvas");
+  out.width = w; out.height = h;
+  const ctx = out.getContext("2d");
+  const img = fotoEditorImage;
+  const maxW = 1000, scale = Math.min(1, maxW / img.naturalWidth);
+  const iw = Math.round(img.naturalWidth*scale), ih=Math.round(img.naturalHeight*scale);
+  ctx.save();
+  ctx.translate(-x,-y);
+  ctx.translate(photoCanvas.width/2, photoCanvas.height/2);
+  ctx.rotate(fotoEditorRotation*Math.PI/180);
+  ctx.drawImage(img,-iw/2,-ih/2,iw,ih);
+  ctx.restore();
+  return new Promise(resolve => out.toBlob(blob => resolve(new File([blob], "partezettel.jpg", {type:"image/jpeg"})), "image/jpeg", .92));
+}
+
+async function bearbeiteFotos(files) {
+  const result = [];
+  for (const file of Array.from(files || [])) {
+    const edited = await openPhotoEditor(file);
+    if (edited) result.push(edited);
+  }
+  return result;
+}
+
+async function handleFotoAuswahl(files) {
   const auswahl = Array.from(files || []).filter(Boolean);
   if (!auswahl.length) return;
-  currentFotoBlobs = auswahl;
-  fotoStatus.textContent = auswahl.length === 1 ? "1 Foto ausgewählt ✓" : `${auswahl.length} Fotos ausgewählt ✓`;
-  const url = URL.createObjectURL(auswahl[0]);
+  const bearbeitet = await bearbeiteFotos(auswahl);
+  if (!bearbeitet.length) return;
+  currentFotoBlobs.push(...bearbeitet);
+  fotoStatus.textContent = currentFotoBlobs.length === 1 ? "1 Foto ausgewählt ✓" : `${currentFotoBlobs.length} Fotos ausgewählt ✓`;
+  const url = URL.createObjectURL(currentFotoBlobs[0]);
   fotoPreview.src = url;
   fotoPreview.hidden = false;
 }
 
-fotoInput.addEventListener("change", () => handleFotoAuswahl(fotoInput.files));
-fotoInputGalerie.addEventListener("change", () => handleFotoAuswahl(fotoInputGalerie.files));
+fotoInput.addEventListener("change", () => { handleFotoAuswahl(fotoInput.files); fotoInput.value = ""; });
+fotoInputGalerie.addEventListener("change", () => { handleFotoAuswahl(fotoInputGalerie.files); fotoInputGalerie.value = ""; });
+
+document.getElementById("photo-rotate-left").addEventListener("click", () => { fotoEditorRotation -= 90; drawPhotoEditor(); });
+document.getElementById("photo-rotate-right").addEventListener("click", () => { fotoEditorRotation += 90; drawPhotoEditor(); });
+document.getElementById("photo-reset").addEventListener("click", () => { fotoEditorRotation=0; fotoEditorCrop={x:.05,y:.05,w:.9,h:.9}; drawPhotoEditor(); });
+document.getElementById("photo-cancel").addEventListener("click", () => closePhotoEditor(null));
+document.getElementById("photo-apply").addEventListener("click", async () => closePhotoEditor(await exportEditedPhoto()));
+
+photoCanvas.addEventListener("pointerdown", e => {
+  fotoEditorDragging = true;
+  photoCanvas.setPointerCapture(e.pointerId);
+  fotoEditorDragStart = {x:e.offsetX,y:e.offsetY,cx:fotoEditorCrop.x,cy:fotoEditorCrop.y};
+});
+photoCanvas.addEventListener("pointermove", e => {
+  if (!fotoEditorDragging) return;
+  const dx=(e.offsetX-fotoEditorDragStart.x)/photoCanvas.width, dy=(e.offsetY-fotoEditorDragStart.y)/photoCanvas.height;
+  fotoEditorCrop.x=Math.max(0,Math.min(1-fotoEditorCrop.w,fotoEditorDragStart.cx+dx));
+  fotoEditorCrop.y=Math.max(0,Math.min(1-fotoEditorCrop.h,fotoEditorDragStart.cy+dy));
+  drawPhotoEditor();
+});
+photoCanvas.addEventListener("pointerup",()=>fotoEditorDragging=false);
+photoCanvas.addEventListener("pointercancel",()=>fotoEditorDragging=false);
 
 // ---------- Sprachaufnahme (kein Zeitlimit) ----------
 const audioBtn = document.getElementById("audio-record-btn");
@@ -146,6 +275,27 @@ audioBtn.addEventListener("click", async () => {
   }
 });
 
+// ---------- Datumsauswahl ----------
+const MONATE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+function initDatum(prefix) {
+  const tag=document.getElementById(prefix+"-tag"), monat=document.getElementById(prefix+"-monat"), jahr=document.getElementById(prefix+"-jahr");
+  if (!tag) return;
+  for(let i=1;i<=31;i++) tag.insertAdjacentHTML("beforeend",`<option value="${String(i).padStart(2,"0")}">${i}</option>`);
+  MONATE.forEach((m,i)=>monat.insertAdjacentHTML("beforeend",`<option value="${String(i+1).padStart(2,"0")}">${m}</option>`));
+  for(let y=new Date().getFullYear();y>=1600;y--) jahr.insertAdjacentHTML("beforeend",`<option value="${y}">${y}</option>`);
+}
+function getDatum(prefix) {
+  const t=document.getElementById(prefix+"-tag")?.value, m=document.getElementById(prefix+"-monat")?.value, y=document.getElementById(prefix+"-jahr")?.value;
+  return t&&m&&y ? `${y}-${m}-${t}` : null;
+}
+function setDatum(prefix, value) {
+  const t=document.getElementById(prefix+"-tag"),m=document.getElementById(prefix+"-monat"),y=document.getElementById(prefix+"-jahr");
+  if(!t||!m||!y) return;
+  if(!value){t.value="";m.value="";y.value="";return;}
+  const [yy,mm,dd]=String(value).slice(0,10).split("-"); y.value=yy||""; m.value=mm||""; t.value=dd||"";
+}
+["geburtsdatum","sterbedatum","d-geburtsdatum","d-sterbedatum"].forEach(initDatum);
+
 // ---------- Formular absenden ----------
 const form = document.getElementById("person-form");
 const formMessage = document.getElementById("form-message");
@@ -161,8 +311,8 @@ form.addEventListener("submit", async (e) => {
     nachname: document.getElementById("nachname").value.trim(),
     geschlecht: document.getElementById("geschlecht").value || null,
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
-    geburtsdatum: document.getElementById("geburtsdatum").value || null,
-    sterbedatum: document.getElementById("sterbedatum").value || null,
+    geburtsdatum: getDatum("geburtsdatum"),
+    sterbedatum: getDatum("sterbedatum"),
     notiz: document.getElementById("notiz").value.trim() || null,
     beziehung_person_id: document.getElementById("beziehung-person").value || null,
     beziehung_typ: document.getElementById("beziehung-typ").value.trim() || null,
@@ -195,6 +345,7 @@ form.addEventListener("submit", async (e) => {
 
 function resetForm() {
   form.reset();
+  ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
   document.getElementById("ledigenname").value = "";
   currentFotoBlobs = [];
   currentAudioBlob = null;
@@ -460,8 +611,8 @@ async function openPersonDetail(personId) {
   document.getElementById("d-nachname").value = person.nachname || "";
   document.getElementById("d-geschlecht").value = person.geschlecht || "";
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
-  document.getElementById("d-geburtsdatum").value = person.geburtsdatum || "";
-  document.getElementById("d-sterbedatum").value = person.sterbedatum || "";
+  setDatum("d-geburtsdatum", person.geburtsdatum);
+  setDatum("d-sterbedatum", person.sterbedatum);
   document.getElementById("d-notiz").value = person.Notiz || "";
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
@@ -497,8 +648,8 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     nachname,
     geschlecht: document.getElementById("d-geschlecht").value || null,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
-    geburtsdatum: document.getElementById("d-geburtsdatum").value || null,
-    sterbedatum: document.getElementById("d-sterbedatum").value || null,
+    geburtsdatum: getDatum("d-geburtsdatum"),
+    sterbedatum: getDatum("d-sterbedatum"),
     Notiz: document.getElementById("d-notiz").value.trim() || null,
   }).eq("id", currentDetailPersonId);
   msg.textContent = error ? `Fehler: ${error.message}` : "Gespeichert ✓";
