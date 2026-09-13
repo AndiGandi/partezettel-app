@@ -157,7 +157,7 @@ function openPhotoEditor(file) {
   return new Promise(async resolve => {
     fotoEditorResolve = resolve;
     fotoEditorRotation = 0;
-    fotoEditorCrop = { x: .04, y: .04, w: .92, h: .92 };
+    fotoEditorCrop = { x: 0, y: 0, w: 1, h: 1 };
     fotoEditorImage = await loadImage(await bildZuDataURL(file));
     photoEditor.hidden = false;
     drawPhotoEditor();
@@ -200,7 +200,6 @@ async function handleFotoAuswahl(files) {
   const bearbeitet = await bearbeiteFotos(auswahl);
   if (!bearbeitet.length) return;
   currentFotoBlobs.push(...bearbeitet);
-  if (fotoWeiterBtn) fotoWeiterBtn.style.display = "inline-flex";
   fotoStatus.textContent = currentFotoBlobs.length === 1 ? "1 Foto ausgewählt ✓" : `${currentFotoBlobs.length} Fotos ausgewählt ✓`;
   const url = URL.createObjectURL(currentFotoBlobs[0]);
   fotoPreview.src = url;
@@ -214,7 +213,7 @@ fotoInputGalerie.addEventListener("change", async () => { await handleFotoAuswah
 
 document.getElementById("photo-rotate-left").addEventListener("click", () => { fotoEditorRotation -= 90; drawPhotoEditor(); });
 document.getElementById("photo-rotate-right").addEventListener("click", () => { fotoEditorRotation += 90; drawPhotoEditor(); });
-document.getElementById("photo-reset").addEventListener("click", () => { fotoEditorRotation=0; fotoEditorCrop={x:.04,y:.04,w:.92,h:.92}; drawPhotoEditor(); });
+document.getElementById("photo-reset").addEventListener("click", () => { fotoEditorRotation=0; fotoEditorCrop={x:0,y:0,w:1,h:1}; drawPhotoEditor(); });
 document.getElementById("photo-cancel").addEventListener("click", () => closePhotoEditor(null));
 document.getElementById("photo-apply").addEventListener("click", async () => closePhotoEditor(await exportEditedPhoto()));
 
@@ -225,40 +224,57 @@ function clampCrop() {
   fotoEditorCrop.y = Math.max(0, Math.min(1 - fotoEditorCrop.h, fotoEditorCrop.y));
 }
 
+function photoCanvasPoint(e) {
+  const rect = photoCanvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)),
+    y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
+  };
+}
+
 photoCanvas.addEventListener("pointerdown", e => {
   if (!fotoEditorImage) return;
-  const px=e.offsetX/photoCanvas.width, py=e.offsetY/photoCanvas.height;
-  const c=fotoEditorCrop;
-  const edge=.035;
-  const nearL=Math.abs(px-c.x)<edge, nearR=Math.abs(px-(c.x+c.w))<edge;
-  const nearT=Math.abs(py-c.y)<edge, nearB=Math.abs(py-(c.y+c.h))<edge;
-  const nearCorner=(nearL||nearR)&&(nearT||nearB);
-  const inside=px>=c.x&&px<=c.x+c.w&&py>=c.y&&py<=c.y+c.h;
-  fotoEditorDragging = nearCorner || inside;
+  const p = photoCanvasPoint(e);
+  const c = fotoEditorCrop;
+  const edge = Math.max(0.025, 18 / Math.max(photoCanvas.width, photoCanvas.height));
+  const nearL = Math.abs(p.x - c.x) < edge;
+  const nearR = Math.abs(p.x - (c.x + c.w)) < edge;
+  const nearT = Math.abs(p.y - c.y) < edge;
+  const nearB = Math.abs(p.y - (c.y + c.h)) < edge;
+  const nearCorner = (nearL || nearR) && (nearT || nearB);
+  const inside = p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;
+  if (!nearCorner && !inside) return;
+  fotoEditorDragging = true;
   fotoEditorResize = nearCorner;
   fotoEditorResizeX = nearR ? 1 : (nearL ? -1 : 0);
   fotoEditorResizeY = nearB ? 1 : (nearT ? -1 : 0);
-  if (!fotoEditorDragging) return;
-  photoCanvas.setPointerCapture(e.pointerId);
-  fotoEditorDragStart = {x:px,y:py,cx:c.x,cy:c.y,cw:c.w,ch:c.h};
+  photoCanvas.setPointerCapture?.(e.pointerId);
+  fotoEditorDragStart = { x:p.x, y:p.y, cx:c.x, cy:c.y, cw:c.w, ch:c.h };
+  e.preventDefault();
 });
+
 photoCanvas.addEventListener("pointermove", e => {
   if (!fotoEditorDragging) return;
-  const dx=e.offsetX/photoCanvas.width-fotoEditorDragStart.x;
-  const dy=e.offsetY/photoCanvas.height-fotoEditorDragStart.y;
-  const s=fotoEditorDragStart;
+  const p = photoCanvasPoint(e);
+  const dx = p.x - fotoEditorDragStart.x;
+  const dy = p.y - fotoEditorDragStart.y;
+  const s = fotoEditorDragStart;
   if (fotoEditorResize) {
     let nx=s.cx, ny=s.cy, nw=s.cw, nh=s.ch;
-    if (fotoEditorResizeX>0) nw=s.cw+dx;
-    if (fotoEditorResizeX<0) { nx=s.cx+dx; nw=s.cw-dx; }
-    if (fotoEditorResizeY>0) nh=s.ch+dy;
-    if (fotoEditorResizeY<0) { ny=s.cy+dy; nh=s.ch-dy; }
+    if (fotoEditorResizeX > 0) nw=s.cw+dx;
+    if (fotoEditorResizeX < 0) { nx=s.cx+dx; nw=s.cw-dx; }
+    if (fotoEditorResizeY > 0) nh=s.ch+dy;
+    if (fotoEditorResizeY < 0) { ny=s.cy+dy; nh=s.ch-dy; }
     fotoEditorCrop={x:nx,y:ny,w:nw,h:nh};
   } else {
-    fotoEditorCrop.x=s.cx+dx; fotoEditorCrop.y=s.cy+dy;
+    fotoEditorCrop.x=s.cx+dx;
+    fotoEditorCrop.y=s.cy+dy;
   }
-  clampCrop(); drawPhotoEditor();
+  clampCrop();
+  drawPhotoEditor();
+  e.preventDefault();
 });
+
 photoCanvas.addEventListener("pointerup", () => { fotoEditorDragging=false; fotoEditorResize=false; });
 photoCanvas.addEventListener("pointercancel", () => { fotoEditorDragging=false; fotoEditorResize=false; });
 
@@ -341,7 +357,6 @@ function resetForm() {
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
   document.getElementById("ledigenname").value = "";
   currentFotoBlobs = [];
-  if (fotoWeiterBtn) fotoWeiterBtn.style.display = "none";
   currentAudioBlob = null;
   fotoPreview.hidden = true;
   fotoStatus.textContent = "Kein Foto ausgewählt";
@@ -573,9 +588,16 @@ document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
 
 // ---------- Init ----------
 (async function init() {
-  await ensureSession();
-  await flushQueue();
-  await loadPersonen();
+  try {
+    await ensureSession();
+    await flushQueue();
+    await loadPersonen();
+  } catch (err) {
+    const msg = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";
+    debugLog(`❌ Initialisierung fehlgeschlagen: ${msg}`);
+    const banner = document.getElementById("pending-banner");
+    if (banner) { banner.hidden = false; banner.textContent = `Fehler beim Laden: ${msg}`; }
+  }
 
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch((e) => console.error("SW-Fehler:", e));
