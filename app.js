@@ -623,7 +623,7 @@ async function loadPersonen() {
   const empty = document.getElementById("list-empty");
   const { data, error } = await sb
     .from("personen")
-    .select("id, vorname, nachname, geburtsdatum, sterbedatum, Notiz")
+    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, sterbedatum, Notiz")
     .order("nachname", { ascending: true });
 
   if (error) {
@@ -710,13 +710,12 @@ async function openPersonDetail(personId) {
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
   document.getElementById("d-audio-message").textContent = "";
-  document.getElementById("d-beziehung-message").textContent = "";
+  document.getElementById("d-familie-message").textContent = "";
   document.getElementById("d-delete-message").textContent = "";
 
   await loadDetailFotos(personId);
   await loadDetailAudio(personId);
-  await loadDetailBeziehungen(personId);
-  fillDetailBeziehungSelect(personId);
+  await loadDetailFamilie(personId);
 
   detailOverlay.hidden = false;
 }
@@ -856,10 +855,120 @@ document.getElementById("d-audio-record-btn").addEventListener("click", async ()
   }
 });
 
-// ---- Beziehungen im Detail ----
-function fillDetailBeziehungSelect(excludePersonId) {
-  const select = document.getElementById("d-beziehung-person");
-  select.innerHTML = '<option value="">— wählen —</option>';
+// ---- Familie im Detail ----
+function personNameById(id) {
+  const p = personenCache.find((x) => x.id === id);
+  return p ? `${p.vorname} ${p.nachname}` : "(unbekannte Person)";
+}
+
+function familiePartnerIds(familie, personId) {
+  return [familie.partner_a_id, familie.partner_b_id].filter((id) => id && id !== personId);
+}
+
+async function loadDetailFamilie(personId) {
+  const parentSelectVater = document.getElementById("d-vater");
+  const parentSelectMutter = document.getElementById("d-mutter");
+  const partnerList = document.getElementById("d-partner-list");
+  const childList = document.getElementById("d-kinder-list");
+  if (!parentSelectVater || !parentSelectMutter || !partnerList || !childList) return;
+
+  const [{ data: childLinks, error: childError }, { data: partnerFamilies, error: partnerError }] = await Promise.all([
+    sb.from("familien_kinder").select("id, familie_id, beziehungstyp").eq("kind_id", personId),
+    sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
+  ]);
+  if (childError) debugLog(`❌ Eltern laden: ${childError.message}`);
+  if (partnerError) debugLog(`❌ Familien laden: ${partnerError.message}`);
+
+  const parentFamilyIds = (childLinks || []).map((x) => x.familie_id);
+  let parentFamilies = [];
+  if (parentFamilyIds.length) {
+    const { data } = await sb.from("familien").select("*").in("id", parentFamilyIds);
+    parentFamilies = data || [];
+  }
+
+  const potentialParents = [];
+  for (const f of parentFamilies) {
+    for (const id of [f.partner_a_id, f.partner_b_id]) {
+      if (id && id !== personId && !potentialParents.some((x) => x.id === id)) {
+        const p = personenCache.find((x) => x.id === id);
+        if (p) potentialParents.push(p);
+      }
+    }
+  }
+
+  [parentSelectVater, parentSelectMutter].forEach((select) => {
+    select.innerHTML = '<option value="">— nicht angegeben —</option>';
+    personenCache.filter((p) => p.id !== personId).forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.vorname} ${p.nachname}`;
+      select.appendChild(opt);
+    });
+  });
+
+  parentSelectVater.value = potentialParents.find((p) => p.geschlecht === "männlich")?.id || "";
+  parentSelectMutter.value = potentialParents.find((p) => p.geschlecht === "weiblich")?.id || "";
+  if (!parentSelectVater.value && potentialParents.length === 1) parentSelectVater.value = potentialParents[0].id;
+
+  partnerList.innerHTML = "";
+  for (const f of partnerFamilies || []) {
+    const otherId = familiePartnerIds(f, personId)[0];
+    if (!otherId) continue;
+    const div = document.createElement("div");
+    div.className = "detail-media-item familie-item";
+    const typ = f.familientyp || "Partnerschaft";
+    const zeitraum = [f.beginn, f.ende].filter(Boolean).map((d) => d.split("-").reverse().join(".")).join(" – ");
+    div.innerHTML = `<span class="beziehung-text">${personNameById(otherId)}${typ ? ` — ${typ}` : ""}${zeitraum ? ` — ${zeitraum}` : ""}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+    div.querySelector(".del-btn").addEventListener("click", async () => {
+      if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
+      const { error } = await sb.from("familien").delete().eq("id", f.id);
+      if (error) document.getElementById("d-familie-message").textContent = `Fehler: ${error.message}`;
+      else await loadDetailFamilie(personId);
+    });
+    partnerList.appendChild(div);
+  }
+  if (!partnerList.children.length) partnerList.innerHTML = '<span class="capture-status">Keine Partnerschaft erfasst</span>';
+
+  const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id);
+  let childLinksForPerson = [];
+  if (partnerFamilyIds.length) {
+    const { data } = await sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").in("familie_id", partnerFamilyIds);
+    childLinksForPerson = data || [];
+  }
+  childList.innerHTML = "";
+  for (const link of childLinksForPerson) {
+    const child = personenCache.find((p) => p.id === link.kind_id);
+    if (!child) continue;
+    const div = document.createElement("div");
+    div.className = "detail-media-item familie-item";
+    div.innerHTML = `<span class="beziehung-text">${child.vorname} ${child.nachname}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
+    div.querySelector(".del-btn").addEventListener("click", async () => {
+      const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
+      if (error) document.getElementById("d-familie-message").textContent = `Fehler: ${error.message}`;
+      else await loadDetailFamilie(personId);
+    });
+    childList.appendChild(div);
+  }
+  if (!childList.children.length) childList.innerHTML = '<span class="capture-status">Keine Kinder erfasst</span>';
+
+  fillFamilienPersonSelect("d-partner-person", personId);
+  fillFamilienPersonSelect("d-kind-person", personId);
+  const familySelect = document.getElementById("d-kind-partner-family");
+  familySelect.innerHTML = '<option value="">automatisch auswählen</option>';
+  for (const f of partnerFamilies || []) {
+    const otherId = familiePartnerIds(f, personId)[0];
+    if (!otherId) continue;
+    const opt = document.createElement("option");
+    opt.value = f.id;
+    opt.textContent = `${personNameById(otherId)} — ${f.familientyp || "Partnerschaft"}`;
+    familySelect.appendChild(opt);
+  }
+}
+
+function fillFamilienPersonSelect(selectId, excludePersonId) {
+  const select = document.getElementById(selectId);
+  if (!select) return;
+  select.innerHTML = '<option value="">— auswählen —</option>';
   personenCache.filter((p) => p.id !== excludePersonId).forEach((p) => {
     const opt = document.createElement("option");
     opt.value = p.id;
@@ -868,38 +977,84 @@ function fillDetailBeziehungSelect(excludePersonId) {
   });
 }
 
-async function loadDetailBeziehungen(personId) {
-  const container = document.getElementById("d-beziehungen-list");
-  container.innerHTML = "";
-  const { data, error } = await sb.from("beziehung").select("*")
-    .or(`personen_a_id.eq.${personId},personen_b_id.eq.${personId}`);
-  if (error) { debugLog(`❌ Beziehungen laden: ${error.message}`); return; }
-  for (const b of data || []) {
-    const andereId = b.personen_a_id === personId ? b.personen_b_id : b.personen_a_id;
-    const andere = personenCache.find((p) => p.id === andereId);
-    const name = andere ? `${andere.vorname} ${andere.nachname}` : "(unbekannte Person)";
-    const div = document.createElement("div");
-    div.className = "detail-media-item";
-    div.innerHTML = `<span class="beziehung-text">${b.beziehungstyp} — ${name}</span><button class="del-btn" title="Löschen">🗑️</button>`;
-    div.querySelector(".del-btn").addEventListener("click", async () => {
-      await sb.from("beziehung").delete().eq("id", b.id);
-      loadDetailBeziehungen(personId);
-    });
-    container.appendChild(div);
+async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnerschaft", beginn = null, ende = null) {
+  let query = sb.from("familien").select("*");
+  if (partnerBId) {
+    query = query.or(`and(partner_a_id.eq.${partnerAId},partner_b_id.eq.${partnerBId}),and(partner_a_id.eq.${partnerBId},partner_b_id.eq.${partnerAId})`);
+  } else {
+    query = query.eq("partner_a_id", partnerAId).is("partner_b_id", null);
   }
+  const { data, error } = await query.limit(1);
+  if (error) throw error;
+  if (data && data.length) return data[0];
+  const { data: neu, error: insertError } = await sb.from("familien").insert({
+    partner_a_id: partnerAId,
+    partner_b_id: partnerBId || null,
+    familientyp: typ,
+    beginn: beginn || null,
+    ende: ende || null,
+  }).select().single();
+  if (insertError) throw insertError;
+  return neu;
 }
 
-document.getElementById("d-add-beziehung-btn").addEventListener("click", async () => {
-  const msg = document.getElementById("d-beziehung-message");
-  const andereId = document.getElementById("d-beziehung-person").value;
-  const typ = document.getElementById("d-beziehung-typ").value;
-  if (!andereId || !typ) { msg.textContent = "Bitte Person und Beziehungstyp angeben."; return; }
-  const { error } = await sb.from("beziehung").insert({
-    personen_a_id: currentDetailPersonId, personen_b_id: andereId, beziehungstyp: typ,
-  });
-  msg.textContent = error ? `Fehler: ${error.message}` : "Hinzugefügt ✓";
-  document.getElementById("d-beziehung-typ").value = "";
-  loadDetailBeziehungen(currentDetailPersonId);
+async function addKindZuFamilie(familieId, kindId, beziehungstyp = "biologisch") {
+  const { error } = await sb.from("familien_kinder").upsert({
+    familie_id: familieId,
+    kind_id: kindId,
+    beziehungstyp,
+  }, { onConflict: "familie_id,kind_id" });
+  if (error) throw error;
+}
+
+document.getElementById("d-save-eltern-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("d-familie-message");
+  const vater = document.getElementById("d-vater").value || null;
+  const mutter = document.getElementById("d-mutter").value || null;
+  if (!vater && !mutter) { msg.textContent = "Keine Eltern ausgewählt."; return; }
+  msg.textContent = "Speichere Eltern …";
+  try {
+    const familie = await findeOderErstelleFamilie(vater || mutter, vater && mutter ? mutter : null, "Eltern");
+    await addKindZuFamilie(familie.id, currentDetailPersonId, "biologisch");
+    msg.textContent = "Eltern gespeichert ✓";
+    await loadDetailFamilie(currentDetailPersonId);
+  } catch (err) {
+    msg.textContent = `Fehler: ${err.message}`;
+  }
+});
+
+document.getElementById("d-add-partner-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("d-familie-message");
+  const partnerId = document.getElementById("d-partner-person").value;
+  if (!partnerId) { msg.textContent = "Bitte Partner/in auswählen."; return; }
+  try {
+    await findeOderErstelleFamilie(currentDetailPersonId, partnerId,
+      document.getElementById("d-partner-typ").value || "Partnerschaft",
+      document.getElementById("d-partner-beginn").value || null,
+      document.getElementById("d-partner-ende").value || null);
+    msg.textContent = "Partner/in hinzugefügt ✓";
+    document.getElementById("d-partner-person").value = "";
+    document.getElementById("d-partner-beginn").value = "";
+    document.getElementById("d-partner-ende").value = "";
+    await loadDetailFamilie(currentDetailPersonId);
+  } catch (err) { msg.textContent = `Fehler: ${err.message}`; }
+});
+
+document.getElementById("d-add-kind-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("d-familie-message");
+  const kindId = document.getElementById("d-kind-person").value;
+  if (!kindId) { msg.textContent = "Bitte Kind auswählen."; return; }
+  try {
+    let familie = null;
+    const partnerFamilies = await sb.from("familien").select("*").or(`partner_a_id.eq.${currentDetailPersonId},partner_b_id.eq.${currentDetailPersonId}`);
+    const preferredPartnerId = document.getElementById("d-kind-partner-family").value || null;
+    if (preferredPartnerId) familie = (partnerFamilies.data || []).find((f) => f.id === preferredPartnerId);
+    if (!familie) familie = (partnerFamilies.data || [])[0] || await findeOderErstelleFamilie(currentDetailPersonId, null, "Eltern");
+    await addKindZuFamilie(familie.id, kindId, document.getElementById("d-kind-typ").value || "biologisch");
+    msg.textContent = "Kind hinzugefügt ✓";
+    document.getElementById("d-kind-person").value = "";
+    await loadDetailFamilie(currentDetailPersonId);
+  } catch (err) { msg.textContent = `Fehler: ${err.message}`; }
 });
 
 // ---- Person vollständig löschen ----
@@ -920,7 +1075,6 @@ document.getElementById("d-delete-person-btn").addEventListener("click", async (
     await sb.from("sprachnotizen").delete().eq("id", a.id);
   }
 
-  await sb.from("beziehung").delete().or(`personen_a_id.eq.${currentDetailPersonId},personen_b_id.eq.${currentDetailPersonId}`);
   const { error } = await sb.from("personen").delete().eq("id", currentDetailPersonId);
 
   if (error) {
@@ -948,13 +1102,17 @@ function downloadFile(filename, content, mimeType) {
 }
 
 async function fetchAllExportData() {
-  const [{ data: personen }, { data: beziehungen }, { data: fotos }, { data: sprachnotizen }] = await Promise.all([
-    sb.from("personen").select("*"),
-    sb.from("beziehung").select("*"),
+  const [{ data: personen }, { data: familien }, { data: familien_kinder }, { data: fotos }, { data: sprachnotizen }] = await Promise.all([
+    sb.from("personen").select("*").order("nachname"),
+    sb.from("familien").select("*"),
+    sb.from("familien_kinder").select("*"),
     sb.from("fotos").select("*"),
     sb.from("sprachnotizen").select("*"),
   ]);
-  return { personen: personen || [], beziehungen: beziehungen || [], fotos: fotos || [], sprachnotizen: sprachnotizen || [] };
+  return {
+    personen: personen || [], familien: familien || [], familien_kinder: familien_kinder || [],
+    fotos: fotos || [], sprachnotizen: sprachnotizen || []
+  };
 }
 
 document.getElementById("export-json-btn").addEventListener("click", async () => {
@@ -968,45 +1126,102 @@ document.getElementById("export-json-btn").addEventListener("click", async () =>
 document.getElementById("export-gedcom-btn").addEventListener("click", async () => {
   const msg = document.getElementById("export-message");
   msg.textContent = "Erstelle GEDCOM …";
-  const { personen, beziehungen } = await fetchAllExportData();
+  const { personen, familien, familien_kinder } = await fetchAllExportData();
 
   const gedcomDate = (d) => {
     if (!d) return null;
-    const [y, m, day] = d.split("-");
+    const [y, m, day] = String(d).slice(0, 10).split("-");
     const monate = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
     return `${parseInt(day, 10)} ${monate[parseInt(m, 10) - 1]} ${y}`;
   };
+  const clean = (v) => String(v || "").replace(/[\r\n]+/g, " ").trim();
+  const personById = new Map(personen.map((p) => [p.id, p]));
+  const gidById = new Map();
+  personen.forEach((p, i) => gidById.set(p.id, `@I${i + 1}@`));
+  const fidById = new Map();
+  familien.forEach((f, i) => fidById.set(f.id, `@F${i + 1}@`));
 
-  let lines = ["0 HEAD", "1 SOUR PartezettelArchiv", "1 GEDC", "2 VERS 5.5.1", "1 CHAR UTF-8"];
+  const famsByPerson = new Map();
+  const famcByPerson = new Map();
+  for (const f of familien) {
+    for (const pid of [f.partner_a_id, f.partner_b_id].filter(Boolean)) {
+      if (!famsByPerson.has(pid)) famsByPerson.set(pid, []);
+      famsByPerson.get(pid).push(f.id);
+    }
+  }
+  for (const fk of familien_kinder) {
+    if (!famcByPerson.has(fk.kind_id)) famcByPerson.set(fk.kind_id, []);
+    famcByPerson.get(fk.kind_id).push(fk.familie_id);
+  }
 
-  personen.forEach((p, i) => {
-    const gid = `@I${i + 1}@`;
-    p._gid = gid;
-    lines.push(`0 ${gid} INDI`);
-    lines.push(`1 NAME ${p.vorname} /${p.nachname}/`);
-    if (p.Ledigenname) lines.push(`2 _MARNM ${p.Ledigenname}`);
+  const lines = [
+    "0 HEAD",
+    "1 SOUR PartezettelArchiv",
+    "2 NAME Partezettel Archiv",
+    "1 GEDC",
+    "2 VERS 5.5.1",
+    "1 CHAR UTF-8",
+  ];
+
+  for (const p of personen) {
+    lines.push(`0 ${gidById.get(p.id)} INDI`);
+    lines.push(`1 NAME ${clean(p.vorname)} /${clean(p.nachname)}/`);
+    if (p.geschlecht === "männlich") lines.push("1 SEX M");
+    else if (p.geschlecht === "weiblich") lines.push("1 SEX F");
+    else lines.push("1 SEX U");
+    if (p.Ledigenname) lines.push(`1 NOTE Geburtsname: ${clean(p.Ledigenname)}`);
     if (p.geburtsdatum) { lines.push("1 BIRT"); lines.push(`2 DATE ${gedcomDate(p.geburtsdatum)}`); }
     if (p.sterbedatum) { lines.push("1 DEAT"); lines.push(`2 DATE ${gedcomDate(p.sterbedatum)}`); }
-    if (p.Notiz) lines.push(`1 NOTE ${p.Notiz.replace(/\n/g, " ")}`);
-  });
+    if (p.Notiz) lines.push(`1 NOTE ${clean(p.Notiz)}`);
+    for (const fid of famsByPerson.get(p.id) || []) lines.push(`1 FAMS ${fidById.get(fid)}`);
+    for (const fid of famcByPerson.get(p.id) || []) lines.push(`1 FAMC ${fidById.get(fid)}`);
+  }
 
-  beziehungen.forEach((b) => {
-    const a = personen.find((p) => p.id === b.personen_a_id);
-    const bb = personen.find((p) => p.id === b.personen_b_id);
-    if (a && bb) {
-      lines.push(`1 NOTE Beziehung: ${a.vorname} ${a.nachname} — ${b.beziehungstyp} — ${bb.vorname} ${bb.nachname}`);
+  for (const f of familien) {
+    const fid = fidById.get(f.id);
+    lines.push(`0 ${fid} FAM`);
+    const a = personById.get(f.partner_a_id);
+    const b = f.partner_b_id ? personById.get(f.partner_b_id) : null;
+    const partners = [a, b].filter(Boolean);
+    const male = partners.find((p) => p.geschlecht === "männlich");
+    const female = partners.find((p) => p.geschlecht === "weiblich");
+    if (male) lines.push(`1 HUSB ${gidById.get(male.id)}`);
+    if (female && (!male || female.id !== male.id)) lines.push(`1 WIFE ${gidById.get(female.id)}`);
+    if (!male && a) lines.push(`1 HUSB ${gidById.get(a.id)}`);
+    if (!female && b && (!male || b.id !== male.id)) lines.push(`1 WIFE ${gidById.get(b.id)}`);
+    if (f.beginn) {
+      lines.push("1 MARR");
+      lines.push(`2 DATE ${gedcomDate(f.beginn)}`);
     }
-  });
+    if (f.ende) {
+      if ((f.familientyp || "").toLowerCase() === "ehe") {
+        lines.push("1 DIV");
+        lines.push(`2 DATE ${gedcomDate(f.ende)}`);
+      } else {
+        lines.push(`1 NOTE Ende der ${clean(f.familientyp || "Partnerschaft")}: ${gedcomDate(f.ende)}`);
+      }
+    }
+    if (f.familientyp && f.familientyp.toLowerCase() !== "ehe" && !f.beginn) {
+      lines.push(`1 NOTE ${clean(f.familientyp)}`);
+    }
+    if (f.notiz) lines.push(`1 NOTE ${clean(f.notiz)}`);
+    for (const fk of familien_kinder.filter((x) => x.familie_id === f.id)) {
+      if (gidById.has(fk.kind_id)) {
+        lines.push(`1 CHIL ${gidById.get(fk.kind_id)}`);
+        if (fk.beziehungstyp && fk.beziehungstyp !== "biologisch") lines.push(`2 NOTE ${clean(fk.beziehungstyp)}`);
+      }
+    }
+  }
 
   lines.push("0 TRLR");
-  downloadFile("partezettel-export.ged", lines.join("\n"), "text/plain");
-  msg.textContent = "GEDCOM-Datei heruntergeladen ✓ (vereinfachtes Format: Beziehungen als Notizen, keine automatische Familienstruktur)";
+  downloadFile("partezettel-export.ged", lines.join("\n"), "text/plain;charset=utf-8");
+  msg.textContent = "GEDCOM-Datei heruntergeladen ✓";
 });
 
 document.getElementById("export-pdf-btn").addEventListener("click", async () => {
   const msg = document.getElementById("export-message");
   msg.textContent = "Erstelle PDF …";
-  const { personen, beziehungen } = await fetchAllExportData();
+  const { personen, familien, familien_kinder } = await fetchAllExportData();
 
   if (!window.jspdf) {
     msg.textContent = "PDF-Bibliothek konnte nicht geladen werden.";
@@ -1015,38 +1230,38 @@ document.getElementById("export-pdf-btn").addEventListener("click", async () => 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
   let y = 15;
-  doc.setFontSize(16);
-  doc.text("Partezettel Archiv — Übersicht", 14, y);
-  y += 10;
-  doc.setFontSize(10);
+  const personById = new Map(personen.map((p) => [p.id, p]));
+  const name = (id) => {
+    const p = personById.get(id);
+    return p ? `${p.vorname} ${p.nachname}` : "(unbekannte Person)";
+  };
+  const addLine = (text, size = 10, bold = false) => {
+    if (y > 275) { doc.addPage(); y = 15; }
+    doc.setFontSize(size);
+    doc.setFont(undefined, bold ? "bold" : "normal");
+    const wrapped = doc.splitTextToSize(String(text), 180);
+    doc.text(wrapped, 14, y);
+    y += wrapped.length * 5 + 1;
+  };
 
-  personen.forEach((p) => {
-    if (y > 270) { doc.addPage(); y = 15; }
-    doc.setFont(undefined, "bold");
-    doc.text(`${p.vorname} ${p.nachname}${p.Ledigenname ? " geb. " + p.Ledigenname : ""}`, 14, y);
-    doc.setFont(undefined, "normal");
-    y += 5;
-    if (p.geburtsdatum || p.sterbedatum) {
-      doc.text(`${p.geburtsdatum || "?"} – ${p.sterbedatum || "?"}`, 14, y);
-      y += 5;
+  addLine("Partezettel Archiv — Familienübersicht", 16, true);
+  y += 3;
+  for (const p of personen) {
+    addLine(`${p.vorname} ${p.nachname}${p.Ledigenname ? ` geb. ${p.Ledigenname}` : ""}`, 11, true);
+    const jahre = [p.geburtsdatum, p.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
+    if (jahre) addLine(jahre);
+    if (p.Notiz) addLine(p.Notiz);
+    y += 2;
+  }
+  if (familien.length) {
+    addLine("Familien", 13, true);
+    for (const f of familien) {
+      const partner = [f.partner_a_id, f.partner_b_id].filter(Boolean).map(name).join(" + ");
+      addLine(`${partner} — ${f.familientyp || "Partnerschaft"}`, 10, true);
+      const kids = familien_kinder.filter((k) => k.familie_id === f.id);
+      for (const k of kids) addLine(`  Kind: ${name(k.kind_id)}${k.beziehungstyp && k.beziehungstyp !== "biologisch" ? ` — ${k.beziehungstyp}` : ""}`);
     }
-    if (p.Notiz) {
-      const lines = doc.splitTextToSize(p.Notiz, 180);
-      doc.text(lines, 14, y);
-      y += lines.length * 5;
-    }
-    const beziehungenZuP = beziehungen.filter((b) => b.personen_a_id === p.id || b.personen_b_id === p.id);
-    beziehungenZuP.forEach((b) => {
-      const andereId = b.personen_a_id === p.id ? b.personen_b_id : b.personen_a_id;
-      const andere = personen.find((pp) => pp.id === andereId);
-      if (andere) {
-        doc.text(`  ${b.beziehungstyp}: ${andere.vorname} ${andere.nachname}`, 14, y);
-        y += 5;
-      }
-    });
-    y += 4;
-  });
-
+  }
   doc.save("partezettel-export.pdf");
   msg.textContent = "PDF heruntergeladen ✓";
 });
