@@ -35,7 +35,7 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 debugLog("Supabase-Client initialisiert.");
 debugLog(`Anon-Key: ${SUPABASE_ANON_KEY.slice(0, 12)}…${SUPABASE_ANON_KEY.slice(-6)} (Länge: ${SUPABASE_ANON_KEY.length} Zeichen)`);
 
-let currentFotoBlob = null;
+let currentFotoBlobs = [];
 let currentAudioBlob = null;
 let mediaRecorder = null;
 let audioChunks = [];
@@ -74,17 +74,18 @@ const fotoInputGalerie = document.getElementById("foto-input-galerie");
 const fotoStatus = document.getElementById("foto-status");
 const fotoPreview = document.getElementById("foto-preview");
 
-function handleFotoAuswahl(file) {
-  if (!file) return;
-  currentFotoBlob = file;
-  fotoStatus.textContent = "Foto ausgewählt ✓";
-  const url = URL.createObjectURL(file);
+function handleFotoAuswahl(files) {
+  const auswahl = Array.from(files || []).filter(Boolean);
+  if (!auswahl.length) return;
+  currentFotoBlobs = auswahl;
+  fotoStatus.textContent = auswahl.length === 1 ? "1 Foto ausgewählt ✓" : `${auswahl.length} Fotos ausgewählt ✓`;
+  const url = URL.createObjectURL(auswahl[0]);
   fotoPreview.src = url;
   fotoPreview.hidden = false;
 }
 
-fotoInput.addEventListener("change", () => handleFotoAuswahl(fotoInput.files[0]));
-fotoInputGalerie.addEventListener("change", () => handleFotoAuswahl(fotoInputGalerie.files[0]));
+fotoInput.addEventListener("change", () => handleFotoAuswahl(fotoInput.files));
+fotoInputGalerie.addEventListener("change", () => handleFotoAuswahl(fotoInputGalerie.files));
 
 // ---------- Sprachaufnahme (kein Zeitlimit) ----------
 const audioBtn = document.getElementById("audio-record-btn");
@@ -164,7 +165,7 @@ form.addEventListener("submit", async (e) => {
     notiz: document.getElementById("notiz").value.trim() || null,
     beziehung_person_id: document.getElementById("beziehung-person").value || null,
     beziehung_typ: document.getElementById("beziehung-typ").value.trim() || null,
-    foto: currentFotoBlob,
+    fotos: currentFotoBlobs,
     audio: currentAudioBlob,
     audio_dauer: audioPreview.hidden ? null : Math.round((audioPreview.duration || 0)),
   };
@@ -194,7 +195,7 @@ form.addEventListener("submit", async (e) => {
 function resetForm() {
   form.reset();
   document.getElementById("ledigenname").value = "";
-  currentFotoBlob = null;
+  currentFotoBlobs = [];
   currentAudioBlob = null;
   fotoPreview.hidden = true;
   fotoStatus.textContent = "Kein Foto ausgewählt";
@@ -236,17 +237,21 @@ async function sendEintrag(eintrag, onProgress) {
     );
     if (personError) throw personError;
 
-    // 2. Foto hochladen
-    if (eintrag.foto) {
-      step("Schritt 3/4: Foto hochladen …");
-      const path = `${eintrag.id}/${Date.now()}.jpg`;
-      const { error: uploadError } = await mitTimeout(
-        sb.storage.from(BUCKET_FOTOS).upload(path, eintrag.foto),
-        20000,
-        "Zeitüberschreitung beim Foto-Upload (Netzwerk antwortet nicht)"
-      );
-      if (uploadError) throw uploadError;
-      await sb.from("fotos").insert({ personen_id: eintrag.id, dateipfad: path });
+    // 2. Fotos hochladen
+    if (eintrag.fotos && eintrag.fotos.length) {
+      step(`Schritt 3/4: ${eintrag.fotos.length} Foto${eintrag.fotos.length === 1 ? "" : "s"} hochladen …`);
+      for (const foto of eintrag.fotos) {
+        const ext = foto.type && foto.type.includes("png") ? "png" : foto.type && foto.type.includes("webp") ? "webp" : "jpg";
+        const path = `${eintrag.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: uploadError } = await mitTimeout(
+          sb.storage.from(BUCKET_FOTOS).upload(path, foto),
+          20000,
+          "Zeitüberschreitung beim Foto-Upload (Netzwerk antwortet nicht)"
+        );
+        if (uploadError) throw uploadError;
+        const { error: insertError } = await sb.from("fotos").insert({ personen_id: eintrag.id, dateipfad: path });
+        if (insertError) throw insertError;
+      }
     }
 
     // 3. Sprachnotiz hochladen
@@ -526,11 +531,17 @@ async function uploadDetailFoto(file) {
   loadDetailFotos(currentDetailPersonId);
 }
 
-document.getElementById("d-foto-input").addEventListener("change", (e) => {
-  if (e.target.files[0]) uploadDetailFoto(e.target.files[0]);
+document.getElementById("d-foto-input").addEventListener("change", async (e) => {
+  if (e.target.files.length) {
+    for (const file of Array.from(e.target.files)) await uploadDetailFoto(file);
+    e.target.value = "";
+  }
 });
-document.getElementById("d-foto-input-galerie").addEventListener("change", (e) => {
-  if (e.target.files[0]) uploadDetailFoto(e.target.files[0]);
+document.getElementById("d-foto-input-galerie").addEventListener("change", async (e) => {
+  if (e.target.files.length) {
+    for (const file of Array.from(e.target.files)) await uploadDetailFoto(file);
+    e.target.value = "";
+  }
 });
 
 // ---- Sprachnotizen im Detail ----

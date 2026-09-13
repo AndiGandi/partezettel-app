@@ -76,7 +76,7 @@
           </label>
           <label class="btn btn--secondary capture-btn">
             <span>🖼️ Aus Fotos wählen</span>
-            <input type="file" id="foto-input-galerie" accept="image/*" hidden>
+            <input type="file" id="foto-input-galerie" accept="image/*" multiple hidden>
           </label>
         </div>
         <div class="capture-row">
@@ -104,7 +104,38 @@
         </label>
         <label class="field">
           <span>Beziehungstyp</span>
-          <input type="text" id="beziehung-typ" placeholder="z. B. Vater, Mutter, Pate, Geschwister …">
+          <select id="beziehung-typ">
+            <option value="">Beziehung auswählen</option>
+            <option value="Ehepartner">Ehepartner</option>
+            <option value="Vater">Vater</option>
+            <option value="Mutter">Mutter</option>
+            <option value="Sohn">Sohn</option>
+            <option value="Tochter">Tochter</option>
+            <option value="Adoptivvater">Adoptivvater</option>
+            <option value="Adoptivmutter">Adoptivmutter</option>
+            <option value="Adoptivsohn">Adoptivsohn</option>
+            <option value="Adoptivtochter">Adoptivtochter</option>
+            <option value="Stiefvater">Stiefvater</option>
+            <option value="Stiefmutter">Stiefmutter</option>
+            <option value="Stiefsohn">Stiefsohn</option>
+            <option value="Stieftochter">Stieftochter</option>
+            <option value="Pflegevater">Pflegevater</option>
+            <option value="Pflegemutter">Pflegemutter</option>
+            <option value="Pflegekind">Pflegekind</option>
+            <option value="Pate">Pate</option>
+            <option value="Patin">Patin</option>
+            <option value="Schwiegervater">Schwiegervater</option>
+            <option value="Schwiegermutter">Schwiegermutter</option>
+            <option value="Schwiegersohn">Schwiegersohn</option>
+            <option value="Schwiegertochter">Schwiegertochter</option>
+            <option value="Verlobter">Verlobter</option>
+            <option value="Verlobte">Verlobte</option>
+            <option value="Lebenspartner">Lebenspartner</option>
+            <option value="Lebenspartnerin">Lebenspartnerin</option>
+            <option value="Vormund">Vormund</option>
+            <option value="Mündel">Mündel</option>
+            <option value="Sonstige Beziehung">Sonstige Beziehung</option>
+          </select>
         </label>
       </fieldset>
 
@@ -178,7 +209,7 @@
           </label>
           <label class="btn btn--secondary capture-btn">
             <span>🖼️ Aus Fotos wählen</span>
-            <input type="file" id="d-foto-input-galerie" accept="image/*" hidden>
+            <input type="file" id="d-foto-input-galerie" accept="image/*" multiple hidden>
           </label>
         </div>
         <p id="d-foto-message" class="form-message"></p>
@@ -198,7 +229,38 @@
           <select id="d-beziehung-person"><option value="">— wählen —</option></select>
         </label>
         <label class="field"><span>Beziehungstyp</span>
-          <input type="text" id="d-beziehung-typ" placeholder="z. B. Vater, Mutter, Pate …">
+          <select id="d-beziehung-typ">
+            <option value="">Beziehung auswählen</option>
+            <option value="Ehepartner">Ehepartner</option>
+            <option value="Vater">Vater</option>
+            <option value="Mutter">Mutter</option>
+            <option value="Sohn">Sohn</option>
+            <option value="Tochter">Tochter</option>
+            <option value="Adoptivvater">Adoptivvater</option>
+            <option value="Adoptivmutter">Adoptivmutter</option>
+            <option value="Adoptivsohn">Adoptivsohn</option>
+            <option value="Adoptivtochter">Adoptivtochter</option>
+            <option value="Stiefvater">Stiefvater</option>
+            <option value="Stiefmutter">Stiefmutter</option>
+            <option value="Stiefsohn">Stiefsohn</option>
+            <option value="Stieftochter">Stieftochter</option>
+            <option value="Pflegevater">Pflegevater</option>
+            <option value="Pflegemutter">Pflegemutter</option>
+            <option value="Pflegekind">Pflegekind</option>
+            <option value="Pate">Pate</option>
+            <option value="Patin">Patin</option>
+            <option value="Schwiegervater">Schwiegervater</option>
+            <option value="Schwiegermutter">Schwiegermutter</option>
+            <option value="Schwiegersohn">Schwiegersohn</option>
+            <option value="Schwiegertochter">Schwiegertochter</option>
+            <option value="Verlobter">Verlobter</option>
+            <option value="Verlobte">Verlobte</option>
+            <option value="Lebenspartner">Lebenspartner</option>
+            <option value="Lebenspartnerin">Lebenspartnerin</option>
+            <option value="Vormund">Vormund</option>
+            <option value="Mündel">Mündel</option>
+            <option value="Sonstige Beziehung">Sonstige Beziehung</option>
+          </select>
         </label>
         <button type="button" id="d-add-beziehung-btn" class="btn btn--secondary btn--full">Beziehung hinzufügen</button>
         <p id="d-beziehung-message" class="form-message"></p>
