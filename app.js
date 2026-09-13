@@ -85,6 +85,10 @@ let fotoEditorDragStart = null;
 const photoEditor = document.getElementById("photo-editor");
 const photoCanvas = document.getElementById("photo-editor-canvas");
 const photoCtx = photoCanvas.getContext("2d");
+const fotoEditorBaseCanvas = document.createElement("canvas");
+let fotoEditorResize = false;
+let fotoEditorResizeX = 0;
+let fotoEditorResizeY = 0;
 
 function bildZuDataURL(file) {
   return new Promise((resolve, reject) => {
@@ -107,28 +111,45 @@ function loadImage(src) {
 function drawPhotoEditor() {
   if (!fotoEditorImage) return;
   const img = fotoEditorImage;
-  const maxW = 1000;
+  const maxW = 1200;
   const scale = Math.min(1, maxW / img.naturalWidth);
-  const w = Math.round(img.naturalWidth * scale), h = Math.round(img.naturalHeight * scale);
+  const w = Math.max(1, Math.round(img.naturalWidth * scale));
+  const h = Math.max(1, Math.round(img.naturalHeight * scale));
   const rotated = Math.abs(fotoEditorRotation % 180) === 90;
   photoCanvas.width = rotated ? h : w;
   photoCanvas.height = rotated ? w : h;
+
+  // Erst das unverdeckte Bild in ein eigenes Canvas zeichnen.
+  fotoEditorBaseCanvas.width = photoCanvas.width;
+  fotoEditorBaseCanvas.height = photoCanvas.height;
+  const bctx = fotoEditorBaseCanvas.getContext("2d");
+  bctx.clearRect(0, 0, fotoEditorBaseCanvas.width, fotoEditorBaseCanvas.height);
+  bctx.save();
+  bctx.translate(fotoEditorBaseCanvas.width / 2, fotoEditorBaseCanvas.height / 2);
+  bctx.rotate(fotoEditorRotation * Math.PI / 180);
+  bctx.drawImage(img, -w / 2, -h / 2, w, h);
+  bctx.restore();
+
+  photoCtx.clearRect(0, 0, photoCanvas.width, photoCanvas.height);
+  photoCtx.drawImage(fotoEditorBaseCanvas, 0, 0);
+
+  const cw = photoCanvas.width * fotoEditorCrop.w;
+  const ch = photoCanvas.height * fotoEditorCrop.h;
+  const cx = photoCanvas.width * fotoEditorCrop.x;
+  const cy = photoCanvas.height * fotoEditorCrop.y;
   photoCtx.save();
-  photoCtx.translate(photoCanvas.width / 2, photoCanvas.height / 2);
-  photoCtx.rotate(fotoEditorRotation * Math.PI / 180);
-  photoCtx.drawImage(img, -w / 2, -h / 2, w, h);
-  photoCtx.restore();
-  const cw = photoCanvas.width * fotoEditorCrop.w, ch = photoCanvas.height * fotoEditorCrop.h;
-  const cx = photoCanvas.width * fotoEditorCrop.x, cy = photoCanvas.height * fotoEditorCrop.y;
-  photoCtx.save();
-  photoCtx.fillStyle = "rgba(0,0,0,.48)";
-  photoCtx.fillRect(0,0,photoCanvas.width,photoCanvas.height);
+  photoCtx.fillStyle = "rgba(0,0,0,.50)";
+  photoCtx.fillRect(0, 0, photoCanvas.width, photoCanvas.height);
   photoCtx.globalCompositeOperation = "destination-out";
-  photoCtx.fillRect(cx,cy,cw,ch);
+  photoCtx.fillRect(cx, cy, cw, ch);
   photoCtx.globalCompositeOperation = "source-over";
   photoCtx.strokeStyle = "white";
-  photoCtx.lineWidth = Math.max(2, photoCanvas.width/300);
-  photoCtx.strokeRect(cx,cy,cw,ch);
+  photoCtx.lineWidth = Math.max(3, photoCanvas.width / 300);
+  photoCtx.strokeRect(cx, cy, cw, ch);
+  // Ecken als sichtbare Griffe
+  const r = Math.max(12, photoCanvas.width / 45);
+  photoCtx.fillStyle = "white";
+  [[cx,cy],[cx+cw,cy],[cx,cy+ch],[cx+cw,cy+ch]].forEach(([x,y]) => photoCtx.fillRect(x-r/2,y-r/2,r,r));
   photoCtx.restore();
 }
 
@@ -136,7 +157,7 @@ function openPhotoEditor(file) {
   return new Promise(async resolve => {
     fotoEditorResolve = resolve;
     fotoEditorRotation = 0;
-    fotoEditorCrop = { x: .05, y: .05, w: .9, h: .9 };
+    fotoEditorCrop = { x: .04, y: .04, w: .92, h: .92 };
     fotoEditorImage = await loadImage(await bildZuDataURL(file));
     photoEditor.hidden = false;
     drawPhotoEditor();
@@ -152,23 +173,16 @@ function closePhotoEditor(result) {
 }
 
 function exportEditedPhoto() {
-  if (!fotoEditorImage) return null;
-  const src = photoCanvas;
-  const x = Math.round(src.width * fotoEditorCrop.x), y = Math.round(src.height * fotoEditorCrop.y);
-  const w = Math.round(src.width * fotoEditorCrop.w), h = Math.round(src.height * fotoEditorCrop.h);
+  if (!fotoEditorImage || !fotoEditorBaseCanvas.width) return null;
+  const src = fotoEditorBaseCanvas;
+  const x = Math.max(0, Math.round(src.width * fotoEditorCrop.x));
+  const y = Math.max(0, Math.round(src.height * fotoEditorCrop.y));
+  const w = Math.max(1, Math.min(src.width - x, Math.round(src.width * fotoEditorCrop.w)));
+  const h = Math.max(1, Math.min(src.height - y, Math.round(src.height * fotoEditorCrop.h)));
   const out = document.createElement("canvas");
   out.width = w; out.height = h;
-  const ctx = out.getContext("2d");
-  const img = fotoEditorImage;
-  const maxW = 1000, scale = Math.min(1, maxW / img.naturalWidth);
-  const iw = Math.round(img.naturalWidth*scale), ih=Math.round(img.naturalHeight*scale);
-  ctx.save();
-  ctx.translate(-x,-y);
-  ctx.translate(photoCanvas.width/2, photoCanvas.height/2);
-  ctx.rotate(fotoEditorRotation*Math.PI/180);
-  ctx.drawImage(img,-iw/2,-ih/2,iw,ih);
-  ctx.restore();
-  return new Promise(resolve => out.toBlob(blob => resolve(new File([blob], "partezettel.jpg", {type:"image/jpeg"})), "image/jpeg", .92));
+  out.getContext("2d").drawImage(src, x, y, w, h, 0, 0, w, h);
+  return new Promise(resolve => out.toBlob(blob => resolve(blob ? new File([blob], "partezettel.jpg", {type:"image/jpeg"}) : null), "image/jpeg", .92));
 }
 
 async function bearbeiteFotos(files) {
@@ -186,102 +200,79 @@ async function handleFotoAuswahl(files) {
   const bearbeitet = await bearbeiteFotos(auswahl);
   if (!bearbeitet.length) return;
   currentFotoBlobs.push(...bearbeitet);
+  if (fotoWeiterBtn) fotoWeiterBtn.style.display = "inline-flex";
   fotoStatus.textContent = currentFotoBlobs.length === 1 ? "1 Foto ausgewählt ✓" : `${currentFotoBlobs.length} Fotos ausgewählt ✓`;
   const url = URL.createObjectURL(currentFotoBlobs[0]);
   fotoPreview.src = url;
   fotoPreview.hidden = false;
 }
 
-fotoInput.addEventListener("change", () => { handleFotoAuswahl(fotoInput.files); fotoInput.value = ""; });
-fotoInputGalerie.addEventListener("change", () => { handleFotoAuswahl(fotoInputGalerie.files); fotoInputGalerie.value = ""; });
+fotoInput.addEventListener("change", async () => { await handleFotoAuswahl(fotoInput.files); fotoInput.value = ""; });
+const fotoWeiterBtn = document.getElementById("foto-weiter-btn");
+if (fotoWeiterBtn) fotoWeiterBtn.addEventListener("click", () => fotoInput.click());
+fotoInputGalerie.addEventListener("change", async () => { await handleFotoAuswahl(fotoInputGalerie.files); fotoInputGalerie.value = ""; });
 
 document.getElementById("photo-rotate-left").addEventListener("click", () => { fotoEditorRotation -= 90; drawPhotoEditor(); });
 document.getElementById("photo-rotate-right").addEventListener("click", () => { fotoEditorRotation += 90; drawPhotoEditor(); });
-document.getElementById("photo-reset").addEventListener("click", () => { fotoEditorRotation=0; fotoEditorCrop={x:.05,y:.05,w:.9,h:.9}; drawPhotoEditor(); });
+document.getElementById("photo-reset").addEventListener("click", () => { fotoEditorRotation=0; fotoEditorCrop={x:.04,y:.04,w:.92,h:.92}; drawPhotoEditor(); });
 document.getElementById("photo-cancel").addEventListener("click", () => closePhotoEditor(null));
 document.getElementById("photo-apply").addEventListener("click", async () => closePhotoEditor(await exportEditedPhoto()));
 
+function clampCrop() {
+  fotoEditorCrop.w = Math.max(.08, Math.min(1, fotoEditorCrop.w));
+  fotoEditorCrop.h = Math.max(.08, Math.min(1, fotoEditorCrop.h));
+  fotoEditorCrop.x = Math.max(0, Math.min(1 - fotoEditorCrop.w, fotoEditorCrop.x));
+  fotoEditorCrop.y = Math.max(0, Math.min(1 - fotoEditorCrop.h, fotoEditorCrop.y));
+}
+
 photoCanvas.addEventListener("pointerdown", e => {
-  fotoEditorDragging = true;
+  if (!fotoEditorImage) return;
+  const px=e.offsetX/photoCanvas.width, py=e.offsetY/photoCanvas.height;
+  const c=fotoEditorCrop;
+  const edge=.035;
+  const nearL=Math.abs(px-c.x)<edge, nearR=Math.abs(px-(c.x+c.w))<edge;
+  const nearT=Math.abs(py-c.y)<edge, nearB=Math.abs(py-(c.y+c.h))<edge;
+  const nearCorner=(nearL||nearR)&&(nearT||nearB);
+  const inside=px>=c.x&&px<=c.x+c.w&&py>=c.y&&py<=c.y+c.h;
+  fotoEditorDragging = nearCorner || inside;
+  fotoEditorResize = nearCorner;
+  fotoEditorResizeX = nearR ? 1 : (nearL ? -1 : 0);
+  fotoEditorResizeY = nearB ? 1 : (nearT ? -1 : 0);
+  if (!fotoEditorDragging) return;
   photoCanvas.setPointerCapture(e.pointerId);
-  fotoEditorDragStart = {x:e.offsetX,y:e.offsetY,cx:fotoEditorCrop.x,cy:fotoEditorCrop.y};
+  fotoEditorDragStart = {x:px,y:py,cx:c.x,cy:c.y,cw:c.w,ch:c.h};
 });
 photoCanvas.addEventListener("pointermove", e => {
   if (!fotoEditorDragging) return;
-  const dx=(e.offsetX-fotoEditorDragStart.x)/photoCanvas.width, dy=(e.offsetY-fotoEditorDragStart.y)/photoCanvas.height;
-  fotoEditorCrop.x=Math.max(0,Math.min(1-fotoEditorCrop.w,fotoEditorDragStart.cx+dx));
-  fotoEditorCrop.y=Math.max(0,Math.min(1-fotoEditorCrop.h,fotoEditorDragStart.cy+dy));
-  drawPhotoEditor();
-});
-photoCanvas.addEventListener("pointerup",()=>fotoEditorDragging=false);
-photoCanvas.addEventListener("pointercancel",()=>fotoEditorDragging=false);
-
-// ---------- Sprachaufnahme (kein Zeitlimit) ----------
-const audioBtn = document.getElementById("audio-record-btn");
-const audioStatus = document.getElementById("audio-status");
-const audioPreview = document.getElementById("audio-preview");
-
-function pickAudioMimeType() {
-  const candidates = [
-    "audio/mp4",
-    "audio/webm;codecs=opus",
-    "audio/webm",
-    "audio/ogg;codecs=opus",
-  ];
-  for (const type of candidates) {
-    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type;
-  }
-  return ""; // Browser-Standard verwenden, falls keiner der obigen unterstützt wird
-}
-
-let currentAudioMimeType = "audio/webm";
-let currentAudioExt = "webm";
-
-audioBtn.addEventListener("click", async () => {
-  if (!isRecording) {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const chosenType = pickAudioMimeType();
-      mediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
-      audioChunks = [];
-      mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
-      mediaRecorder.onstop = () => {
-        // tatsächlich verwendeten Typ nehmen, nicht den gewünschten – manche Browser weichen ab
-        currentAudioMimeType = mediaRecorder.mimeType || chosenType || "audio/webm";
-        currentAudioExt = currentAudioMimeType.includes("mp4") ? "m4a"
-          : currentAudioMimeType.includes("ogg") ? "ogg"
-          : "webm";
-        currentAudioBlob = new Blob(audioChunks, { type: currentAudioMimeType });
-        const url = URL.createObjectURL(currentAudioBlob);
-        audioPreview.src = url;
-        audioPreview.hidden = false;
-        const dauer = Math.round((Date.now() - recordStartTime) / 1000);
-        audioStatus.textContent = `Aufnahme: ${dauer}s ✓`;
-        stream.getTracks().forEach((t) => t.stop());
-      };
-      mediaRecorder.start();
-      recordStartTime = Date.now();
-      isRecording = true;
-      audioBtn.textContent = "⏹️ Aufnahme stoppen";
-      audioStatus.textContent = "Aufnahme läuft …";
-    } catch (err) {
-      audioStatus.textContent = "Mikrofonzugriff fehlgeschlagen";
-      console.error(err);
-    }
+  const dx=e.offsetX/photoCanvas.width-fotoEditorDragStart.x;
+  const dy=e.offsetY/photoCanvas.height-fotoEditorDragStart.y;
+  const s=fotoEditorDragStart;
+  if (fotoEditorResize) {
+    let nx=s.cx, ny=s.cy, nw=s.cw, nh=s.ch;
+    if (fotoEditorResizeX>0) nw=s.cw+dx;
+    if (fotoEditorResizeX<0) { nx=s.cx+dx; nw=s.cw-dx; }
+    if (fotoEditorResizeY>0) nh=s.ch+dy;
+    if (fotoEditorResizeY<0) { ny=s.cy+dy; nh=s.ch-dy; }
+    fotoEditorCrop={x:nx,y:ny,w:nw,h:nh};
   } else {
-    mediaRecorder.stop();
-    isRecording = false;
-    audioBtn.textContent = "🎙️ Aufnahme starten";
+    fotoEditorCrop.x=s.cx+dx; fotoEditorCrop.y=s.cy+dy;
   }
+  clampCrop(); drawPhotoEditor();
 });
+photoCanvas.addEventListener("pointerup", () => { fotoEditorDragging=false; fotoEditorResize=false; });
+photoCanvas.addEventListener("pointercancel", () => { fotoEditorDragging=false; fotoEditorResize=false; });
 
 // ---------- Datumsauswahl ----------
 const MONATE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 function initDatum(prefix) {
   const tag=document.getElementById(prefix+"-tag"), monat=document.getElementById(prefix+"-monat"), jahr=document.getElementById(prefix+"-jahr");
   if (!tag) return;
+  // Der Tag bleibt IMMER sichtbar und enthält 1–31. Er wird niemals beim Jahrwechsel verändert.
+  tag.innerHTML='<option value="">Tag</option>';
   for(let i=1;i<=31;i++) tag.insertAdjacentHTML("beforeend",`<option value="${String(i).padStart(2,"0")}">${i}</option>`);
+  monat.innerHTML='<option value="">Monat</option>';
   MONATE.forEach((m,i)=>monat.insertAdjacentHTML("beforeend",`<option value="${String(i+1).padStart(2,"0")}">${m}</option>`));
+  jahr.innerHTML='<option value="">Jahr</option>';
   for(let y=new Date().getFullYear();y>=1600;y--) jahr.insertAdjacentHTML("beforeend",`<option value="${y}">${y}</option>`);
 }
 function getDatum(prefix) {
@@ -292,7 +283,9 @@ function setDatum(prefix, value) {
   const t=document.getElementById(prefix+"-tag"),m=document.getElementById(prefix+"-monat"),y=document.getElementById(prefix+"-jahr");
   if(!t||!m||!y) return;
   if(!value){t.value="";m.value="";y.value="";return;}
-  const [yy,mm,dd]=String(value).slice(0,10).split("-"); y.value=yy||""; m.value=mm||""; t.value=dd||"";
+  const [yy,mm,dd]=String(value).slice(0,10).split("-");
+  // Keine Neuberechnung/Filterung des Tages beim Setzen des Monats oder Jahres.
+  y.value=yy||""; m.value=mm||""; t.value=dd||"";
 }
 ["geburtsdatum","sterbedatum","d-geburtsdatum","d-sterbedatum"].forEach(initDatum);
 
@@ -348,6 +341,7 @@ function resetForm() {
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
   document.getElementById("ledigenname").value = "";
   currentFotoBlobs = [];
+  if (fotoWeiterBtn) fotoWeiterBtn.style.display = "none";
   currentAudioBlob = null;
   fotoPreview.hidden = true;
   fotoStatus.textContent = "Kein Foto ausgewählt";

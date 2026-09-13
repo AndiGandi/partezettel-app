@@ -91,6 +91,7 @@
             <span>📷 Foto aufnehmen</span>
             <input type="file" id="foto-input" accept="image/*" capture="environment" hidden>
           </label>
+          <button type="button" id="foto-weiter-btn" class="btn btn--secondary">📷 Weiteres Foto aufnehmen</button>
           <label class="btn btn--secondary capture-btn">
             <span>🖼️ Aus Fotos wählen</span>
             <input type="file" id="foto-input-galerie" accept="image/*" multiple hidden>
@@ -308,6 +309,7 @@
 <div id="photo-editor" class="photo-editor" hidden>
   <div class="photo-editor__sheet">
     <h2>Foto anpassen</h2>
+    <p class="photo-editor__hint">Rahmen verschieben oder an den weißen Ecken auf die gewünschte Größe ziehen.</p>
     <div class="photo-editor__canvas-wrap"><canvas id="photo-editor-canvas"></canvas></div>
     <div class="capture-row">
       <button type="button" id="photo-rotate-left" class="btn btn--secondary">↶ Drehen</button>

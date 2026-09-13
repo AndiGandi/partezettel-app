@@ -9,3 +9,5 @@
 .photo-editor__sheet h2 { margin-top:0; }
 .photo-editor__canvas-wrap { width:100%; display:flex; justify-content:center; background:#222; border-radius:10px; overflow:hidden; touch-action:none; }
 #photo-editor-canvas { display:block; max-width:100%; height:auto; touch-action:none; }
+.photo-editor__hint { margin: 0 0 .7rem; font-size: .85rem; color: var(--ink-soft); }
+#foto-weiter-btn { display: none; }
