@@ -159,6 +159,7 @@ form.addEventListener("submit", async (e) => {
     id: crypto.randomUUID(),
     vorname: document.getElementById("vorname").value.trim(),
     nachname: document.getElementById("nachname").value.trim(),
+    geschlecht: document.getElementById("geschlecht").value || null,
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: document.getElementById("geburtsdatum").value || null,
     sterbedatum: document.getElementById("sterbedatum").value || null,
@@ -227,6 +228,7 @@ async function sendEintrag(eintrag, onProgress) {
         id: eintrag.id,
         vorname: eintrag.vorname,
         nachname: eintrag.nachname,
+        geschlecht: eintrag.geschlecht,
         "Ledigenname": eintrag.ledigenname,
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
@@ -456,6 +458,7 @@ async function openPersonDetail(personId) {
 
   document.getElementById("d-vorname").value = person.vorname || "";
   document.getElementById("d-nachname").value = person.nachname || "";
+  document.getElementById("d-geschlecht").value = person.geschlecht || "";
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
   document.getElementById("d-geburtsdatum").value = person.geburtsdatum || "";
   document.getElementById("d-sterbedatum").value = person.sterbedatum || "";
@@ -492,6 +495,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   const { error } = await sb.from("personen").update({
     vorname,
     nachname,
+    geschlecht: document.getElementById("d-geschlecht").value || null,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
     geburtsdatum: document.getElementById("d-geburtsdatum").value || null,
     sterbedatum: document.getElementById("d-sterbedatum").value || null,
