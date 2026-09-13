@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
 
@@ -91,7 +91,7 @@
             <span>📷 Foto aufnehmen</span>
             <input type="file" id="foto-input" accept="image/*" capture="environment" hidden>
           </label>
-          <button type="button" id="foto-weiter-btn" class="btn btn--secondary">📷 Weiteres Foto aufnehmen</button>
+          <button type="button" id="foto-weiter-btn" class="btn btn--secondary" hidden>📷 Weiteres Foto aufnehmen</button>
           <label class="btn btn--secondary capture-btn">
             <span>🖼️ Aus Fotos wählen</span>
             <input type="file" id="foto-input-galerie" accept="image/*" multiple hidden>
@@ -297,9 +297,12 @@
         <p id="d-beziehung-message" class="form-message"></p>
       </fieldset>
 
-      <button type="button" id="d-save-person-btn" class="btn btn--primary btn--full" style="margin-top:1rem;">Änderungen speichern</button>
-      <button type="button" id="d-delete-person-btn" class="btn btn--full detail-delete-btn">Person vollständig löschen</button>
-      <p id="d-delete-message" class="form-message"></p>
+      <div class="detail-actions">
+        <p id="d-person-message" class="form-message"></p>
+        <button type="button" id="d-save-person-btn" class="btn btn--primary btn--full">Änderungen speichern</button>
+        <button type="button" id="d-delete-person-btn" class="btn btn--full detail-delete-btn">Person vollständig löschen</button>
+        <p id="d-delete-message" class="form-message"></p>
+      </div>
     </div>
   </div>
 </div>
@@ -314,6 +317,12 @@
       <button type="button" id="photo-rotate-right" class="btn btn--secondary">↷ Drehen</button>
       <button type="button" id="photo-reset" class="btn btn--ghost">Zurücksetzen</button>
     </div>
+    <div class="crop-controls">
+      <label>Links <input type="range" id="crop-left" min="0" max="45" value="0"></label>
+      <label>Rechts <input type="range" id="crop-right" min="0" max="45" value="0"></label>
+      <label>Oben <input type="range" id="crop-top" min="0" max="45" value="0"></label>
+      <label>Unten <input type="range" id="crop-bottom" min="0" max="45" value="0"></label>
+    </div>
     <div class="capture-row">
       <button type="button" id="photo-cancel" class="btn btn--ghost">Abbrechen</button>
       <button type="button" id="photo-apply" class="btn btn--primary">Übernehmen</button>
@@ -324,6 +333,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

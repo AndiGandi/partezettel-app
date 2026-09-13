@@ -31,9 +31,19 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-debugLog("Supabase-Client initialisiert.");
-debugLog(`Anon-Key: ${SUPABASE_ANON_KEY.slice(0, 12)}…${SUPABASE_ANON_KEY.slice(-6)} (Länge: ${SUPABASE_ANON_KEY.length} Zeichen)`);
+let sb = null;
+try {
+  if (!window.supabase || typeof SUPABASE_URL === "undefined" || typeof SUPABASE_ANON_KEY === "undefined") {
+    throw new Error("Supabase-Konfiguration fehlt.");
+  }
+  if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY.includes("HIER_DEINEN_ANON_PUBLIC_KEY_EINFÜGEN")) {
+    throw new Error("Supabase-Anon-Key fehlt in config.js.");
+  }
+  sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  debugLog("Supabase-Client initialisiert.");
+} catch (err) {
+  debugLog(`⚠️ Supabase nicht initialisiert: ${err.message}`);
+}
 
 let currentFotoBlobs = [];
 let currentAudioBlob = null;
@@ -45,6 +55,7 @@ let personenCache = []; // {id, vorname, nachname, ...}
 
 // ---------- Anonyme Anmeldung sicherstellen ----------
 async function ensureSession() {
+  if (!sb) throw new Error("Supabase ist nicht verfügbar. Bitte config.js prüfen.");
   const { data: { session }, error: getSessionError } = await sb.auth.getSession();
   if (getSessionError) throw getSessionError;
   if (!session) {
@@ -160,6 +171,7 @@ function openPhotoEditor(file) {
     fotoEditorCrop = { x: 0, y: 0, w: 1, h: 1 };
     fotoEditorImage = await loadImage(await bildZuDataURL(file));
     photoEditor.hidden = false;
+    syncCropControls();
     drawPhotoEditor();
   });
 }
@@ -201,6 +213,7 @@ async function handleFotoAuswahl(files) {
   if (!bearbeitet.length) return;
   currentFotoBlobs.push(...bearbeitet);
   fotoStatus.textContent = currentFotoBlobs.length === 1 ? "1 Foto ausgewählt ✓" : `${currentFotoBlobs.length} Fotos ausgewählt ✓`;
+  if (fotoWeiterBtn) fotoWeiterBtn.hidden = false;
   const url = URL.createObjectURL(currentFotoBlobs[0]);
   fotoPreview.src = url;
   fotoPreview.hidden = false;
@@ -213,7 +226,27 @@ fotoInputGalerie.addEventListener("change", async () => { await handleFotoAuswah
 
 document.getElementById("photo-rotate-left").addEventListener("click", () => { fotoEditorRotation -= 90; drawPhotoEditor(); });
 document.getElementById("photo-rotate-right").addEventListener("click", () => { fotoEditorRotation += 90; drawPhotoEditor(); });
-document.getElementById("photo-reset").addEventListener("click", () => { fotoEditorRotation=0; fotoEditorCrop={x:0,y:0,w:1,h:1}; drawPhotoEditor(); });
+document.getElementById("photo-reset").addEventListener("click", () => { fotoEditorRotation=0; fotoEditorCrop={x:0,y:0,w:1,h:1}; syncCropControls(); drawPhotoEditor(); });
+const cropLeft = document.getElementById("crop-left");
+const cropRight = document.getElementById("crop-right");
+const cropTop = document.getElementById("crop-top");
+const cropBottom = document.getElementById("crop-bottom");
+function syncCropControls() {
+  if (!cropLeft) return;
+  cropLeft.value = Math.round(fotoEditorCrop.x * 100);
+  cropRight.value = Math.round((1 - (fotoEditorCrop.x + fotoEditorCrop.w)) * 100);
+  cropTop.value = Math.round(fotoEditorCrop.y * 100);
+  cropBottom.value = Math.round((1 - (fotoEditorCrop.y + fotoEditorCrop.h)) * 100);
+}
+function updateCropFromControls() {
+  if (!cropLeft) return;
+  let l=Number(cropLeft.value)/100, r=Number(cropRight.value)/100, t=Number(cropTop.value)/100, b=Number(cropBottom.value)/100;
+  if (l+r>0.90) { r=Math.min(r,0.90-l); cropRight.value=Math.round(r*100); }
+  if (t+b>0.90) { b=Math.min(b,0.90-t); cropBottom.value=Math.round(b*100); }
+  fotoEditorCrop={x:l,y:t,w:1-l-r,h:1-t-b};
+  drawPhotoEditor();
+}
+[cropLeft,cropRight,cropTop,cropBottom].filter(Boolean).forEach(el=>el.addEventListener("input", updateCropFromControls));
 document.getElementById("photo-cancel").addEventListener("click", () => closePhotoEditor(null));
 document.getElementById("photo-apply").addEventListener("click", async () => closePhotoEditor(await exportEditedPhoto()));
 
@@ -271,6 +304,7 @@ photoCanvas.addEventListener("pointermove", e => {
     fotoEditorCrop.y=s.cy+dy;
   }
   clampCrop();
+  syncCropControls();
   drawPhotoEditor();
   e.preventDefault();
 });
@@ -357,6 +391,7 @@ function resetForm() {
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
   document.getElementById("ledigenname").value = "";
   currentFotoBlobs = [];
+  if (fotoWeiterBtn) fotoWeiterBtn.hidden = true;
   currentAudioBlob = null;
   fotoPreview.hidden = true;
   fotoStatus.textContent = "Kein Foto ausgewählt";
@@ -526,7 +561,15 @@ window.addEventListener("online", flushQueue);
 
 // ---------- Personenliste laden ----------
 async function loadPersonen() {
-  await ensureSession();
+  const banner = document.getElementById("pending-banner");
+  try {
+    await ensureSession();
+  } catch (err) {
+    const msg = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";
+    if (banner) { banner.hidden = false; banner.textContent = `Fehler beim Laden: ${msg}`; }
+    debugLog(`❌ Personen laden: ${msg}`);
+    return;
+  }
   const list = document.getElementById("personen-list");
   const empty = document.getElementById("list-empty");
   const { data, error } = await sb
@@ -540,6 +583,7 @@ async function loadPersonen() {
   }
 
   personenCache = data || [];
+  if (banner) banner.hidden = true;
   renderPersonenList(personenCache);
   fillBeziehungSelect(personenCache);
 
@@ -591,12 +635,9 @@ document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
   try {
     await ensureSession();
     await flushQueue();
-    await loadPersonen();
   } catch (err) {
     const msg = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";
-    debugLog(`❌ Initialisierung fehlgeschlagen: ${msg}`);
-    const banner = document.getElementById("pending-banner");
-    if (banner) { banner.hidden = false; banner.textContent = `Fehler beim Laden: ${msg}`; }
+    debugLog(`⚠️ ${msg}`);
   }
 
   if ("serviceWorker" in navigator) {
@@ -646,7 +687,7 @@ async function openPersonDetail(personId) {
 
 document.getElementById("detail-close-btn").addEventListener("click", () => {
   detailOverlay.hidden = true;
-  loadPersonen(); // Liste aktualisieren, falls sich etwas geändert hat
+  loadPersonen();
 });
 
 // ---- Person-Felder speichern ----
@@ -693,9 +734,13 @@ async function loadDetailFotos(personId) {
 
 async function uploadDetailFoto(file) {
   const msg = document.getElementById("d-foto-message");
+  msg.textContent = "Foto anpassen …";
+  const edited = await openPhotoEditor(file);
+  if (!edited) { msg.textContent = "Foto nicht übernommen."; return; }
   msg.textContent = "Lade hoch …";
-  const path = `${currentDetailPersonId}/${Date.now()}.jpg`;
-  const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, file);
+  const ext = edited.type.includes("png") ? "png" : "jpg";
+  const path = `${currentDetailPersonId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
+  const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, edited);
   if (uploadError) { msg.textContent = `Fehler: ${uploadError.message}`; return; }
   const { error: insertError } = await sb.from("fotos").insert({ personen_id: currentDetailPersonId, dateipfad: path });
   msg.textContent = insertError ? `Fehler: ${insertError.message}` : "Foto hinzugefügt ✓";
@@ -811,7 +856,7 @@ async function loadDetailBeziehungen(personId) {
 document.getElementById("d-add-beziehung-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-beziehung-message");
   const andereId = document.getElementById("d-beziehung-person").value;
-  const typ = document.getElementById("d-beziehung-typ").value.trim();
+  const typ = document.getElementById("d-beziehung-typ").value;
   if (!andereId || !typ) { msg.textContent = "Bitte Person und Beziehungstyp angeben."; return; }
   const { error } = await sb.from("beziehung").insert({
     personen_a_id: currentDetailPersonId, personen_b_id: andereId, beziehungstyp: typ,
