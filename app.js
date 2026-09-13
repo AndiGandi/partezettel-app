@@ -417,8 +417,6 @@ form.addEventListener("submit", async (e) => {
     geburtsdatum: getDatum("geburtsdatum"),
     sterbedatum: getDatum("sterbedatum"),
     notiz: document.getElementById("notiz").value.trim() || null,
-    beziehung_person_id: document.getElementById("beziehung-person").value || null,
-    beziehung_typ: document.getElementById("beziehung-typ").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
     audio_dauer: audioPreview.hidden ? null : Math.round((audioPreview.duration || 0)),
@@ -531,15 +529,6 @@ async function sendEintrag(eintrag, onProgress) {
       });
     }
 
-    // 4. Beziehung anlegen
-    if (eintrag.beziehung_person_id && eintrag.beziehung_typ) {
-      await sb.from("beziehung").insert({
-        personen_a_id: eintrag.id,
-        personen_b_id: eintrag.beziehung_person_id,
-        beziehungstyp: eintrag.beziehung_typ,
-      });
-    }
-
     return { ok: true };
   } catch (err) {
     console.error("Senden fehlgeschlagen:", err);
@@ -645,7 +634,6 @@ async function loadPersonen() {
   personenCache = data || [];
   if (banner) banner.hidden = true;
   renderPersonenList(personenCache);
-  fillBeziehungSelect(personenCache);
 
   empty.hidden = personenCache.length > 0;
 }
@@ -667,18 +655,6 @@ function renderPersonenList(personen) {
   });
 }
 
-function fillBeziehungSelect(personen) {
-  const select = document.getElementById("beziehung-person");
-  const current = select.value;
-  select.innerHTML = '<option value="">— keine —</option>';
-  personen.forEach((p) => {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = `${p.vorname} ${p.nachname}`;
-    select.appendChild(opt);
-  });
-  select.value = current;
-}
 
 document.getElementById("search-input").addEventListener("input", (e) => {
   const q = e.target.value.toLowerCase();
