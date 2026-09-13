@@ -158,6 +158,7 @@ form.addEventListener("submit", async (e) => {
     id: crypto.randomUUID(),
     vorname: document.getElementById("vorname").value.trim(),
     nachname: document.getElementById("nachname").value.trim(),
+    ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: document.getElementById("geburtsdatum").value || null,
     sterbedatum: document.getElementById("sterbedatum").value || null,
     notiz: document.getElementById("notiz").value.trim() || null,
@@ -192,6 +193,7 @@ form.addEventListener("submit", async (e) => {
 
 function resetForm() {
   form.reset();
+  document.getElementById("ledigenname").value = "";
   currentFotoBlob = null;
   currentAudioBlob = null;
   fotoPreview.hidden = true;
@@ -224,6 +226,7 @@ async function sendEintrag(eintrag, onProgress) {
         id: eintrag.id,
         vorname: eintrag.vorname,
         nachname: eintrag.nachname,
+        "Ledigenname": eintrag.ledigenname,
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
         Notiz: eintrag.notiz,
@@ -388,6 +391,7 @@ function renderPersonenList(personen) {
       ${jahre ? `<div class="person-card__years">${jahre}</div>` : ""}
       ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
     `;
+    li.addEventListener("click", () => openPersonDetail(p.id));
     list.appendChild(li);
   });
 }
@@ -425,3 +429,361 @@ document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
     navigator.serviceWorker.register("sw.js").catch((e) => console.error("SW-Fehler:", e));
   }
 })();
+
+// ==========================================================
+// PERSON-DETAIL / BEARBEITEN
+// ==========================================================
+
+let currentDetailPersonId = null;
+let detailAudioMediaRecorder = null;
+let detailAudioChunks = [];
+let detailAudioStart = null;
+let detailIsRecording = false;
+
+const detailOverlay = document.getElementById("detail-overlay");
+
+async function openPersonDetail(personId) {
+  currentDetailPersonId = personId;
+  await ensureSession();
+
+  const { data: person, error } = await sb.from("personen").select("*").eq("id", personId).single();
+  if (error) { debugLog(`❌ Fehler beim Laden der Person: ${error.message}`); return; }
+
+  document.getElementById("d-vorname").value = person.vorname || "";
+  document.getElementById("d-nachname").value = person.nachname || "";
+  document.getElementById("d-ledigenname").value = person.Ledigenname || "";
+  document.getElementById("d-geburtsdatum").value = person.geburtsdatum || "";
+  document.getElementById("d-sterbedatum").value = person.sterbedatum || "";
+  document.getElementById("d-notiz").value = person.Notiz || "";
+  document.getElementById("d-person-message").textContent = "";
+  document.getElementById("d-foto-message").textContent = "";
+  document.getElementById("d-audio-message").textContent = "";
+  document.getElementById("d-beziehung-message").textContent = "";
+  document.getElementById("d-delete-message").textContent = "";
+
+  await loadDetailFotos(personId);
+  await loadDetailAudio(personId);
+  await loadDetailBeziehungen(personId);
+  fillDetailBeziehungSelect(personId);
+
+  detailOverlay.hidden = false;
+}
+
+document.getElementById("detail-close-btn").addEventListener("click", () => {
+  detailOverlay.hidden = true;
+  loadPersonen(); // Liste aktualisieren, falls sich etwas geändert hat
+});
+
+// ---- Person-Felder speichern ----
+document.getElementById("d-save-person-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("d-person-message");
+  msg.textContent = "Speichere …";
+  const vorname = document.getElementById("d-vorname").value.trim();
+  const nachname = document.getElementById("d-nachname").value.trim();
+  if (!vorname || !nachname) {
+    msg.textContent = "Vor- und Nachname dürfen nicht leer sein.";
+    return;
+  }
+  const { error } = await sb.from("personen").update({
+    vorname,
+    nachname,
+    "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
+    geburtsdatum: document.getElementById("d-geburtsdatum").value || null,
+    sterbedatum: document.getElementById("d-sterbedatum").value || null,
+    Notiz: document.getElementById("d-notiz").value.trim() || null,
+  }).eq("id", currentDetailPersonId);
+  msg.textContent = error ? `Fehler: ${error.message}` : "Gespeichert ✓";
+});
+
+// ---- Fotos im Detail ----
+async function loadDetailFotos(personId) {
+  const container = document.getElementById("d-fotos-list");
+  container.innerHTML = "";
+  const { data, error } = await sb.from("fotos").select("*").eq("personen_id", personId);
+  if (error) { debugLog(`❌ Fotos laden: ${error.message}`); return; }
+  for (const foto of data || []) {
+    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    const div = document.createElement("div");
+    div.className = "detail-media-item";
+    div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">Foto</span><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.querySelector(".del-btn").addEventListener("click", async () => {
+      await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
+      await sb.from("fotos").delete().eq("id", foto.id);
+      loadDetailFotos(personId);
+    });
+    container.appendChild(div);
+  }
+}
+
+async function uploadDetailFoto(file) {
+  const msg = document.getElementById("d-foto-message");
+  msg.textContent = "Lade hoch …";
+  const path = `${currentDetailPersonId}/${Date.now()}.jpg`;
+  const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, file);
+  if (uploadError) { msg.textContent = `Fehler: ${uploadError.message}`; return; }
+  const { error: insertError } = await sb.from("fotos").insert({ personen_id: currentDetailPersonId, dateipfad: path });
+  msg.textContent = insertError ? `Fehler: ${insertError.message}` : "Foto hinzugefügt ✓";
+  loadDetailFotos(currentDetailPersonId);
+}
+
+document.getElementById("d-foto-input").addEventListener("change", (e) => {
+  if (e.target.files[0]) uploadDetailFoto(e.target.files[0]);
+});
+document.getElementById("d-foto-input-galerie").addEventListener("change", (e) => {
+  if (e.target.files[0]) uploadDetailFoto(e.target.files[0]);
+});
+
+// ---- Sprachnotizen im Detail ----
+async function loadDetailAudio(personId) {
+  const container = document.getElementById("d-audio-list");
+  container.innerHTML = "";
+  const { data, error } = await sb.from("sprachnotizen").select("*").eq("person_id", personId);
+  if (error) { debugLog(`❌ Sprachnotizen laden: ${error.message}`); return; }
+  for (const note of data || []) {
+    const { data: signed } = await sb.storage.from(BUCKET_AUDIO).createSignedUrl(note.dateipfad, 3600);
+    const div = document.createElement("div");
+    div.className = "detail-media-item";
+    div.innerHTML = `<audio controls src="${signed ? signed.signedUrl : ""}"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.querySelector(".del-btn").addEventListener("click", async () => {
+      await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
+      await sb.from("sprachnotizen").delete().eq("id", note.id);
+      loadDetailAudio(personId);
+    });
+    container.appendChild(div);
+  }
+}
+
+document.getElementById("d-audio-record-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("d-audio-message");
+  const btn = document.getElementById("d-audio-record-btn");
+  if (!detailIsRecording) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const chosenType = pickAudioMimeType();
+      detailAudioMediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+      detailAudioChunks = [];
+      detailAudioMediaRecorder.ondataavailable = (e) => detailAudioChunks.push(e.data);
+      detailAudioMediaRecorder.onstop = async () => {
+        const mimeType = detailAudioMediaRecorder.mimeType || chosenType || "audio/webm";
+        const ext = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
+        const blob = new Blob(detailAudioChunks, { type: mimeType });
+        const dauer = Math.round((Date.now() - detailAudioStart) / 1000);
+        stream.getTracks().forEach((t) => t.stop());
+        msg.textContent = "Lade hoch …";
+        const path = `${currentDetailPersonId}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await sb.storage.from(BUCKET_AUDIO).upload(path, blob);
+        if (uploadError) { msg.textContent = `Fehler: ${uploadError.message}`; return; }
+        const { error: insertError } = await sb.from("sprachnotizen").insert({
+          person_id: currentDetailPersonId, dateipfad: path, dauer_sekunden: dauer,
+        });
+        msg.textContent = insertError ? `Fehler: ${insertError.message}` : "Sprachnotiz hinzugefügt ✓";
+        loadDetailAudio(currentDetailPersonId);
+      };
+      detailAudioMediaRecorder.start();
+      detailAudioStart = Date.now();
+      detailIsRecording = true;
+      btn.textContent = "⏹️ Aufnahme stoppen";
+    } catch (err) {
+      msg.textContent = "Mikrofonzugriff fehlgeschlagen";
+    }
+  } else {
+    detailAudioMediaRecorder.stop();
+    detailIsRecording = false;
+    btn.textContent = "🎙️ Neue Aufnahme hinzufügen";
+  }
+});
+
+// ---- Beziehungen im Detail ----
+function fillDetailBeziehungSelect(excludePersonId) {
+  const select = document.getElementById("d-beziehung-person");
+  select.innerHTML = '<option value="">— wählen —</option>';
+  personenCache.filter((p) => p.id !== excludePersonId).forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = `${p.vorname} ${p.nachname}`;
+    select.appendChild(opt);
+  });
+}
+
+async function loadDetailBeziehungen(personId) {
+  const container = document.getElementById("d-beziehungen-list");
+  container.innerHTML = "";
+  const { data, error } = await sb.from("beziehung").select("*")
+    .or(`personen_a_id.eq.${personId},personen_b_id.eq.${personId}`);
+  if (error) { debugLog(`❌ Beziehungen laden: ${error.message}`); return; }
+  for (const b of data || []) {
+    const andereId = b.personen_a_id === personId ? b.personen_b_id : b.personen_a_id;
+    const andere = personenCache.find((p) => p.id === andereId);
+    const name = andere ? `${andere.vorname} ${andere.nachname}` : "(unbekannte Person)";
+    const div = document.createElement("div");
+    div.className = "detail-media-item";
+    div.innerHTML = `<span class="beziehung-text">${b.beziehungstyp} — ${name}</span><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.querySelector(".del-btn").addEventListener("click", async () => {
+      await sb.from("beziehung").delete().eq("id", b.id);
+      loadDetailBeziehungen(personId);
+    });
+    container.appendChild(div);
+  }
+}
+
+document.getElementById("d-add-beziehung-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("d-beziehung-message");
+  const andereId = document.getElementById("d-beziehung-person").value;
+  const typ = document.getElementById("d-beziehung-typ").value.trim();
+  if (!andereId || !typ) { msg.textContent = "Bitte Person und Beziehungstyp angeben."; return; }
+  const { error } = await sb.from("beziehung").insert({
+    personen_a_id: currentDetailPersonId, personen_b_id: andereId, beziehungstyp: typ,
+  });
+  msg.textContent = error ? `Fehler: ${error.message}` : "Hinzugefügt ✓";
+  document.getElementById("d-beziehung-typ").value = "";
+  loadDetailBeziehungen(currentDetailPersonId);
+});
+
+// ---- Person vollständig löschen ----
+document.getElementById("d-delete-person-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("d-delete-message");
+  if (!confirm("Diese Person inkl. aller Fotos, Sprachnotizen und Beziehungen unwiderruflich löschen?")) return;
+  msg.textContent = "Lösche …";
+
+  const { data: fotos } = await sb.from("fotos").select("*").eq("personen_id", currentDetailPersonId);
+  for (const f of fotos || []) {
+    await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]);
+    await sb.from("fotos").delete().eq("id", f.id);
+  }
+
+  const { data: audios } = await sb.from("sprachnotizen").select("*").eq("person_id", currentDetailPersonId);
+  for (const a of audios || []) {
+    await sb.storage.from(BUCKET_AUDIO).remove([a.dateipfad]);
+    await sb.from("sprachnotizen").delete().eq("id", a.id);
+  }
+
+  await sb.from("beziehung").delete().or(`personen_a_id.eq.${currentDetailPersonId},personen_b_id.eq.${currentDetailPersonId}`);
+  const { error } = await sb.from("personen").delete().eq("id", currentDetailPersonId);
+
+  if (error) {
+    msg.textContent = `Fehler: ${error.message}`;
+  } else {
+    detailOverlay.hidden = true;
+    loadPersonen();
+  }
+});
+
+// ==========================================================
+// EXPORT
+// ==========================================================
+
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function fetchAllExportData() {
+  const [{ data: personen }, { data: beziehungen }, { data: fotos }, { data: sprachnotizen }] = await Promise.all([
+    sb.from("personen").select("*"),
+    sb.from("beziehung").select("*"),
+    sb.from("fotos").select("*"),
+    sb.from("sprachnotizen").select("*"),
+  ]);
+  return { personen: personen || [], beziehungen: beziehungen || [], fotos: fotos || [], sprachnotizen: sprachnotizen || [] };
+}
+
+document.getElementById("export-json-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("export-message");
+  msg.textContent = "Erstelle JSON …";
+  const data = await fetchAllExportData();
+  downloadFile("partezettel-export.json", JSON.stringify(data, null, 2), "application/json");
+  msg.textContent = "JSON-Datei heruntergeladen ✓";
+});
+
+document.getElementById("export-gedcom-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("export-message");
+  msg.textContent = "Erstelle GEDCOM …";
+  const { personen, beziehungen } = await fetchAllExportData();
+
+  const gedcomDate = (d) => {
+    if (!d) return null;
+    const [y, m, day] = d.split("-");
+    const monate = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    return `${parseInt(day, 10)} ${monate[parseInt(m, 10) - 1]} ${y}`;
+  };
+
+  let lines = ["0 HEAD", "1 SOUR PartezettelArchiv", "1 GEDC", "2 VERS 5.5.1", "1 CHAR UTF-8"];
+
+  personen.forEach((p, i) => {
+    const gid = `@I${i + 1}@`;
+    p._gid = gid;
+    lines.push(`0 ${gid} INDI`);
+    lines.push(`1 NAME ${p.vorname} /${p.nachname}/`);
+    if (p.Ledigenname) lines.push(`2 _MARNM ${p.Ledigenname}`);
+    if (p.geburtsdatum) { lines.push("1 BIRT"); lines.push(`2 DATE ${gedcomDate(p.geburtsdatum)}`); }
+    if (p.sterbedatum) { lines.push("1 DEAT"); lines.push(`2 DATE ${gedcomDate(p.sterbedatum)}`); }
+    if (p.Notiz) lines.push(`1 NOTE ${p.Notiz.replace(/\n/g, " ")}`);
+  });
+
+  beziehungen.forEach((b) => {
+    const a = personen.find((p) => p.id === b.personen_a_id);
+    const bb = personen.find((p) => p.id === b.personen_b_id);
+    if (a && bb) {
+      lines.push(`1 NOTE Beziehung: ${a.vorname} ${a.nachname} — ${b.beziehungstyp} — ${bb.vorname} ${bb.nachname}`);
+    }
+  });
+
+  lines.push("0 TRLR");
+  downloadFile("partezettel-export.ged", lines.join("\n"), "text/plain");
+  msg.textContent = "GEDCOM-Datei heruntergeladen ✓ (vereinfachtes Format: Beziehungen als Notizen, keine automatische Familienstruktur)";
+});
+
+document.getElementById("export-pdf-btn").addEventListener("click", async () => {
+  const msg = document.getElementById("export-message");
+  msg.textContent = "Erstelle PDF …";
+  const { personen, beziehungen } = await fetchAllExportData();
+
+  if (!window.jspdf) {
+    msg.textContent = "PDF-Bibliothek konnte nicht geladen werden.";
+    return;
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  let y = 15;
+  doc.setFontSize(16);
+  doc.text("Partezettel Archiv — Übersicht", 14, y);
+  y += 10;
+  doc.setFontSize(10);
+
+  personen.forEach((p) => {
+    if (y > 270) { doc.addPage(); y = 15; }
+    doc.setFont(undefined, "bold");
+    doc.text(`${p.vorname} ${p.nachname}${p.Ledigenname ? " geb. " + p.Ledigenname : ""}`, 14, y);
+    doc.setFont(undefined, "normal");
+    y += 5;
+    if (p.geburtsdatum || p.sterbedatum) {
+      doc.text(`${p.geburtsdatum || "?"} – ${p.sterbedatum || "?"}`, 14, y);
+      y += 5;
+    }
+    if (p.Notiz) {
+      const lines = doc.splitTextToSize(p.Notiz, 180);
+      doc.text(lines, 14, y);
+      y += lines.length * 5;
+    }
+    const beziehungenZuP = beziehungen.filter((b) => b.personen_a_id === p.id || b.personen_b_id === p.id);
+    beziehungenZuP.forEach((b) => {
+      const andereId = b.personen_a_id === p.id ? b.personen_b_id : b.personen_a_id;
+      const andere = personen.find((pp) => pp.id === andereId);
+      if (andere) {
+        doc.text(`  ${b.beziehungstyp}: ${andere.vorname} ${andere.nachname}`, 14, y);
+        y += 5;
+      }
+    });
+    y += 4;
+  });
+
+  doc.save("partezettel-export.pdf");
+  msg.textContent = "PDF heruntergeladen ✓";
+});

@@ -22,6 +22,7 @@
 <nav class="tabs" role="tablist" aria-label="Bereiche">
   <button class="tab-btn is-active" data-tab="erfassen" role="tab" aria-selected="true">Neu erfassen</button>
   <button class="tab-btn" data-tab="liste" role="tab" aria-selected="false">Personen</button>
+  <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export</button>
 </nav>
 
 <main>
@@ -42,6 +43,11 @@
         <label class="field">
           <span>Nachname *</span>
           <input type="text" id="nachname" required>
+        </label>
+
+        <label class="field">
+          <span>Ledigenname (falls abweichend)</span>
+          <input type="text" id="ledigenname" placeholder="z. B. Geburtsname vor der Heirat">
         </label>
 
         <div class="field-row">
@@ -125,9 +131,87 @@
     <p id="list-empty" class="list-empty" hidden>Noch keine Personen erfasst.</p>
   </section>
 
+  <!-- ===================== TAB: EXPORT ===================== -->
+  <section id="tab-export" class="tab-panel">
+    <fieldset class="field-group">
+      <legend>Daten exportieren</legend>
+      <p class="capture-status">Exportiert alle erfassten Personen, Beziehungen und Notizen (Fotos/Sprachnotizen bleiben als Dateien in Supabase gespeichert und sind nicht in den Exporten enthalten).</p>
+      <button type="button" id="export-json-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als JSON exportieren</button>
+      <button type="button" id="export-gedcom-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als GEDCOM exportieren</button>
+      <button type="button" id="export-pdf-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als PDF exportieren</button>
+      <p id="export-message" class="form-message"></p>
+    </fieldset>
+  </section>
+
 </main>
 
+<!-- ===================== PERSON-DETAIL / BEARBEITEN OVERLAY ===================== -->
+<div id="detail-overlay" class="detail-overlay" hidden>
+  <div class="detail-sheet">
+    <div class="detail-header">
+      <h2>Person bearbeiten</h2>
+      <button type="button" id="detail-close-btn" class="btn btn--ghost">✕</button>
+    </div>
+
+    <div class="detail-body">
+      <fieldset class="field-group">
+        <legend>Person</legend>
+        <label class="field"><span>Vorname *</span><input type="text" id="d-vorname"></label>
+        <label class="field"><span>Nachname *</span><input type="text" id="d-nachname"></label>
+        <label class="field"><span>Ledigenname</span><input type="text" id="d-ledigenname"></label>
+        <div class="field-row">
+          <label class="field"><span>Geburtsdatum</span><input type="date" id="d-geburtsdatum"></label>
+          <label class="field"><span>Sterbedatum</span><input type="date" id="d-sterbedatum"></label>
+        </div>
+        <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
+        <button type="button" id="d-save-person-btn" class="btn btn--primary btn--full">Änderungen speichern</button>
+        <p id="d-person-message" class="form-message"></p>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Fotos</legend>
+        <div id="d-fotos-list" class="detail-media-list"></div>
+        <div class="capture-row">
+          <label class="btn btn--secondary capture-btn">
+            <span>📷 Foto aufnehmen</span>
+            <input type="file" id="d-foto-input" accept="image/*" capture="environment" hidden>
+          </label>
+          <label class="btn btn--secondary capture-btn">
+            <span>🖼️ Aus Fotos wählen</span>
+            <input type="file" id="d-foto-input-galerie" accept="image/*" hidden>
+          </label>
+        </div>
+        <p id="d-foto-message" class="form-message"></p>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Sprachnotizen</legend>
+        <div id="d-audio-list" class="detail-media-list"></div>
+        <button type="button" id="d-audio-record-btn" class="btn btn--secondary">🎙️ Neue Aufnahme hinzufügen</button>
+        <p id="d-audio-message" class="form-message"></p>
+      </fieldset>
+
+      <fieldset class="field-group">
+        <legend>Beziehungen</legend>
+        <div id="d-beziehungen-list" class="detail-media-list"></div>
+        <label class="field"><span>Neue Beziehung: verknüpfte Person</span>
+          <select id="d-beziehung-person"><option value="">— wählen —</option></select>
+        </label>
+        <label class="field"><span>Beziehungstyp</span>
+          <input type="text" id="d-beziehung-typ" placeholder="z. B. Vater, Mutter, Pate …">
+        </label>
+        <button type="button" id="d-add-beziehung-btn" class="btn btn--secondary btn--full">Beziehung hinzufügen</button>
+        <p id="d-beziehung-message" class="form-message"></p>
+      </fieldset>
+
+      <button type="button" id="d-delete-person-btn" class="btn btn--full detail-delete-btn">Person vollständig löschen</button>
+      <p id="d-delete-message" class="form-message"></p>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
 <script src="app.js"></script>
 </body>
