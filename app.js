@@ -222,6 +222,66 @@ async function handleFotoAuswahl(files) {
 fotoInput.addEventListener("change", async () => { await handleFotoAuswahl(fotoInput.files); fotoInput.value = ""; });
 const fotoWeiterBtn = document.getElementById("foto-weiter-btn");
 if (fotoWeiterBtn) fotoWeiterBtn.addEventListener("click", () => fotoInput.click());
+
+// ---------- Sprachaufnahme (kein Zeitlimit) ----------
+const audioBtn = document.getElementById("audio-record-btn");
+const audioStatus = document.getElementById("audio-status");
+const audioPreview = document.getElementById("audio-preview");
+
+function pickAudioMimeType() {
+  const candidates = [
+    "audio/mp4",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/ogg;codecs=opus",
+  ];
+  for (const type of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(type)) return type;
+  }
+  return "";
+}
+
+let currentAudioMimeType = "audio/webm";
+let currentAudioExt = "webm";
+
+if (audioBtn && audioStatus && audioPreview) {
+  audioBtn.addEventListener("click", async () => {
+    if (!isRecording) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const chosenType = pickAudioMimeType();
+        mediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+        audioChunks = [];
+        mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
+        mediaRecorder.onstop = () => {
+          currentAudioMimeType = mediaRecorder.mimeType || chosenType || "audio/webm";
+          currentAudioExt = currentAudioMimeType.includes("mp4") ? "m4a"
+            : currentAudioMimeType.includes("ogg") ? "ogg"
+            : "webm";
+          currentAudioBlob = new Blob(audioChunks, { type: currentAudioMimeType });
+          const url = URL.createObjectURL(currentAudioBlob);
+          audioPreview.src = url;
+          audioPreview.hidden = false;
+          const dauer = Math.round((Date.now() - recordStartTime) / 1000);
+          audioStatus.textContent = `Aufnahme: ${dauer}s ✓`;
+          stream.getTracks().forEach((t) => t.stop());
+        };
+        mediaRecorder.start();
+        recordStartTime = Date.now();
+        isRecording = true;
+        audioBtn.textContent = "⏹️ Aufnahme stoppen";
+        audioStatus.textContent = "Aufnahme läuft …";
+      } catch (err) {
+        audioStatus.textContent = "Mikrofonzugriff fehlgeschlagen";
+        debugLog(`❌ Mikrofon: ${err.message || err}`);
+      }
+    } else {
+      mediaRecorder.stop();
+      isRecording = false;
+      audioBtn.textContent = "🎙️ Aufnahme starten";
+    }
+  });
+}
 fotoInputGalerie.addEventListener("change", async () => { await handleFotoAuswahl(fotoInputGalerie.files); fotoInputGalerie.value = ""; });
 
 document.getElementById("photo-rotate-left").addEventListener("click", () => { fotoEditorRotation -= 90; drawPhotoEditor(); });
