@@ -477,7 +477,7 @@ async function sendEintrag(eintrag, onProgress) {
 
     step("Schritt 2/4: Person speichern …");
     const { error: personError } = await mitTimeout(
-      sb.from("personen").insert({
+      sb.from("personen").upsert({
         id: eintrag.id,
         vorname: eintrag.vorname,
         nachname: eintrag.nachname,
@@ -486,7 +486,7 @@ async function sendEintrag(eintrag, onProgress) {
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
         Notiz: eintrag.notiz,
-      }),
+      }, { onConflict: "id" }),
       15000,
       "Zeitüberschreitung beim Speichern der Person (Netzwerk antwortet nicht)"
     );
