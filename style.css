@@ -270,6 +270,10 @@ textarea { resize: vertical; }
   align-items: flex-end;
 }
 
+.detail-overlay[hidden] {
+  display: none;
+}
+
 .detail-sheet {
   background: var(--paper);
   width: 100%;
