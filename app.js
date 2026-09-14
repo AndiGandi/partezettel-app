@@ -741,17 +741,17 @@ function personenVergleich(a,b) {
 }
 function sortierePersonen(personen) { return [...personen].sort((a,b)=>personenVergleich(a,b)*personenSortRichtung); }
 function personenAuswahlText(person) {
-  if (!person) return "";
-  const name = `${person.vorname || ""} ${person.nachname || ""}`.trim();
+  if (!person) return "(unbekannte Person)";
+  const name = `${person.vorname || ""} ${person.nachname || ""}`.trim() || "(unbekannte Person)";
   const ledigenname = (person.Ledigenname || "").trim();
   let text = name;
-  if (ledigenname && ledigenname.toLowerCase() !== (person.nachname || "").trim().toLowerCase()) {
+  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== (person.nachname || "").trim().toLocaleLowerCase("de")) {
     text += ` (geb. ${ledigenname})`;
   }
-  const geburtsjahr = person.geburtsdatum ? new Date(person.geburtsdatum).getUTCFullYear() : null;
-  const sterbejahr = person.sterbedatum ? new Date(person.sterbedatum).getUTCFullYear() : (person.sterbejahr || null);
-  if (geburtsjahr) text += ` — geb. ${geburtsjahr}`;
-  if (sterbejahr) text += ` — gest. ${sterbejahr}`;
+  const geburtsjahr = person.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : "";
+  const sterbejahr = person.sterbedatum ? String(person.sterbedatum).slice(0, 4) : (person.sterbejahr ? String(person.sterbejahr) : "");
+  if (/^\d{4}$/.test(geburtsjahr)) text += ` — geb. ${geburtsjahr}`;
+  if (/^\d{4}$/.test(sterbejahr)) text += ` — gest. ${sterbejahr}`;
   return text;
 }
 
@@ -1150,6 +1150,32 @@ async function loadDetailFamilie(personId) {
     parentFamilies = data || [];
   }
 
+  const detailPersonIds = new Set([personId]);
+  for (const f of partnerFamilies) {
+    for (const id of [f.partner_a_id, f.partner_b_id]) {
+      if (id) detailPersonIds.add(id);
+    }
+  }
+  for (const f of parentFamilies) {
+    for (const id of [f.partner_a_id, f.partner_b_id]) {
+      if (id) detailPersonIds.add(id);
+    }
+  }
+
+  const detailPersonMap = new Map(personenCache.map((p) => [p.id, p]));
+  if (detailPersonIds.size) {
+    const { data: detailPersons, error: detailPersonsError } = await sb
+      .from("personen")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
+      .in("id", Array.from(detailPersonIds));
+    if (detailPersonsError) {
+      debugLog(`❌ Personendaten für Familienanzeige: ${detailPersonsError.message}`);
+    } else {
+      for (const p of detailPersons || []) detailPersonMap.set(p.id, p);
+    }
+  }
+  const detailPerson = (id) => detailPersonMap.get(id) || personenCache.find((p) => p.id === id) || null;
+
   const potentialParents = [];
   for (const f of parentFamilies) {
     for (const id of [f.partner_a_id, f.partner_b_id]) {
@@ -1182,7 +1208,7 @@ async function loadDetailFamilie(personId) {
     div.className = "detail-media-item familie-item";
     const typ = f.familientyp || "Partnerschaft";
     const zeitraum = [f.beginn, f.ende].filter(Boolean).map((d) => d.split("-").reverse().join(".")).join(" – ");
-    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(personenCache.find((p) => p.id === otherId))}${typ ? ` — ${typ}` : ""}${zeitraum ? ` — ${zeitraum}` : ""}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(detailPerson(otherId))}${typ ? ` — ${typ}` : ""}${zeitraum ? ` — ${zeitraum}` : ""}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
       const { error } = await sb.from("familien").delete().eq("id", f.id);
@@ -1214,7 +1240,7 @@ async function loadDetailFamilie(personId) {
       if (!otherId) continue;
       const div = document.createElement("div");
       div.className = "detail-media-item familie-item";
-      div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(personenCache.find((p) => p.id === otherId))} — ${b.beziehungstyp}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+      div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(detailPerson(otherId))} — ${b.beziehungstyp}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
       div.querySelector(".del-btn").addEventListener("click", async () => {
         if (!confirm("Diese Partnerschaft löschen?")) return;
         const { error } = await sb.from("beziehung").delete().eq("id", b.id);
@@ -1238,7 +1264,7 @@ async function loadDetailFamilie(personId) {
     if (!child) continue;
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
-    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(child)}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
+    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(detailPerson(child.id))}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
       if (error) setDetailFamilieMessage(`Fehler: ${error.message}`);
@@ -1263,7 +1289,7 @@ async function loadDetailFamilie(personId) {
     if (!otherId) continue;
     const opt = document.createElement("option");
     opt.value = f.id;
-    opt.textContent = `${personenAuswahlText(personenCache.find((p) => p.id === otherId))} — ${f.familientyp || "Partnerschaft"}`;
+    opt.textContent = `${personenAuswahlText(detailPerson(otherId))} — ${f.familientyp || "Partnerschaft"}`;
     familySelect.appendChild(opt);
   }
 }
