@@ -3,6 +3,14 @@
 // ==========================================================
 
 // ---------- Sichtbares Debug-Log (funktioniert ohne Mac/Web-Inspector) ----------
+
+function deathYearOnly() {
+  const y = document.getElementById("n-sterbe-jahr")?.value;
+  const m = document.getElementById("n-sterbe-monat")?.value;
+  const d = document.getElementById("n-sterbe-tag")?.value;
+  return y && (!m || m === "0" || !d || d === "0") ? String(y) : "";
+}
+
 function debugLog(msg) {
   const el = document.getElementById("debug-log");
   const zeit = new Date().toLocaleTimeString("de-DE");
