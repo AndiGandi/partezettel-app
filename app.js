@@ -221,6 +221,7 @@ async function handleFotoAuswahl(files) {
   const url = URL.createObjectURL(currentFotoBlobs[0]);
   fotoPreview.src = url;
   fotoPreview.hidden = false;
+  fotoPreview.style.display = "block";
 }
 
 fotoInput.addEventListener("change", async () => { await handleFotoAuswahl(fotoInput.files); fotoInput.value = ""; });
@@ -459,6 +460,7 @@ function resetForm() {
   if (fotoPreview) {
     const oldUrl = fotoPreview.src;
     fotoPreview.hidden = true;
+    fotoPreview.style.display = "none";
     fotoPreview.removeAttribute("src");
     if (oldUrl && oldUrl.startsWith("blob:")) URL.revokeObjectURL(oldUrl);
   }
@@ -790,7 +792,7 @@ async function loadDetailFotos(personId) {
       viewerImg.src = fotoImg.src;
       viewer.hidden = false;
     };
-    fotoImg.addEventListener("pointerup", openFoto);
+    fotoImg.addEventListener("click", openFoto);
     div.querySelector(".del-btn").addEventListener("click", async () => {
       await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
       await sb.from("fotos").delete().eq("id", foto.id);
@@ -1042,48 +1044,70 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
   if (!partnerAId) throw new Error("Partner A fehlt.");
 
   if (partnerBId) {
-    // Immer dieselbe Familie verwenden – unabhängig davon, wer die Beziehung anlegt.
-    const [{ data: aRows, error: aError }, { data: bRows, error: bError }] = await Promise.all([
-      sb.from("familien").select("*").eq("partner_a_id", partnerAId).eq("partner_b_id", partnerBId),
-      sb.from("familien").select("*").eq("partner_a_id", partnerBId).eq("partner_b_id", partnerAId),
-    ]);
-    if (aError) throw aError;
-    if (bError) throw bError;
+    // Eine Partnerschaft ist immer genau EIN gemeinsamer Datensatz.
+    // Die Reihenfolge der beiden Personen spielt dabei keine Rolle.
+    const [firstId, secondId] = [partnerAId, partnerBId].sort();
 
-    const existing = (aRows && aRows[0]) || (bRows && bRows[0]);
-    if (existing) {
-      // Falls die Familie bereits besteht, werden neu eingegebener Typ/Zeitraum übernommen,
-      // ohne eine zweite Gegenbeziehung anzulegen.
-      const update = {};
-      if (typ) update.familientyp = typ;
-      if (beginn !== null) update.beginn = beginn;
-      if (ende !== null) update.ende = ende;
-      if (Object.keys(update).length) {
-        const { error } = await sb.from("familien").update(update).eq("id", existing.id);
-        if (error) throw error;
-      }
-      return existing;
-    }
-  } else {
-    const { data, error } = await sb.from("familien")
+    const { data: existingRows, error: findError } = await sb.from("familien")
       .select("*")
-      .eq("partner_a_id", partnerAId)
-      .is("partner_b_id", null)
+      .or(`and(partner_a_id.eq.${firstId},partner_b_id.eq.${secondId}),and(partner_a_id.eq.${secondId},partner_b_id.eq.${firstId})`)
       .limit(1);
-    if (error) throw error;
-    if (data && data.length) return data[0];
+    if (findError) throw findError;
+
+    const existing = existingRows?.[0] || null;
+    if (existing) {
+      const update = {
+        familientyp: typ || existing.familientyp || "Partnerschaft",
+        beginn: beginn || existing.beginn || null,
+        ende: ende || existing.ende || null,
+      };
+      const { data: updated, error: updateError } = await sb.from("familien")
+        .update(update)
+        .eq("id", existing.id)
+        .select()
+        .single();
+      if (updateError) throw updateError;
+      return updated || existing;
+    }
+
+    const { data: neu, error: insertError } = await sb.from("familien").insert({
+      partner_a_id: firstId,
+      partner_b_id: secondId,
+      familientyp: typ || "Partnerschaft",
+      beginn: beginn || null,
+      ende: ende || null,
+    }).select().single();
+    if (insertError) {
+      // Falls zwischenzeitlich bereits dieselbe Familie angelegt wurde, noch einmal lesen.
+      const { data: retryRows } = await sb.from("familien")
+        .select("*")
+        .or(`and(partner_a_id.eq.${firstId},partner_b_id.eq.${secondId}),and(partner_a_id.eq.${secondId},partner_b_id.eq.${firstId})`)
+        .limit(1);
+      if (retryRows?.[0]) return retryRows[0];
+      throw insertError;
+    }
+    return neu;
   }
+
+  const { data, error } = await sb.from("familien")
+    .select("*")
+    .eq("partner_a_id", partnerAId)
+    .is("partner_b_id", null)
+    .limit(1);
+  if (error) throw error;
+  if (data?.length) return data[0];
 
   const { data: neu, error: insertError } = await sb.from("familien").insert({
     partner_a_id: partnerAId,
-    partner_b_id: partnerBId || null,
-    familientyp: typ,
+    partner_b_id: null,
+    familientyp: typ || "Partnerschaft",
     beginn: beginn || null,
     ende: ende || null,
   }).select().single();
   if (insertError) throw insertError;
   return neu;
 }
+
 async function addKindZuFamilie(familieId, kindId, beziehungstyp = "biologisch") {
   const { error } = await sb.from("familien_kinder").upsert({
     familie_id: familieId,
@@ -1114,26 +1138,32 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
   const partnerId = document.getElementById("d-partner-person").value;
   if (!partnerId) { msg.textContent = "Bitte Partner/in auswählen."; return; }
   try {
-    await findeOderErstelleFamilie(currentDetailPersonId, partnerId,
+    const familie = await findeOderErstelleFamilie(currentDetailPersonId, partnerId,
       document.getElementById("d-partner-typ").value || "Partnerschaft",
       document.getElementById("d-partner-beginn").value || null,
       document.getElementById("d-partner-ende").value || null);
-    msg.textContent = "Partner/in hinzugefügt ✓";
 
-    // Die Familie ist ein gemeinsamer Datensatz. Sie wird deshalb auch bei der
-    // anderen Person automatisch sichtbar; hier prüfen wir das direkt.
-    const checkA = await sb.from("familien").select("id").eq("partner_a_id", currentDetailPersonId).eq("partner_b_id", partnerId);
-    const checkB = await sb.from("familien").select("id").eq("partner_a_id", partnerId).eq("partner_b_id", currentDetailPersonId);
-    if (!(checkA.data?.length || checkB.data?.length)) {
-      msg.textContent = "Fehler: Partnerschaft wurde nicht gespeichert.";
-      return;
+    // Eine Familie gehört beiden Personen. Kontrolliert wird deshalb nur die
+    // gemeinsame Familien-ID, nicht ein zweiter Gegen-Datensatz.
+    const { data: verify, error: verifyError } = await sb.from("familien")
+      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
+      .eq("id", familie.id)
+      .single();
+    if (verifyError) throw verifyError;
+    if (!verify || !((verify.partner_a_id === currentDetailPersonId && verify.partner_b_id === partnerId) ||
+                     (verify.partner_a_id === partnerId && verify.partner_b_id === currentDetailPersonId))) {
+      throw new Error("Partnerschaft wurde nicht korrekt gespeichert.");
     }
+    msg.textContent = "Partner/in hinzugefügt ✓";
 
     document.getElementById("d-partner-person").value = "";
     document.getElementById("d-partner-beginn").value = "";
     document.getElementById("d-partner-ende").value = "";
     await loadDetailFamilie(currentDetailPersonId);
-  } catch (err) { msg.textContent = `Fehler: ${err.message}`; }
+  } catch (err) {
+    debugLog(`❌ Partnerschaft speichern: ${err.message || err}`);
+    msg.textContent = `Fehler: ${err.message || err}`;
+  }
 });
 
 document.getElementById("d-add-kind-btn").addEventListener("click", async () => {
