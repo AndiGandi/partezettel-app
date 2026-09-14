@@ -1054,17 +1054,17 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
   if (!partnerAId) throw new Error("Partner A fehlt.");
 
   if (partnerBId) {
-    // Eine Partnerschaft ist genau EIN gemeinsamer Datensatz.
-    // Die Suche erfolgt absichtlich mit zwei einfachen Abfragen, damit die
-    // UUID-Verknüpfung unabhängig von der Reihenfolge zuverlässig gefunden wird.
-    const [aResult, bResult] = await Promise.all([
-      sb.from("familien").select("*").eq("partner_a_id", partnerAId).eq("partner_b_id", partnerBId).limit(1),
-      sb.from("familien").select("*").eq("partner_a_id", partnerBId).eq("partner_b_id", partnerAId).limit(1),
-    ]);
-    if (aResult.error) throw aResult.error;
-    if (bResult.error) throw bResult.error;
+    const [firstId, secondId] = [partnerAId, partnerBId].sort();
 
-    const existing = aResult.data?.[0] || bResult.data?.[0] || null;
+    debugLog(`Partnerschaft speichern: ${firstId} ↔ ${secondId} (${typ || "Partnerschaft"})`);
+
+    const { data: existingRows, error: findError } = await sb.from("familien")
+      .select("*")
+      .or(`and(partner_a_id.eq.${firstId},partner_b_id.eq.${secondId}),and(partner_a_id.eq.${secondId},partner_b_id.eq.${firstId})`)
+      .limit(1);
+    if (findError) throw findError;
+
+    const existing = existingRows?.[0] || null;
     const werte = {
       familientyp: typ || existing?.familientyp || "Partnerschaft",
       beginn: beginn || existing?.beginn || null,
@@ -1072,25 +1072,32 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
     };
 
     if (existing) {
-      const { data: updated, error } = await sb.from("familien")
+      const { error } = await sb.from("familien")
         .update(werte)
-        .eq("id", existing.id)
-        .select("*")
-        .single();
+        .eq("id", existing.id);
       if (error) throw error;
-      return updated;
+      debugLog(`Partnerschaft aktualisiert: ${existing.id}`);
+      return { ...existing, ...werte };
     }
 
-    // Feste Reihenfolge verhindert, dass dieselbe Partnerschaft durch
-    // unterschiedliche Eingaberichtung doppelt angelegt wird.
-    const [firstId, secondId] = [partnerAId, partnerBId].sort();
-    const { data: neu, error } = await sb.from("familien").insert({
+    // ID clientseitig erzeugen. Dadurch benötigen wir nach dem INSERT
+    // kein SELECT/RETURNING, um die neue Familie weiterzuverwenden.
+    const neueId = crypto.randomUUID();
+    const { error: insertError } = await sb.from("familien").insert({
+      id: neueId,
       partner_a_id: firstId,
       partner_b_id: secondId,
       ...werte,
-    }).select("*").single();
-    if (error) throw error;
-    return neu;
+    });
+    if (insertError) throw insertError;
+
+    debugLog(`Partnerschaft gespeichert: ${neueId}`);
+    return {
+      id: neueId,
+      partner_a_id: firstId,
+      partner_b_id: secondId,
+      ...werte,
+    };
   }
 
   const { data, error } = await sb.from("familien")
@@ -1101,15 +1108,24 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
   if (error) throw error;
   if (data?.length) return data[0];
 
-  const { data: neu, error: insertError } = await sb.from("familien").insert({
+  const neueId = crypto.randomUUID();
+  const { error: insertError } = await sb.from("familien").insert({
+    id: neueId,
     partner_a_id: partnerAId,
     partner_b_id: null,
     familientyp: typ || "Partnerschaft",
     beginn: beginn || null,
     ende: ende || null,
-  }).select("*").single();
+  });
   if (insertError) throw insertError;
-  return neu;
+  return {
+    id: neueId,
+    partner_a_id: partnerAId,
+    partner_b_id: null,
+    familientyp: typ || "Partnerschaft",
+    beginn: beginn || null,
+    ende: ende || null,
+  };
 }
 
 async function addKindZuFamilie(familieId, kindId, beziehungstyp = "biologisch") {
@@ -1142,23 +1158,12 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
   const partnerId = document.getElementById("d-partner-person").value;
   if (!partnerId) { msg.textContent = "Bitte Partner/in auswählen."; return; }
   try {
-    const familie = await findeOderErstelleFamilie(currentDetailPersonId, partnerId,
-      document.getElementById("d-partner-typ").value || "Partnerschaft",
-      document.getElementById("d-partner-beginn").value || null,
-      document.getElementById("d-partner-ende").value || null);
+    const typ = document.getElementById("d-partner-typ").value || "Partnerschaft";
+    const beginn = document.getElementById("d-partner-beginn").value || null;
+    const ende = document.getElementById("d-partner-ende").value || null;
 
-    // Nach dem Speichern noch einmal direkt aus der Datenbank lesen.
-    const { data: verifyRows, error: verifyError } = await sb.from("familien")
-      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-      .eq("id", familie.id);
-    if (verifyError) throw verifyError;
-    const verify = verifyRows?.[0];
-    const gegenseitig = verify &&
-      ((verify.partner_a_id === currentDetailPersonId && verify.partner_b_id === partnerId) ||
-       (verify.partner_a_id === partnerId && verify.partner_b_id === currentDetailPersonId));
-    if (!gegenseitig) {
-      throw new Error("Partnerschaft wurde in Supabase nicht mit beiden Personen gespeichert.");
-    }
+    const familie = await findeOderErstelleFamilie(currentDetailPersonId, partnerId, typ, beginn, ende);
+    debugLog(`Partner/in gespeichert: Familie ${familie.id}`);
     msg.textContent = "Partner/in hinzugefügt ✓";
 
     document.getElementById("d-partner-person").value = "";
