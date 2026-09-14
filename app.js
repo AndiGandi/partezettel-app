@@ -1270,18 +1270,12 @@ document.getElementById("d-save-eltern-btn").addEventListener("click", async () 
   }
 });
 
-// Erste Partnerschaft: Sobald ein Partner ausgewählt wird, wird sie automatisch gespeichert.
-// Sobald bereits eine Partnerschaft vorhanden ist, bleibt der Button für weitere Partnerschaften sichtbar.
-document.getElementById("d-partner-person").addEventListener("change", async (event) => {
-  const partnerList = document.getElementById("d-partner-list");
-  const hatPartnerschaft = !!partnerList?.querySelector(".familie-item");
-  if (hatPartnerschaft || !event.target.value) return;
-  autoPartnerSave = true;
-  try {
-    await document.getElementById("d-add-partner-btn").click();
-  } finally {
-    autoPartnerSave = false;
-  }
+// Partner/in auswählen löst KEIN automatisches Speichern aus.
+// Zuerst Partner/in, Art (Partnerschaft/Ehe) und optional die Daten auswählen,
+// anschließend ausdrücklich auf „Partner/in hinzufügen“ tippen.
+document.getElementById("d-partner-person").addEventListener("change", () => {
+  const msg = document.getElementById("d-familie-message");
+  if (msg) msg.textContent = "";
 });
 
 document.getElementById("d-add-partner-btn").addEventListener("click", async () => {
@@ -1297,7 +1291,11 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
     const userId = sessionData?.session?.user?.id || "keine Session-ID";
     debugLog(`Partnerschaftstest: Session ${userId}`);
 
-    const typ = document.getElementById("d-partner-typ").value || "Partnerschaft";
+    const typ = document.getElementById("d-partner-typ").value;
+    if (!typ) {
+      msg.textContent = "Bitte zuerst Partnerschaft oder Ehe auswählen.";
+      return;
+    }
     const beginn = document.getElementById("d-partner-beginn").value || null;
     const ende = document.getElementById("d-partner-ende").value || null;
 
