@@ -1152,7 +1152,9 @@ async function loadDetailFamilie(personId) {
     if (error) {
       debugLog(`❌ Elternfamilien laden: ${error.message}`);
     } else {
-      parentFamilies = (data || []).filter((f) => f.familientyp === "Eltern");
+      // Jede Familienverknüpfung eines Kindes definiert seine Elternfamilie.
+      // Der Familientyp kann "Partnerschaft", "Ehe" oder "Eltern" sein.
+      parentFamilies = data || [];
     }
   }
 
@@ -1401,7 +1403,8 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
       .in("id", familyIds);
     if (error) throw error;
-    families = (data || []).filter((f) => f.familientyp === "Eltern");
+    // Eine vorhandene Familie kann gleichzeitig Partnerschaft/Ehe und Elternfamilie sein.
+    families = data || [];
   }
 
   const oldParentLinks = (links || []).filter((l) =>
@@ -1422,19 +1425,23 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
     return;
   }
 
-  // Existierende exakt passende Elternfamilie wiederverwenden.
+  // Eine vorhandene Familie mit genau diesen Eltern wiederverwenden.
+  // Wichtig: Bei zwei Eltern muss auch die umgekehrte Reihenfolge gefunden werden,
+  // weil der Unique-Index die beiden Personen unabhängig von der Reihenfolge behandelt.
   let zielFamilie = null;
-  {
-    let query = sb.from("familien")
+  if (zielB) {
+    const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-      .eq("familientyp", "Eltern")
-      .eq("partner_a_id", zielA);
-
-    query = zielB
-      ? query.eq("partner_b_id", zielB)
-      : query.is("partner_b_id", null);
-
-    const { data, error } = await query.limit(1);
+      .or(`and(partner_a_id.eq.${zielA},partner_b_id.eq.${zielB}),and(partner_a_id.eq.${zielB},partner_b_id.eq.${zielA})`)
+      .limit(1);
+    if (error) throw error;
+    zielFamilie = (data || [])[0] || null;
+  } else {
+    const { data, error } = await sb.from("familien")
+      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
+      .eq("partner_a_id", zielA)
+      .is("partner_b_id", null)
+      .limit(1);
     if (error) throw error;
     zielFamilie = (data || [])[0] || null;
   }
