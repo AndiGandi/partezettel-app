@@ -817,7 +817,7 @@ async function loadDetailFotos(personId) {
     const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐</button><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
     const fotoImg = div.querySelector("img");
     const openFoto = (event) => {
       if (event) event.stopPropagation();
