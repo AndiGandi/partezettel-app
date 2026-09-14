@@ -80,6 +80,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.setAttribute("aria-selected", "true");
     document.getElementById("tab-" + btn.dataset.tab).classList.add("is-active");
     if (btn.dataset.tab === "liste") loadPersonen();
+    if (btn.dataset.tab === "stammbaum") loadStammbaum();
   });
 });
 
@@ -1572,3 +1573,198 @@ document.getElementById("export-pdf-btn").addEventListener("click", async () => 
   doc.save("partezettel-export.pdf");
   msg.textContent = "PDF heruntergeladen ✓";
 });
+
+// ===================== Stammbaum v31 =====================
+let treeZoom = 1;
+let treeData = { personen: [], familien: [], kinder: [], photos: new Map() };
+
+function escTree(value) {
+  return String(value ?? "").replace(/[&<>\"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+
+function treePersonCard(person, rootId = null, extraClass = "") {
+  if (!person) return "";
+  const jahre = [person.geburtsdatum, person.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
+  const foto = treeData.photos.get(person.id);
+  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${extraClass}" data-tree-person="${person.id}">
+    ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
+    <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}</span>
+    ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
+  </button>`;
+}
+
+function treePerson(id) {
+  return treeData.personen.find((p) => p.id === id) || null;
+}
+
+function treeFamiliesForPerson(id) {
+  return treeData.familien.filter((f) => f.partner_a_id === id || f.partner_b_id === id);
+}
+
+function treeChildrenForFamily(familyId) {
+  return treeData.kinder.filter((k) => k.familie_id === familyId).map((k) => ({ ...k, person: treePerson(k.kind_id) })).filter((k) => k.person);
+}
+
+function treeParentFamiliesForPerson(id) {
+  return treeData.kinder.filter((k) => k.kind_id === id).map((k) => treeData.familien.find((f) => f.id === k.familie_id)).filter(Boolean);
+}
+
+async function loadStammbaumData() {
+  await ensureSession();
+  const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
+    sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum, sterbedatum").order("nachname", { ascending: true }),
+    sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende"),
+    sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
+  ]);
+  if (personenError) throw personenError;
+  if (familienError) throw familienError;
+  if (kinderError) throw kinderError;
+
+  treeData.personen = personen || [];
+  treeData.familien = familien || [];
+  treeData.kinder = kinder || [];
+  treeData.photos = new Map();
+
+  const ids = treeData.personen.map((p) => p.id);
+  if (ids.length) {
+    const { data: fotos, error: fotoError } = await sb.from("fotos")
+      .select("personen_id, dateipfad, ist_schluesselfoto")
+      .in("personen_id", ids)
+      .eq("ist_schluesselfoto", true);
+    if (fotoError) debugLog(`❌ Stammbaum-Schlüsselfotos: ${fotoError.message}`);
+    for (const foto of fotos || []) {
+      const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+      if (signed?.signedUrl) treeData.photos.set(foto.personen_id, signed.signedUrl);
+    }
+  }
+}
+
+function renderStammbaum(rootId) {
+  const stage = document.getElementById("tree-stage");
+  const message = document.getElementById("tree-message");
+  if (!stage) return;
+  stage.innerHTML = "";
+  const root = treePerson(rootId);
+  if (!root) {
+    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    return;
+  }
+
+  // Eltern des Mittelpunktes – alle vorhandenen Elternfamilien werden berücksichtigt.
+  const parentFamilies = treeParentFamiliesForPerson(rootId);
+  if (parentFamilies.length) {
+    const parentGeneration = document.createElement("div");
+    parentGeneration.className = "tree-generation";
+    const uniqueParents = [];
+    for (const f of parentFamilies) {
+      for (const id of [f.partner_a_id, f.partner_b_id]) {
+        if (id && id !== rootId && treePerson(id) && !uniqueParents.some((p) => p.id === id)) uniqueParents.push(treePerson(id));
+      }
+    }
+    if (uniqueParents.length) {
+      parentGeneration.innerHTML = uniqueParents.map((p) => treePersonCard(p, rootId)).join('<div class="tree-parent-join"></div>');
+      stage.appendChild(parentGeneration);
+      const label = document.createElement("div");
+      label.className = "tree-label";
+      label.textContent = uniqueParents.length > 2 ? "Eltern / weitere Elternverknüpfungen" : "Eltern";
+      stage.appendChild(label);
+    }
+  }
+
+  const rootArea = document.createElement("div");
+  rootArea.className = "tree-root-area";
+  rootArea.innerHTML = treePersonCard(root, rootId);
+  stage.appendChild(rootArea);
+
+  const partnerFamilies = treeFamiliesForPerson(rootId);
+  const visibleFamilies = partnerFamilies.filter((f) => treeChildrenForFamily(f.id).length || f.partner_a_id === rootId || f.partner_b_id === rootId);
+
+  if (!visibleFamilies.length) {
+    const empty = document.createElement("div");
+    empty.className = "tree-empty";
+    empty.textContent = "Keine Partnerschaft oder Kinder erfasst.";
+    stage.appendChild(empty);
+  } else {
+    const familyWrap = document.createElement("div");
+    familyWrap.className = "tree-generation tree-family-generation";
+    for (const f of visibleFamilies) {
+      const block = document.createElement("div");
+      block.className = "tree-family-block";
+      const otherId = [f.partner_a_id, f.partner_b_id].find((id) => id && id !== rootId);
+      const partner = treePerson(otherId);
+      const kids = treeChildrenForFamily(f.id);
+      const partnerHtml = partner
+        ? `<div class="tree-partners"><span class="tree-label">mit</span><span class="tree-partner-link"></span>${treePersonCard(partner)}</div>`
+        : `<div class="tree-partners"><span class="tree-label">mit</span><span class="tree-partner-link"></span><div class="tree-node"><span class="tree-node__placeholder">?</span><span class="tree-node__name">Unbekannter Partner</span></div></div>`;
+      block.innerHTML = partnerHtml;
+      if (kids.length) {
+        const label = document.createElement("div");
+        label.className = "tree-label";
+        label.textContent = `${f.familientyp || "Partnerschaft"}${kids.length > 1 ? ` · ${kids.length} Kinder` : " · 1 Kind"}`;
+        block.appendChild(label);
+        const children = document.createElement("div");
+        children.className = "tree-children";
+        children.innerHTML = kids.map((k) => treePersonCard(k.person, rootId)).join("");
+        block.appendChild(children);
+      }
+      familyWrap.appendChild(block);
+    }
+    stage.appendChild(familyWrap);
+  }
+
+  stage.querySelectorAll("[data-tree-person]").forEach((el) => {
+    el.addEventListener("click", () => {
+      const id = el.dataset.treePerson;
+      const select = document.getElementById("tree-person-select");
+      if (select) select.value = id;
+      renderStammbaum(id);
+    });
+  });
+  if (message) message.textContent = "";
+}
+
+async function loadStammbaum() {
+  const message = document.getElementById("tree-message");
+  const select = document.getElementById("tree-person-select");
+  try {
+    message.textContent = "Stammbaum wird geladen …";
+    await loadStammbaumData();
+    if (!treeData.personen.length) {
+      select.innerHTML = '<option value="">— keine Personen vorhanden —</option>';
+      renderStammbaum("");
+      message.textContent = "";
+      return;
+    }
+    const current = select.value && treePerson(select.value) ? select.value : treeData.personen[0].id;
+    select.innerHTML = '<option value="">— Person auswählen —</option>';
+    treeData.personen.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.nachname}, ${p.vorname}`;
+      select.appendChild(opt);
+    });
+    select.value = current;
+    renderStammbaum(current);
+    message.textContent = "";
+  } catch (err) {
+    message.textContent = `Fehler beim Laden des Stammbaums: ${err.message || err}`;
+    debugLog(`❌ Stammbaum: ${err.message || err}`);
+  }
+}
+
+function updateTreeZoom() {
+  const stage = document.getElementById("tree-stage");
+  const value = document.getElementById("tree-zoom-value");
+  if (stage) stage.style.transform = `scale(${treeZoom})`;
+  if (value) value.textContent = `${Math.round(treeZoom * 100)} %`;
+}
+
+const treeSelect = document.getElementById("tree-person-select");
+if (treeSelect) treeSelect.addEventListener("change", () => renderStammbaum(treeSelect.value));
+const treeZoomIn = document.getElementById("tree-zoom-in");
+const treeZoomOut = document.getElementById("tree-zoom-out");
+const treeReset = document.getElementById("tree-reset");
+if (treeZoomIn) treeZoomIn.addEventListener("click", () => { treeZoom = Math.min(1.5, +(treeZoom + 0.1).toFixed(2)); updateTreeZoom(); });
+if (treeZoomOut) treeZoomOut.addEventListener("click", () => { treeZoom = Math.max(0.6, +(treeZoom - 0.1).toFixed(2)); updateTreeZoom(); });
+if (treeReset) treeReset.addEventListener("click", () => { treeZoom = 1; updateTreeZoom(); });
+updateTreeZoom();

@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
 
@@ -22,6 +22,7 @@
 <nav class="tabs" role="tablist" aria-label="Bereiche">
   <button class="tab-btn is-active" data-tab="erfassen" role="tab" aria-selected="true">Neu erfassen</button>
   <button class="tab-btn" data-tab="liste" role="tab" aria-selected="false">Personen</button>
+  <button class="tab-btn" data-tab="stammbaum" role="tab" aria-selected="false">Stammbaum</button>
   <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export</button>
 </nav>
 
@@ -133,6 +134,25 @@
     <div id="pending-banner" class="pending-banner" hidden></div>
     <ul id="personen-list" class="personen-list"></ul>
     <p id="list-empty" class="list-empty" hidden>Noch keine Personen erfasst.</p>
+  </section>
+
+  <!-- ===================== TAB: STAMMBAUM ===================== -->
+  <section id="tab-stammbaum" class="tab-panel tree-panel">
+    <div class="tree-toolbar">
+      <label class="field tree-person-select"><span>Mittelpunkt</span>
+        <select id="tree-person-select"><option value="">— Person auswählen —</option></select>
+      </label>
+      <div class="tree-zoom-controls" aria-label="Stammbaum Zoom">
+        <button type="button" id="tree-zoom-out" class="btn btn--ghost" aria-label="Verkleinern">−</button>
+        <span id="tree-zoom-value">100 %</span>
+        <button type="button" id="tree-zoom-in" class="btn btn--ghost" aria-label="Vergrößern">+</button>
+        <button type="button" id="tree-reset" class="btn btn--ghost">↺</button>
+      </div>
+    </div>
+    <p id="tree-message" class="form-message"></p>
+    <div id="tree-viewport" class="tree-viewport">
+      <div id="tree-stage" class="tree-stage"></div>
+    </div>
   </section>
 
   <!-- ===================== TAB: EXPORT ===================== -->
@@ -302,6 +322,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=13"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>
