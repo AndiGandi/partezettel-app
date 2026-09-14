@@ -54,3 +54,5 @@
  .tree-node__photo,.tree-node__placeholder{width:44px;height:44px}
  .tree-children .tree-node{width:115px}
 }
+
+.login-screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:1rem;background:var(--paper)}.login-card{width:min(420px,100%);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.08)}.login-card h1{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:400;font-size:1.6rem;text-align:center;margin:.1rem 0 .15rem}.login-subtitle{text-align:center;color:var(--ink-soft);margin:0 0 1rem;font-style:italic}.login-logout{margin:.55rem auto 0;display:flex;min-height:40px}

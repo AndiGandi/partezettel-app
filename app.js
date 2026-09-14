@@ -53,16 +53,89 @@ let recordStartTime = null;
 let isRecording = false;
 let personenCache = []; // {id, vorname, nachname, ...}
 
-// ---------- Anonyme Anmeldung sicherstellen ----------
+// ---------- Anmeldung ----------
 async function ensureSession() {
   if (!sb) throw new Error("Supabase ist nicht verfügbar. Bitte config.js prüfen.");
   const { data: { session }, error: getSessionError } = await sb.auth.getSession();
   if (getSessionError) throw getSessionError;
-  if (!session) {
-    const { error } = await sb.auth.signInAnonymously();
-    if (error) throw error; // vorher wurde das hier nur geloggt und ignoriert
+  if (!session) throw new Error("Nicht angemeldet.");
+  return session;
+}
+
+async function anmelden(email, password) {
+  if (!sb) throw new Error("Supabase ist nicht verfügbar. Bitte config.js prüfen.");
+  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.session;
+}
+
+async function zeigeAppWennAngemeldet() {
+  const loginScreen = document.getElementById("login-screen");
+  const appShell = document.getElementById("app-shell");
+  const loginMessage = document.getElementById("login-message");
+  if (!loginScreen || !appShell) return;
+  try {
+    const { data: { session }, error } = await sb.auth.getSession();
+    if (error) throw error;
+    if (session) {
+      loginScreen.hidden = true;
+      appShell.hidden = false;
+      debugLog("Angemeldet.");
+    } else {
+      loginScreen.hidden = false;
+      appShell.hidden = true;
+    }
+  } catch (err) {
+    loginScreen.hidden = false;
+    appShell.hidden = true;
+    if (loginMessage) loginMessage.textContent = err.message;
   }
 }
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const loginForm = document.getElementById("login-form");
+  const loginMessage = document.getElementById("login-message");
+  const loginEmail = document.getElementById("login-email");
+  const loginPassword = document.getElementById("login-password");
+  const logoutBtn = document.getElementById("logout-btn");
+
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      loginMessage.textContent = "Anmeldung …";
+      try {
+        await anmelden(loginEmail.value.trim(), loginPassword.value);
+        loginPassword.value = "";
+        loginMessage.textContent = "";
+        await zeigeAppWennAngemeldet();
+        try { await flushQueue(); } catch (err) { debugLog(`⚠️ Warteschlange nach Anmeldung: ${err.message}`); }
+        try { await loadPersonen(); } catch (err) { debugLog(`⚠️ Laden nach Anmeldung: ${err.message}`); }
+      } catch (err) {
+        loginMessage.textContent = `Anmeldung fehlgeschlagen: ${err.message}`;
+      }
+    });
+  }
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      await sb.auth.signOut();
+      await zeigeAppWennAngemeldet();
+    });
+  }
+  if (sb) {
+    sb.auth.onAuthStateChange((_event, session) => {
+      const loginScreen = document.getElementById("login-screen");
+      const appShell = document.getElementById("app-shell");
+      if (session) {
+        loginScreen.hidden = true;
+        appShell.hidden = false;
+      } else {
+        loginScreen.hidden = false;
+        appShell.hidden = true;
+      }
+    });
+    await zeigeAppWennAngemeldet();
+  }
+});
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {

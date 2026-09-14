@@ -14,9 +14,24 @@
 </head>
 <body>
 
+<div id="login-screen" class="login-screen">
+  <div class="login-card">
+    <h1>Partezettel Archiv</h1>
+    <p class="login-subtitle">Anmelden</p>
+    <form id="login-form" autocomplete="on">
+      <label class="field"><span>E-Mail</span><input type="email" id="login-email" autocomplete="username" value="gan.stammbaum@gmail.com" required></label>
+      <label class="field"><span>Passwort</span><input type="password" id="login-password" autocomplete="current-password" required></label>
+      <button type="submit" class="btn btn--primary btn--full">Anmelden</button>
+      <p id="login-message" class="form-message"></p>
+    </form>
+  </div>
+</div>
+
+<div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
+  <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -291,6 +306,8 @@
   </div>
 </div>
 
+</div>
+
 <div id="detail-photo-viewer" class="detail-photo-viewer" hidden aria-label="Foto vergrößert">
   <button type="button" id="detail-photo-viewer-close" class="detail-photo-viewer__close" aria-label="Foto schließen">✕</button>
   <img id="detail-photo-viewer-img" alt="Foto vergrößert">
@@ -322,6 +339,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=14"></script>
+<script src="app.js?v=15"></script>
 </body>
 </html>
