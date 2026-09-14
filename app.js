@@ -740,6 +740,21 @@ function personenVergleich(a,b) {
   return nc || String(a.vorname||"").localeCompare(String(b.vorname||""),"de",{sensitivity:"base"});
 }
 function sortierePersonen(personen) { return [...personen].sort((a,b)=>personenVergleich(a,b)*personenSortRichtung); }
+function personenAuswahlText(person) {
+  if (!person) return "";
+  const name = `${person.vorname || ""} ${person.nachname || ""}`.trim();
+  const ledigenname = (person.Ledigenname || "").trim();
+  let text = name;
+  if (ledigenname && ledigenname.toLowerCase() !== (person.nachname || "").trim().toLowerCase()) {
+    text += ` (geb. ${ledigenname})`;
+  }
+  const geburtsjahr = person.geburtsdatum ? new Date(person.geburtsdatum).getUTCFullYear() : null;
+  const sterbejahr = person.sterbedatum ? new Date(person.sterbedatum).getUTCFullYear() : (person.sterbejahr || null);
+  if (geburtsjahr) text += ` — geb. ${geburtsjahr}`;
+  if (sterbejahr) text += ` — gest. ${sterbejahr}`;
+  return text;
+}
+
 function berechneFamilienSortKeys(personen,familien) {
   const ids=new Set(personen.map(p=>p.id)), adj=new Map(personen.map(p=>[p.id,new Set()]));
   for(const f of familien||[]) { const a=f.partner_a_id,b=f.partner_b_id; if(ids.has(a)&&ids.has(b)){adj.get(a).add(b);adj.get(b).add(a);} for(const k of f._kinder||[]){if(!ids.has(k))continue;if(ids.has(a)){adj.get(a).add(k);adj.get(k).add(a);}if(ids.has(b)){adj.get(b).add(k);adj.get(k).add(b);}}}
@@ -1150,7 +1165,7 @@ async function loadDetailFamilie(personId) {
     personenCache.filter((p) => p.id !== personId).forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.id;
-      opt.textContent = `${p.vorname} ${p.nachname}`;
+      opt.textContent = personenAuswahlText(p);
       select.appendChild(opt);
     });
   });
@@ -1260,7 +1275,7 @@ function fillFamilienPersonSelect(selectId, excludePersonId) {
   personenCache.filter((p) => p.id !== excludePersonId).forEach((p) => {
     const opt = document.createElement("option");
     opt.value = p.id;
-    opt.textContent = `${p.vorname} ${p.nachname}`;
+    opt.textContent = personenAuswahlText(p);
     select.appendChild(opt);
   });
 }
