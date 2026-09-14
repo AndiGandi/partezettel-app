@@ -192,17 +192,17 @@
   <section id="tab-export" class="tab-panel">
     <fieldset class="field-group">
       <legend>☁️ iCloud-Backup</legend>
-      <p class="capture-status">Sichert die Datenbankdaten als Backup-Datei. Nach dem Erstellen kannst du die Datei auf dem iPad über „In Dateien sichern“ in iCloud Drive ablegen.</p>
+      <p class="capture-status">Sichert Datenbank, Fotos und Sprachnotizen als vollständige Backup-Datei. Nach dem Erstellen kannst du die ZIP-Datei auf dem iPad über „In Dateien sichern“ in iCloud Drive ablegen.</p>
       <button type="button" id="backup-icloud-btn" class="btn btn--primary btn--full" style="margin-top:0.75rem;">☁️ Backup für iCloud erstellen</button>
       <label class="btn btn--secondary btn--full" style="margin-top:0.75rem;">↩️ Backup wiederherstellen
-        <input type="file" id="backup-restore-input" accept="application/json,.json" hidden>
+        <input type="file" id="backup-restore-input" accept="application/zip,.zip,application/json,.json" hidden>
       </label>
       <p id="backup-message" class="form-message"></p>
     </fieldset>
 
     <fieldset class="field-group">
       <legend>Daten exportieren</legend>
-      <p class="capture-status">Exportiert alle erfassten Personen, Familien und Notizen. Fotos und Sprachnotizen bleiben als Dateien in Supabase gespeichert und sind nicht Bestandteil der JSON-Datei.</p>
+      <p class="capture-status">Exportiert die Datenbankdaten als JSON. Das vollständige Backup oben enthält zusätzlich Fotos und Sprachnotizen.</p>
       <button type="button" id="export-json-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als JSON exportieren</button>
       <button type="button" id="export-gedcom-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als GEDCOM exportieren</button>
       <button type="button" id="export-pdf-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als PDF exportieren</button>
@@ -326,7 +326,7 @@
         </label>
         <button type="button" id="d-add-kind-btn" class="btn btn--secondary btn--full">Kind hinzufügen</button>
         <p id="d-familie-message" class="form-message"></p>
-        <!-- Kompatibilität mit älteren app.js?v=29-Versionen -->
+        <!-- Kompatibilität mit älteren app.js?v=30-Versionen -->
         <p id="d-beziehung-message" class="form-message" hidden></p>
       </fieldset>
 
@@ -373,6 +373,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=29"></script>
+<script src="app.js?v=30"></script>
 </body>
 </html>

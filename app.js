@@ -1749,14 +1749,182 @@ async function fetchAllExportData() {
 function backupDateiname() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, "0");
-  return `Partezettel_Backup_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+  return `Partezettel_Backup_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.zip`;
+}
+
+function u16(value) {
+  const a = new Uint8Array(2);
+  new DataView(a.buffer).setUint16(0, value, true);
+  return a;
+}
+
+function u32(value) {
+  const a = new Uint8Array(4);
+  new DataView(a.buffer).setUint32(0, value >>> 0, true);
+  return a;
+}
+
+function concatBytes(parts) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const part of parts) {
+    out.set(part, offset);
+    offset += part.length;
+  }
+  return out;
+}
+
+// CRC-32 für ZIP-Dateien. Wir verwenden bewusst STORE (keine Kompression),
+// damit das Backup ohne zusätzliche Bibliothek auf iPad/iPhone erzeugt werden kann.
+const ZIP_CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = ZIP_CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function zipEncodeName(name) {
+  return new TextEncoder().encode(name);
+}
+
+function erstelleZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+
+  for (const entry of entries) {
+    const nameBytes = zipEncodeName(entry.name);
+    const data = entry.data instanceof Uint8Array ? entry.data : new Uint8Array(entry.data);
+    const crc = crc32(data);
+    const local = concatBytes([
+      new Uint8Array([0x50,0x4B,0x03,0x04]),
+      u16(20), u16(0x0800), u16(0), u16(0), u16(0),
+      u32(crc), u32(data.length), u32(data.length),
+      u16(nameBytes.length), u16(0), nameBytes, data
+    ]);
+    locals.push(local);
+
+    const central = concatBytes([
+      new Uint8Array([0x50,0x4B,0x01,0x02]),
+      u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0),
+      u32(crc), u32(data.length), u32(data.length),
+      u16(nameBytes.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset),
+      nameBytes
+    ]);
+    centrals.push(central);
+    offset += local.length;
+  }
+
+  const centralOffset = offset;
+  const centralBytes = concatBytes(centrals);
+  const localBytes = concatBytes(locals);
+  const count = entries.length;
+  const eocd = concatBytes([
+    new Uint8Array([0x50,0x4B,0x05,0x06]),
+    u16(0), u16(0), u16(count), u16(count),
+    u32(centralBytes.length), u32(centralOffset), u16(0)
+  ]);
+  return concatBytes([localBytes, centralBytes, eocd]);
+}
+
+function zipReadDirectory(bytes) {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = -1;
+  const min = Math.max(0, bytes.length - 65557);
+  for (let i = bytes.length - 22; i >= min; i--) {
+    if (view.getUint32(i, true) === 0x06054B50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("Keine gültige ZIP-Datei.");
+
+  const count = view.getUint16(eocd + 10, true);
+  const centralSize = view.getUint32(eocd + 12, true);
+  const centralOffset = view.getUint32(eocd + 16, true);
+  if (centralOffset + centralSize > bytes.length) throw new Error("ZIP-Datei ist beschädigt.");
+
+  const decoder = new TextDecoder();
+  const entries = new Map();
+  let p = centralOffset;
+  for (let i = 0; i < count; i++) {
+    if (view.getUint32(p, true) !== 0x02014B50) throw new Error("Ungültiger ZIP-Verzeichniseintrag.");
+    const flags = view.getUint16(p + 8, true);
+    const method = view.getUint16(p + 10, true);
+    const compressedSize = view.getUint32(p + 20, true);
+    const uncompressedSize = view.getUint32(p + 24, true);
+    const nameLength = view.getUint16(p + 28, true);
+    const extraLength = view.getUint16(p + 30, true);
+    const commentLength = view.getUint16(p + 32, true);
+    const localOffset = view.getUint32(p + 42, true);
+    if (flags & 0x08) throw new Error("ZIP mit Daten-Deskriptor wird nicht unterstützt.");
+    if (method !== 0) throw new Error("Dieses Backup verwendet eine nicht unterstützte Kompression.");
+
+    const name = decoder.decode(bytes.subarray(p + 46, p + 46 + nameLength));
+    const local = localOffset;
+    if (view.getUint32(local, true) !== 0x04034B50) throw new Error("Ungültiger ZIP-Dateikopf.");
+    const localNameLength = view.getUint16(local + 26, true);
+    const localExtraLength = view.getUint16(local + 28, true);
+    const dataStart = local + 30 + localNameLength + localExtraLength;
+    const dataEnd = dataStart + compressedSize;
+    if (dataEnd > bytes.length || uncompressedSize !== compressedSize) throw new Error("ZIP-Datei ist beschädigt.");
+    entries.set(name, bytes.slice(dataStart, dataEnd));
+    p += 46 + nameLength + extraLength + commentLength;
+  }
+  return entries;
+}
+
+function sichereDateiname(name) {
+  return String(name || "datei").replace(/[^a-zA-Z0-9._-]/g, "_");
+}
+
+function mediaZipPath(bucket, path) {
+  const parts = String(path || "").split("/").filter(Boolean).map(sichereDateiname);
+  return `media/${bucket === BUCKET_FOTOS ? "fotos" : "sprachnotizen"}/${parts.join("/")}`;
+}
+
+async function sammleMedien(backupData, msg) {
+  const media = [];
+  const seen = new Set();
+  const quellen = [
+    ...(backupData.fotos || []).map((row) => ({ bucket: BUCKET_FOTOS, path: row.dateipfad, type: "foto" })),
+    ...(backupData.sprachnotizen || []).map((row) => ({ bucket: BUCKET_AUDIO, path: row.dateipfad, type: "audio" })),
+  ];
+
+  let index = 0;
+  for (const quelle of quellen) {
+    if (!quelle.path || seen.has(`${quelle.bucket}|${quelle.path}`)) continue;
+    seen.add(`${quelle.bucket}|${quelle.path}`);
+    index++;
+    msg.textContent = `Medien sichern … ${index}/${quellen.length}`;
+    const { data, error } = await sb.storage.from(quelle.bucket).download(quelle.path);
+    if (error) throw new Error(`${quelle.path}: ${error.message}`);
+    if (!data) throw new Error(`${quelle.path}: Datei konnte nicht geladen werden.`);
+    const bytes = new Uint8Array(await data.arrayBuffer());
+    media.push({
+      bucket: quelle.bucket,
+      path: quelle.path,
+      zipPath: mediaZipPath(quelle.bucket, quelle.path),
+      mimeType: data.type || (quelle.type === "foto" ? "image/jpeg" : "audio/mp4"),
+      size: bytes.length,
+      bytes,
+    });
+  }
+  return media;
 }
 
 async function teileOderLadeDateiHerunter(file) {
   if (navigator.share && navigator.canShare) {
     try {
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ title: "Partezettel Backup", text: "Partezettel Datenbank-Backup", files: [file] });
+        await navigator.share({ title: "Partezettel Backup", text: "Vollständiges Partezettel-Backup", files: [file] });
         return "geteilt";
       }
     } catch (err) {
@@ -1777,42 +1945,59 @@ async function teileOderLadeDateiHerunter(file) {
 
 async function erstelleICloudBackup() {
   const msg = document.getElementById("backup-message");
-  msg.textContent = "Backup wird erstellt …";
+  msg.textContent = "Backup wird vorbereitet …";
   try {
     await ensureSession();
     const data = await fetchAllExportData();
-    const backup = {
-      format: "partezettel-backup",
-      version: 1,
+    const media = await sammleMedien(data, msg);
+    const manifest = {
+      format: "partezettel-complete-backup",
+      version: 2,
       createdAt: new Date().toISOString(),
-      hinweis: "Fotos und Sprachnotizen sind als Datenbankeinträge enthalten; die eigentlichen Dateien bleiben in Supabase Storage.",
-      ...data
+      app: "Partezettel Archiv",
+      tables: ["personen", "familien", "familien_kinder", "fotos", "sprachnotizen"],
+      media: media.map(({ bucket, path, zipPath, mimeType, size }) => ({ bucket, path, zipPath, mimeType, size })),
     };
-    const file = new File([JSON.stringify(backup, null, 2)], backupDateiname(), { type: "application/json" });
+    const daten = { ...data };
+    const entries = [
+      { name: "backup.json", data: new TextEncoder().encode(JSON.stringify({ manifest, data: daten }, null, 2)) },
+    ];
+    for (const item of media) entries.push({ name: item.zipPath, data: item.bytes });
+
+    msg.textContent = `ZIP-Backup wird erstellt … (${entries.length} Dateien)`;
+    const zipBytes = erstelleZip(entries);
+    const file = new File([zipBytes], backupDateiname(), { type: "application/zip" });
     const result = await teileOderLadeDateiHerunter(file);
-    if (result === "abgebrochen") {
-      msg.textContent = "Backup nicht gespeichert.";
-    } else if (result === "geteilt") {
-      msg.textContent = "Backup erstellt ✓ – jetzt in „Dateien“ / iCloud Drive sichern.";
-    } else {
-      msg.textContent = "Backup erstellt ✓ – die Datei kann über „Dateien“ in iCloud Drive gespeichert werden.";
-    }
+    if (result === "abgebrochen") msg.textContent = "Backup nicht gespeichert.";
+    else if (result === "geteilt") msg.textContent = `Vollständiges Backup erstellt ✓ (${media.length} Mediendateien). Über „Dateien“ kannst du es in iCloud Drive speichern.`;
+    else msg.textContent = `Vollständiges Backup erstellt ✓ (${media.length} Mediendateien).`;
   } catch (err) {
     msg.textContent = `Fehler: ${err.message || err}`;
-    debugLog(`❌ iCloud-Backup: ${err.message || err}`);
+    debugLog(`❌ Vollständiges Backup: ${err.message || err}`);
   }
 }
 
 async function stelleBackupWiederHer(file) {
   const msg = document.getElementById("backup-message");
   if (!file) return;
-  if (!confirm("Dieses Backup in Supabase einspielen? Vorhandene Datensätze mit gleicher ID werden überschrieben.")) return;
+  if (!confirm("Dieses vollständige Backup in Supabase einspielen? Vorhandene Datensätze mit gleicher ID werden überschrieben; vorhandene Mediendateien bleiben unverändert.")) return;
   msg.textContent = "Backup wird geprüft …";
   try {
     await ensureSession();
-    const text = await file.text();
-    const backup = JSON.parse(text);
-    if (!backup || backup.format !== "partezettel-backup" || !Array.isArray(backup.personen) || !Array.isArray(backup.familien) || !Array.isArray(backup.familien_kinder)) {
+    let backup;
+    let zipEntries = null;
+    if (file.name.toLowerCase().endsWith(".zip") || file.type === "application/zip") {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      zipEntries = zipReadDirectory(bytes);
+      const backupBytes = zipEntries.get("backup.json");
+      if (!backupBytes) throw new Error("backup.json fehlt im Backup.");
+      backup = JSON.parse(new TextDecoder().decode(backupBytes));
+    } else {
+      backup = JSON.parse(await file.text());
+    }
+
+    const data = backup.data || backup;
+    if (!data || (backup.manifest?.format !== "partezettel-complete-backup" && backup.format !== "partezettel-backup") || !Array.isArray(data.personen) || !Array.isArray(data.familien) || !Array.isArray(data.familien_kinder)) {
       throw new Error("Keine gültige Partezettel-Backup-Datei.");
     }
 
@@ -1826,15 +2011,45 @@ async function stelleBackupWiederHer(file) {
       }
     };
 
-    // Erst Personen, dann Familien und Kinder, danach die Medien-Metadaten.
-    await upsertBatch("personen", backup.personen, "Personen");
-    await upsertBatch("familien", backup.familien || [], "Familien");
-    await upsertBatch("familien_kinder", backup.familien_kinder || [], "Kinder-Verknüpfungen");
-    await upsertBatch("fotos", backup.fotos || [], "Foto-Daten");
-    await upsertBatch("sprachnotizen", backup.sprachnotizen || [], "Sprachnotizen");
+    await upsertBatch("personen", data.personen, "Personen");
+    await upsertBatch("familien", data.familien || [], "Familien");
+    await upsertBatch("familien_kinder", data.familien_kinder || [], "Kinder-Verknüpfungen");
+    await upsertBatch("fotos", data.fotos || [], "Foto-Daten");
+    await upsertBatch("sprachnotizen", data.sprachnotizen || [], "Sprachnotizen");
+
+    let restoredMedia = 0;
+    let skippedMedia = 0;
+    const media = backup.manifest?.media || [];
+    if (zipEntries && media.length) {
+      for (let i = 0; i < media.length; i++) {
+        const item = media[i];
+        msg.textContent = `Mediendateien wiederherstellen … ${i + 1}/${media.length}`;
+        const bytes = zipEntries.get(item.zipPath);
+        if (!bytes) throw new Error(`Mediendatei fehlt im ZIP: ${item.zipPath}`);
+
+        // Bestehende Datei nicht überschreiben. So benötigt der Restore keine UPDATE-Rechte
+        // und ein vorhandenes Original bleibt unangetastet.
+        const { data: vorhanden } = await sb.storage.from(item.bucket).download(item.path);
+        if (vorhanden) {
+          skippedMedia++;
+          continue;
+        }
+        const blob = new Blob([bytes], { type: item.mimeType || "application/octet-stream" });
+        const { error } = await sb.storage.from(item.bucket).upload(item.path, blob, {
+          upsert: false,
+          contentType: item.mimeType || "application/octet-stream",
+        });
+        if (error) throw new Error(`Mediendatei ${item.path}: ${error.message}`);
+        restoredMedia++;
+      }
+    }
 
     await loadPersonen();
-    msg.textContent = `Backup wiederhergestellt ✓ (${backup.personen.length} Personen).` + (backup.fotos?.length || backup.sprachnotizen?.length ? " Die zugehörigen Mediendateien bleiben in Supabase Storage." : "");
+    if (zipEntries) {
+      msg.textContent = `Vollständiges Backup wiederhergestellt ✓ (${data.personen.length} Personen, ${restoredMedia} Mediendateien ergänzt, ${skippedMedia} vorhandene beibehalten).`;
+    } else {
+      msg.textContent = `Datenbank-Backup wiederhergestellt ✓ (${data.personen.length} Personen).`;
+    }
   } catch (err) {
     msg.textContent = `Fehler beim Wiederherstellen: ${err.message || err}`;
     debugLog(`❌ Backup wiederherstellen: ${err.message || err}`);
