@@ -1056,24 +1056,20 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
   // Partnerschaft: bewusst nur EIN einfacher INSERT.
   // Keine gegenseitige Prüfung, keine Vorab-Suche, kein RETURNING/SELECT.
   if (partnerBId) {
-    const neueId = crypto.randomUUID();
-    const [firstId, secondId] = [partnerAId, partnerBId].sort();
-
+    // Exakt derselbe einfache INSERT wie der erfolgreiche SQL-Test.
+    // Die Datenbank erzeugt die UUID selbst.
     const datensatz = {
-      id: neueId,
-      partner_a_id: firstId,
-      partner_b_id: secondId,
+      partner_a_id: partnerAId,
+      partner_b_id: partnerBId,
       familientyp: typ || "Partnerschaft",
-      beginn: beginn || null,
-      ende: ende || null,
     };
 
-    debugLog(`Familien-INSERT: ${firstId} ↔ ${secondId}`);
-    const { error } = await sb.from("familien").insert(datensatz);
+    debugLog(`Familien-INSERT: ${partnerAId} ↔ ${partnerBId}`);
+    const { data, error } = await sb.from("familien").insert(datensatz).select("*").single();
     if (error) throw error;
 
-    debugLog(`Familien-INSERT erfolgreich: ${neueId}`);
-    return datensatz;
+    debugLog(`Familien-INSERT erfolgreich: ${data.id}`);
+    return data;
   }
 
   // Ein Eltern-/Einzel-Eltern-Familieneintrag.
