@@ -1065,11 +1065,11 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
     };
 
     debugLog(`Familien-INSERT: ${partnerAId} ↔ ${partnerBId}`);
-    const { data, error } = await sb.from("familien").insert(datensatz).select("*").single();
+    const { error } = await sb.from("familien").insert(datensatz);
     if (error) throw error;
 
-    debugLog(`Familien-INSERT erfolgreich: ${data.id}`);
-    return data;
+    debugLog("Familien-INSERT erfolgreich.");
+    return datensatz;
   }
 
   // Ein Eltern-/Einzel-Eltern-Familieneintrag.
