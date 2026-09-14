@@ -3,10 +3,24 @@
 // ==========================================================
 
 // ---------- Sichtbares Debug-Log (funktioniert ohne Mac/Web-Inspector) ----------
+
+function leseSterbejahrNurJahr(id = "n-sterbejahr-only") {
+  const el = document.getElementById(id);
+  const value = el ? el.value.trim() : "";
+  if (!value) return null;
+  const year = Number(value);
+  return Number.isInteger(year) && year >= 1 && year <= 9999 ? year : null;
+}
+
 function sterbejahrAnzeige(person) {
   if (!person) return "";
   if (person.sterbedatum) {
-    const d = new Date(person.sterbedatum);
+    
+  const sterbejahrEdit = document.getElementById("d-sterbejahr-only");
+  const sterbejahrWert = sterbejahrEdit && sterbejahrEdit.value.trim()
+    ? Number(sterbejahrEdit.value.trim())
+    : null;
+const d = new Date(person.sterbedatum);
     if (!Number.isNaN(d.getTime())) return String(d.getFullYear());
   }
   return person.sterbejahr ? String(person.sterbejahr) : "";
@@ -504,6 +518,7 @@ form.addEventListener("submit", async (e) => {
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
     sterbedatum: getDatum("sterbedatum"),
+      sterbejahr: leseSterbejahrNurJahr(),
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
@@ -589,7 +604,6 @@ async function sendEintrag(eintrag, onProgress) {
         "Ledigenname": eintrag.ledigenname,
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
-      sterbejahr: null,
         Notiz: eintrag.notiz,
       }, { onConflict: "id" }),
       15000,
