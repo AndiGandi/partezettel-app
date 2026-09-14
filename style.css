@@ -81,3 +81,23 @@
 .tree-relationship .tree-partner-link{display:block;width:24px;height:2px;background:var(--accent);flex:0 0 24px}
 .tree-relationship--marriage .tree-marriage__label{margin-bottom:.15rem}
 @media(max-width:700px){.tree-couple{gap:.2rem}.tree-relationship{min-width:44px}.tree-relationship .tree-partner-link{width:18px;flex-basis:18px}.tree-marriage__label{font-size:.66rem}.tree-marriage__rings{font-size:1.25rem}}
+
+/* Stammbaum v34: Partnerpaare konsequent horizontal */
+.tree-family-block > .tree-couple{
+  display:flex !important;
+  flex-direction:row !important;
+  align-items:center !important;
+  justify-content:center !important;
+  flex-wrap:nowrap !important;
+  width:max-content;
+  max-width:none;
+}
+.tree-family-block > .tree-couple > .tree-node{
+  flex:0 0 145px !important;
+}
+.tree-family-block > .tree-couple > .tree-relationship{
+  flex:0 0 auto !important;
+}
+@media(max-width:700px){
+  .tree-family-block > .tree-couple > .tree-node{flex-basis:125px !important}
+}
