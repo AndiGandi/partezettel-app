@@ -56,3 +56,20 @@
 }
 
 .login-screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:1rem;background:var(--paper)}.login-card{width:min(420px,100%);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.08)}.login-card h1{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:400;font-size:1.6rem;text-align:center;margin:.1rem 0 .15rem}.login-subtitle{text-align:center;color:var(--ink-soft);margin:0 0 1rem;font-style:italic}.login-logout{margin:.55rem auto 0;display:flex;min-height:40px}
+
+/* Stammbaum: Ehepaare nebeneinander */
+.tree-couple{display:flex;align-items:center;justify-content:center;gap:.35rem;position:relative}
+.tree-couple .tree-node{flex:0 0 auto}
+.tree-marriage{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:58px;line-height:1}
+.tree-marriage__label{font-size:.72rem;color:var(--ink-soft);font-style:italic;margin-bottom:.15rem}
+.tree-marriage__rings{font-family:Georgia,"Times New Roman",serif;font-size:1.55rem;letter-spacing:-.42rem;padding-right:.42rem;color:var(--accent);transform:scaleX(.92)}
+.tree-family-label{margin-top:-.25rem}
+.tree-family-block .tree-children{margin-top:.15rem}
+.tree-family-block .tree-children::before{height:.8rem}
+
+@media (max-width:700px){
+  .tree-couple{gap:.2rem}
+  .tree-marriage{min-width:44px}
+  .tree-marriage__label{font-size:.66rem}
+  .tree-marriage__rings{font-size:1.25rem}
+}

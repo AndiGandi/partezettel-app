@@ -1742,15 +1742,14 @@ function renderStammbaum(rootId) {
     }
   }
 
-  const rootArea = document.createElement("div");
-  rootArea.className = "tree-root-area";
-  rootArea.innerHTML = treePersonCard(root, rootId);
-  stage.appendChild(rootArea);
-
   const partnerFamilies = treeFamiliesForPerson(rootId);
   const visibleFamilies = partnerFamilies.filter((f) => treeChildrenForFamily(f.id).length || f.partner_a_id === rootId || f.partner_b_id === rootId);
 
   if (!visibleFamilies.length) {
+    const rootArea = document.createElement("div");
+    rootArea.className = "tree-root-area";
+    rootArea.innerHTML = treePersonCard(root, rootId);
+    stage.appendChild(rootArea);
     const empty = document.createElement("div");
     empty.className = "tree-empty";
     empty.textContent = "Keine Partnerschaft oder Kinder erfasst.";
@@ -1758,20 +1757,42 @@ function renderStammbaum(rootId) {
   } else {
     const familyWrap = document.createElement("div");
     familyWrap.className = "tree-generation tree-family-generation";
+
     for (const f of visibleFamilies) {
       const block = document.createElement("div");
       block.className = "tree-family-block";
       const otherId = [f.partner_a_id, f.partner_b_id].find((id) => id && id !== rootId);
       const partner = treePerson(otherId);
       const kids = treeChildrenForFamily(f.id);
-      const partnerHtml = partner
-        ? `<div class="tree-partners"><span class="tree-label">mit</span><span class="tree-partner-link"></span>${treePersonCard(partner)}</div>`
-        : `<div class="tree-partners"><span class="tree-label">mit</span><span class="tree-partner-link"></span><div class="tree-node"><span class="tree-node__placeholder">?</span><span class="tree-node__name">Unbekannter Partner</span></div></div>`;
-      block.innerHTML = partnerHtml;
+      const isMarriage = String(f.familientyp || "").toLowerCase() === "ehe";
+
+      if (partner && isMarriage) {
+        block.innerHTML = `
+          <div class="tree-couple">
+            ${treePersonCard(root, rootId)}
+            <div class="tree-marriage" aria-label="Ehe">
+              <span class="tree-marriage__label">Ehe</span>
+              <span class="tree-marriage__rings" aria-hidden="true">◯◯</span>
+            </div>
+            ${treePersonCard(partner)}
+          </div>`;
+      } else {
+        block.innerHTML = `
+          <div class="tree-partners">
+            ${treePersonCard(root, rootId)}
+            <span class="tree-partner-link"></span>
+            ${partner ? treePersonCard(partner) : `<div class="tree-node"><span class="tree-node__placeholder">?</span><span class="tree-node__name">Unbekannter Partner</span></div>`}
+          </div>`;
+        const typeLabel = document.createElement("div");
+        typeLabel.className = "tree-label";
+        typeLabel.textContent = f.familientyp || "Partnerschaft";
+        block.appendChild(typeLabel);
+      }
+
       if (kids.length) {
         const label = document.createElement("div");
-        label.className = "tree-label";
-        label.textContent = `${f.familientyp || "Partnerschaft"}${kids.length > 1 ? ` · ${kids.length} Kinder` : " · 1 Kind"}`;
+        label.className = "tree-label tree-family-label";
+        label.textContent = `${kids.length > 1 ? `${kids.length} Kinder` : "1 Kind"}`;
         block.appendChild(label);
         const children = document.createElement("div");
         children.className = "tree-children";
