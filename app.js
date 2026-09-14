@@ -5,11 +5,14 @@
 // ---------- Sichtbares Debug-Log (funktioniert ohne Mac/Web-Inspector) ----------
 function todesjahrAnzeige(person) {
   if (!person) return "";
-  if (person.sterbejahr) return String(person.sterbejahr);
-  const raw = person.sterbedatum || "";
-  if (!raw) return "";
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? "" : String(d.getFullYear());
+  if (person.sterbejahr !== null && person.sterbejahr !== undefined && String(person.sterbejahr).trim() !== "") {
+    return String(person.sterbejahr);
+  }
+  if (person.sterbedatum) {
+    const d = new Date(person.sterbedatum);
+    if (!Number.isNaN(d.getTime())) return String(d.getFullYear());
+  }
+  return "";
 }
 
 function debugLog(msg) {
@@ -503,8 +506,8 @@ form.addEventListener("submit", async (e) => {
     geschlecht: document.getElementById("geschlecht").value || null,
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
-    sterbedatum: getDatum("sterbedatum"),,
-      sterbejahr: (() => { const y = document.getElementById("n-sterbe-jahr")?.value; return y ? Number(y) : null; })()
+    sterbedatum: getDatum("sterbedatum"),
+      sterbejahr: (() => { const el = document.getElementById("n-sterbe-jahr"); const y = el ? el.value : ""; return y ? Number(y) : null; })(),
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
