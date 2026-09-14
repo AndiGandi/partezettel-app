@@ -767,6 +767,14 @@ async function loadDetailFotos(personId) {
     const div = document.createElement("div");
     div.className = "detail-media-item";
     div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">Foto</span><button class="del-btn" title="Löschen">🗑️</button>`;
+    const fotoImg = div.querySelector("img");
+    fotoImg.addEventListener("click", () => {
+      const viewer = document.getElementById("detail-photo-viewer");
+      const viewerImg = document.getElementById("detail-photo-viewer-img");
+      if (!viewer || !viewerImg || !fotoImg.src) return;
+      viewerImg.src = fotoImg.src;
+      viewer.hidden = false;
+    });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
       await sb.from("fotos").delete().eq("id", foto.id);
@@ -790,6 +798,21 @@ async function uploadDetailFoto(file) {
   msg.textContent = insertError ? `Fehler: ${insertError.message}` : "Foto hinzugefügt ✓";
   loadDetailFotos(currentDetailPersonId);
 }
+
+const detailPhotoViewer = document.getElementById("detail-photo-viewer");
+const detailPhotoViewerImg = document.getElementById("detail-photo-viewer-img");
+const detailPhotoViewerClose = document.getElementById("detail-photo-viewer-close");
+
+function closeDetailPhotoViewer() {
+  if (!detailPhotoViewer) return;
+  detailPhotoViewer.hidden = true;
+  if (detailPhotoViewerImg) detailPhotoViewerImg.src = "";
+}
+
+detailPhotoViewerClose?.addEventListener("click", closeDetailPhotoViewer);
+detailPhotoViewer?.addEventListener("click", (event) => {
+  if (event.target === detailPhotoViewer) closeDetailPhotoViewer();
+});
 
 document.getElementById("d-foto-input").addEventListener("change", async (e) => {
   if (e.target.files.length) {
