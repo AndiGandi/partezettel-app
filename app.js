@@ -1150,40 +1150,86 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
   const msg = document.getElementById("d-familie-message");
   const partnerId = document.getElementById("d-partner-person").value;
   if (!partnerId) { msg.textContent = "Bitte Partner/in auswählen."; return; }
+
+  msg.textContent = "INSERT Partnerschaft: wird gespeichert …";
   try {
+    await ensureSession();
+    const { data: sessionData } = await sb.auth.getSession();
+    const userId = sessionData?.session?.user?.id || "keine Session-ID";
+    debugLog(`Partnerschaftstest: Session ${userId}`);
+
     const typ = document.getElementById("d-partner-typ").value || "Partnerschaft";
     const beginn = document.getElementById("d-partner-beginn").value || null;
     const ende = document.getElementById("d-partner-ende").value || null;
 
-    // Bewährter Partner-Speicherweg aus v9/v10 als Kompatibilitätsschicht.
-    // Dadurch bleibt die Partnerschaft auch dann sichtbar, wenn die neue
-    // Familien-Tabelle beim INSERT Probleme mit RLS/Berechtigungen macht.
-    const { error: beziehungsError } = await sb.from("beziehung").insert({
+    const beziehungsDatensatz = {
       personen_a_id: currentDetailPersonId,
       personen_b_id: partnerId,
       beziehungstyp: typ,
-    });
-    if (beziehungsError) throw beziehungsError;
-    debugLog("Partnerschaft in beziehung gespeichert.");
+    };
 
-    // Zusätzlich versuchen wir den neuen Familien-Datensatz zu speichern.
-    // Ein Fehler hier darf die bewährte Partnerschaftsanzeige nicht verhindern.
-    try {
-      const familie = await findeOderErstelleFamilie(currentDetailPersonId, partnerId, typ, beginn, ende);
-      debugLog(`Familien-Datensatz gespeichert: ${familie.id || "DB-ID"}`);
-    } catch (familyErr) {
-      debugLog(`⚠️ Familien-Datensatz nicht gespeichert: ${familyErr.message || familyErr}`);
+    debugLog(`BEZIEHUNG-INSERT: ${JSON.stringify(beziehungsDatensatz)}`);
+
+    const { data: beziehungData, error: beziehungsError } = await sb
+      .from("beziehung")
+      .insert(beziehungsDatensatz)
+      .select("id, personen_a_id, personen_b_id, beziehungstyp")
+      .single();
+
+    if (beziehungsError) {
+      const detail = [
+        beziehungsError.message,
+        beziehungsError.details,
+        beziehungsError.hint,
+        beziehungsError.code ? `Code: ${beziehungsError.code}` : ""
+      ].filter(Boolean).join(" | ");
+      debugLog(`❌ BEZIEHUNG-INSERT FEHLER: ${detail}`);
+      msg.textContent = `❌ INSERT FEHLER: ${detail}`;
+      return;
     }
 
-    msg.textContent = "Partner/in hinzugefügt ✓";
+    debugLog(`✅ BEZIEHUNG-INSERT ERFOLGREICH: ${JSON.stringify(beziehungData)}`);
+    msg.textContent = `✅ INSERT erfolgreich – ID: ${beziehungData.id}`;
+
+    // Zusätzlich Familien-Datensatz versuchen. Ein Fehler hier wird separat angezeigt.
+    try {
+      const familienDatensatz = {
+        partner_a_id: currentDetailPersonId,
+        partner_b_id: partnerId,
+        familientyp: typ,
+        beginn,
+        ende,
+      };
+      debugLog(`FAMILIEN-INSERT: ${JSON.stringify(familienDatensatz)}`);
+      const { data: familienData, error: familyErr } = await sb
+        .from("familien")
+        .insert(familienDatensatz)
+        .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
+        .single();
+
+      if (familyErr) {
+        const detail = [familyErr.message, familyErr.details, familyErr.hint, familyErr.code ? `Code: ${familyErr.code}` : ""]
+          .filter(Boolean).join(" | ");
+        debugLog(`⚠️ FAMILIEN-INSERT FEHLER: ${detail}`);
+        msg.textContent = `✅ Beziehung gespeichert. ⚠️ Familien-INSERT Fehler: ${detail}`;
+      } else {
+        debugLog(`✅ FAMILIEN-INSERT ERFOLGREICH: ${JSON.stringify(familienData)}`);
+        msg.textContent = `✅ INSERT erfolgreich – Beziehung + Familie gespeichert`;
+      }
+    } catch (familyErr) {
+      const detail = familyErr?.message || String(familyErr);
+      debugLog(`⚠️ FAMILIEN-INSERT AUSNAHME: ${detail}`);
+      msg.textContent = `✅ Beziehung gespeichert. ⚠️ Familien-INSERT Fehler: ${detail}`;
+    }
 
     document.getElementById("d-partner-person").value = "";
     document.getElementById("d-partner-beginn").value = "";
     document.getElementById("d-partner-ende").value = "";
     await loadDetailFamilie(currentDetailPersonId);
   } catch (err) {
-    debugLog(`❌ Partnerschaft speichern: ${err.message || err}`);
-    msg.textContent = `Fehler: ${err.message || err}`;
+    const detail = err?.message || String(err);
+    debugLog(`❌ Partnerschaftstest AUSNAHME: ${detail}`);
+    msg.textContent = `❌ INSERT FEHLER: ${detail}`;
   }
 });
 
