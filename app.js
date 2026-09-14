@@ -72,6 +72,10 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       b.setAttribute("aria-selected", "false");
     });
     document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("is-active"));
+    // Falls die Personenbearbeitung offen ist, beim Wechsel des Hauptreiters schließen.
+    const overlay = document.getElementById("detail-overlay");
+    if (overlay) overlay.hidden = true;
+
     btn.classList.add("is-active");
     btn.setAttribute("aria-selected", "true");
     document.getElementById("tab-" + btn.dataset.tab).classList.add("is-active");
@@ -692,6 +696,11 @@ let detailAudioStart = null;
 let detailIsRecording = false;
 
 const detailOverlay = document.getElementById("detail-overlay");
+const detailFamilieMessage = document.getElementById("d-familie-message");
+
+function setDetailFamilieMessage(text) {
+  if (detailFamilieMessage) detailFamilieMessage.textContent = text || "";
+}
 
 async function openPersonDetail(personId) {
   currentDetailPersonId = personId;
@@ -710,7 +719,7 @@ async function openPersonDetail(personId) {
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
   document.getElementById("d-audio-message").textContent = "";
-  document.getElementById("d-familie-message").textContent = "";
+  setDetailFamilieMessage("");
   document.getElementById("d-delete-message").textContent = "";
 
   await loadDetailFotos(personId);
@@ -922,7 +931,7 @@ async function loadDetailFamilie(personId) {
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
       const { error } = await sb.from("familien").delete().eq("id", f.id);
-      if (error) document.getElementById("d-familie-message").textContent = `Fehler: ${error.message}`;
+      if (error) setDetailFamilieMessage(`Fehler: ${error.message}`);
       else await loadDetailFamilie(personId);
     });
     partnerList.appendChild(div);
@@ -944,7 +953,7 @@ async function loadDetailFamilie(personId) {
     div.innerHTML = `<span class="beziehung-text">${child.vorname} ${child.nachname}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
-      if (error) document.getElementById("d-familie-message").textContent = `Fehler: ${error.message}`;
+      if (error) setDetailFamilieMessage(`Fehler: ${error.message}`);
       else await loadDetailFamilie(personId);
     });
     childList.appendChild(div);

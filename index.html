@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=6">
+<link rel="stylesheet" href="style.css?v=7">
 </head>
 <body>
 
@@ -257,6 +257,8 @@
         </label>
         <button type="button" id="d-add-kind-btn" class="btn btn--secondary btn--full">Kind hinzufügen</button>
         <p id="d-familie-message" class="form-message"></p>
+        <!-- Kompatibilität mit älteren app.js-Versionen -->
+        <p id="d-beziehung-message" class="form-message" hidden></p>
       </fieldset>
 
       <div class="detail-actions">
