@@ -1146,20 +1146,22 @@ async function loadDetailFamilie(personId) {
   const parentFamilyIds = (childLinks || []).map((x) => x.familie_id);
   let parentFamilies = [];
   if (parentFamilyIds.length) {
-    const { data } = await sb.from("familien").select("*").in("id", parentFamilyIds);
-    parentFamilies = data || [];
+    const { data, error } = await sb.from("familien")
+      .select("*")
+      .in("id", parentFamilyIds);
+    if (error) {
+      debugLog(`❌ Elternfamilien laden: ${error.message}`);
+    } else {
+      parentFamilies = (data || []).filter((f) => f.familientyp === "Eltern");
+    }
   }
 
   const detailPersonIds = new Set([personId]);
   for (const f of partnerFamilies) {
-    for (const id of [f.partner_a_id, f.partner_b_id]) {
-      if (id) detailPersonIds.add(id);
-    }
+    for (const id of [f.partner_a_id, f.partner_b_id]) if (id) detailPersonIds.add(id);
   }
   for (const f of parentFamilies) {
-    for (const id of [f.partner_a_id, f.partner_b_id]) {
-      if (id) detailPersonIds.add(id);
-    }
+    for (const id of [f.partner_a_id, f.partner_b_id]) if (id) detailPersonIds.add(id);
   }
 
   const detailPersonMap = new Map(personenCache.map((p) => [p.id, p]));
@@ -1176,13 +1178,33 @@ async function loadDetailFamilie(personId) {
   }
   const detailPerson = (id) => detailPersonMap.get(id) || personenCache.find((p) => p.id === id) || null;
 
-  const potentialParents = [];
-  for (const f of parentFamilies) {
-    for (const id of [f.partner_a_id, f.partner_b_id]) {
-      if (id && id !== personId && !potentialParents.some((x) => x.id === id)) {
-        const p = personenCache.find((x) => x.id === id);
-        if (p) potentialParents.push(p);
-      }
+  // Nur eine Elternfamilie ist die aktive Elternbeziehung des Kindes.
+  // Bei alten, fehlerhaften Mehrfachverknüpfungen wird die erste vollständige
+  // Familie bevorzugt; beim Speichern werden alle alten Links bereinigt.
+  const aktuelleElternfamilie = parentFamilies.find((f) =>
+    f.partner_a_id && f.partner_b_id
+  ) || parentFamilies[0] || null;
+
+  let vaterId = null;
+  let mutterId = null;
+  if (aktuelleElternfamilie) {
+    const a = detailPerson(aktuelleElternfamilie.partner_a_id);
+    const b = detailPerson(aktuelleElternfamilie.partner_b_id);
+
+    for (const p of [a, b]) {
+      if (!p) continue;
+      if (p.geschlecht === "männlich") vaterId = p.id;
+      if (p.geschlecht === "weiblich") mutterId = p.id;
+    }
+
+    // Legacy-Daten ohne Geschlecht: A=Vater, B=Mutter.
+    if (a && b && !vaterId && !mutterId) {
+      vaterId = a.id;
+      mutterId = b.id;
+    } else if (a && b && !vaterId) {
+      vaterId = a.id === mutterId ? b.id : a.id;
+    } else if (a && b && !mutterId) {
+      mutterId = a.id === vaterId ? b.id : a.id;
     }
   }
 
@@ -1196,9 +1218,8 @@ async function loadDetailFamilie(personId) {
     });
   });
 
-  parentSelectVater.value = potentialParents.find((p) => p.geschlecht === "männlich")?.id || "";
-  parentSelectMutter.value = potentialParents.find((p) => p.geschlecht === "weiblich")?.id || "";
-  if (!parentSelectVater.value && potentialParents.length === 1) parentSelectVater.value = potentialParents[0].id;
+  parentSelectVater.value = vaterId || "";
+  parentSelectMutter.value = mutterId || "";
 
   partnerList.innerHTML = "";
   for (const f of partnerFamilies || []) {
@@ -1267,8 +1288,16 @@ async function loadDetailFamilie(personId) {
     div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(detailPerson(child.id))}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
-      if (error) setDetailFamilieMessage(`Fehler: ${error.message}`);
-      else await loadDetailFamilie(personId);
+      if (error) {
+        setDetailFamilieMessage(`Fehler: ${error.message}`);
+        return;
+      }
+      try {
+        await loescheElternfamilieWennLeer(link.familie_id);
+        await loadDetailFamilie(personId);
+      } catch (err) {
+        setDetailFamilieMessage(`Fehler: ${err.message}`);
+      }
     });
     childList.appendChild(div);
   }
@@ -1354,126 +1383,107 @@ async function addKindZuFamilie(familieId, kindId, beziehungstyp = "biologisch")
 }
 
 async function speichereElternZuKind(kindId, vaterId, mutterId) {
-  // Bestehende Elternfamilien des Kindes laden.
+  if (vaterId && mutterId && vaterId === mutterId) {
+    throw new Error("Vater und Mutter dürfen nicht dieselbe Person sein.");
+  }
+
+  // Alle Familienverknüpfungen dieses Kindes laden.
   const { data: links, error: linksError } = await sb
     .from("familien_kinder")
     .select("id, familie_id, kind_id, beziehungstyp")
     .eq("kind_id", kindId);
   if (linksError) throw linksError;
 
-  const familieIds = (links || []).map((x) => x.familie_id);
-  let familien = [];
-  if (familieIds.length) {
-    const { data, error } = await sb
-      .from("familien")
+  const familyIds = [...new Set((links || []).map((l) => l.familie_id))];
+  let families = [];
+  if (familyIds.length) {
+    const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-      .in("id", familieIds);
+      .in("id", familyIds);
     if (error) throw error;
-    familien = data || [];
+    families = (data || []).filter((f) => f.familientyp === "Eltern");
   }
 
-  // Nur Familien vom Typ "Eltern" werden als Elternbeziehung dieses Kindes
-  // behandelt. Partner-/Ehefamilien bleiben vollständig unangetastet.
-  const elternFamilien = familien.filter((f) => f.familientyp === "Eltern");
+  const oldParentLinks = (links || []).filter((l) =>
+    families.some((f) => f.id === l.familie_id)
+  );
 
-  // Keine Eltern ausgewählt: die Elternverknüpfung dieses Kindes sauber entfernen.
-  if (!vaterId && !mutterId) {
-    for (const f of elternFamilien) {
-      const { error } = await sb.from("familien_kinder").delete().eq("id", (links || []).find((l) => l.familie_id === f.id)?.id);
+  // Ziel-Familie: A=Vater (oder einziger Elternteil), B=Mutter.
+  const zielA = vaterId || mutterId || null;
+  const zielB = vaterId && mutterId ? mutterId : null;
+
+  // Keine Eltern gewählt: alle Elternlinks dieses Kindes entfernen.
+  if (!zielA) {
+    for (const link of oldParentLinks) {
+      const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
       if (error) throw error;
-
-      // Eine Elternfamilie ohne Kinder wird ebenfalls entfernt.
-      const { data: rest, error: restError } = await sb
-        .from("familien_kinder")
-        .select("id")
-        .eq("familie_id", f.id)
-        .limit(1);
-      if (restError) throw restError;
-      if (!rest || rest.length === 0) {
-        const { error: delFamilyError } = await sb.from("familien").delete().eq("id", f.id);
-        if (delFamilyError) throw delFamilyError;
-      }
+      await loescheElternfamilieWennLeer(link.familie_id);
     }
     return;
   }
 
-  // Vorhandene Elternfamilie bevorzugen, die bereits einen der ausgewählten
-  // Elternteile enthält. So entsteht beim Speichern niemals eine unnötige
-  // zweite Elternfamilie für dasselbe Kind.
-  let familie = elternFamilien.find((f) =>
-    [f.partner_a_id, f.partner_b_id].includes(vaterId || mutterId)
-  );
+  // Existierende exakt passende Elternfamilie wiederverwenden.
+  let zielFamilie = null;
+  {
+    let query = sb.from("familien")
+      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
+      .eq("familientyp", "Eltern")
+      .eq("partner_a_id", zielA);
 
-  // Falls Vater + Mutter vorhanden sind, zuerst eine Familie suchen, die
-  // bereits genau dieses Elternpaar enthält.
-  if (vaterId && mutterId) {
-    familie = elternFamilien.find((f) => {
-      const ids = [f.partner_a_id, f.partner_b_id];
-      return ids.includes(vaterId) && ids.includes(mutterId);
-    }) || familie;
+    query = zielB
+      ? query.eq("partner_b_id", zielB)
+      : query.is("partner_b_id", null);
+
+    const { data, error } = await query.limit(1);
+    if (error) throw error;
+    zielFamilie = (data || [])[0] || null;
   }
 
-  if (!familie) {
-    // Keine passende Elternfamilie vorhanden: neue Familie für dieses Kind.
-    const { data, error } = await sb
-      .from("familien")
+  if (!zielFamilie) {
+    const { data, error } = await sb.from("familien")
       .insert({
-        partner_a_id: vaterId || mutterId,
-        partner_b_id: vaterId && mutterId ? mutterId : null,
+        partner_a_id: zielA,
+        partner_b_id: zielB,
         familientyp: "Eltern"
       })
-      .select("id, partner_a_id, partner_b_id, familientyp")
+      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
       .single();
     if (error) throw error;
-    familie = data;
-  } else {
-    // Bestehende Elternfamilie exakt auf den aktuellen Zustand setzen.
-    // Mutter-only bedeutet partner_a=mutter, partner_b=NULL.
-    const update = {
-      partner_a_id: vaterId || mutterId,
-      partner_b_id: vaterId && mutterId ? mutterId : null,
-      familientyp: "Eltern"
-    };
-    const { error } = await sb.from("familien").update(update).eq("id", familie.id);
-    if (error) throw error;
+    zielFamilie = data;
   }
 
-  // Das Kind genau dieser Elternfamilie zuordnen.
-  const existingLink = (links || []).find((l) => l.familie_id === familie.id);
-  if (!existingLink) {
+  // Alle bisherigen Elternlinks dieses Kindes entfernen. Das ist wichtig:
+  // dadurch können alte falsche Vater/Mutter-Kombinationen nicht bestehen bleiben.
+  for (const link of oldParentLinks) {
+    if (link.familie_id === zielFamilie.id) continue;
+    const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
+    if (error) throw error;
+    await loescheElternfamilieWennLeer(link.familie_id);
+  }
+
+  const existingTarget = oldParentLinks.find((l) => l.familie_id === zielFamilie.id);
+  if (!existingTarget) {
     const { error } = await sb.from("familien_kinder").insert({
-      familie_id: familie.id,
+      familie_id: zielFamilie.id,
       kind_id: kindId,
       beziehungstyp: "biologisch"
     });
     if (error) throw error;
-  } else {
-    const { error } = await sb.from("familien_kinder").update({
-      beziehungstyp: "biologisch"
-    }).eq("id", existingLink.id);
-    if (error) throw error;
   }
+}
 
-  // Alte Elternfamilien, die für dieses Kind nicht mehr benötigt werden,
-  // werden vom Kind getrennt. Familien mit anderen Kindern bleiben erhalten.
-  for (const f of elternFamilien) {
-    if (f.id === familie.id) continue;
-    const link = (links || []).find((l) => l.familie_id === f.id);
-    if (!link) continue;
+async function loescheElternfamilieWennLeer(familieId) {
+  const { data, error } = await sb.from("familien_kinder")
+    .select("id")
+    .eq("familie_id", familieId)
+    .limit(1);
+  if (error) throw error;
 
-    const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
-    if (error) throw error;
-
-    const { data: rest, error: restError } = await sb
-      .from("familien_kinder")
-      .select("id")
-      .eq("familie_id", f.id)
-      .limit(1);
-    if (restError) throw restError;
-    if (!rest || rest.length === 0) {
-      const { error: delFamilyError } = await sb.from("familien").delete().eq("id", f.id);
-      if (delFamilyError) throw delFamilyError;
-    }
+  if (!data || data.length === 0) {
+    const { error: delError } = await sb.from("familien")
+      .delete()
+      .eq("id", familieId);
+    if (delError) throw delError;
   }
 }
 
