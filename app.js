@@ -762,7 +762,7 @@ async function loadPersonen() {
   const empty = document.getElementById("list-empty");
   const { data, error } = await sb
     .from("personen")
-    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, Notiz")
+    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
     .order("nachname", { ascending: true });
 
   if (error) {
