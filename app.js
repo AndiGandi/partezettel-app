@@ -519,8 +519,18 @@ async function sendEintrag(eintrag, onProgress) {
       for (const foto of eintrag.fotos) {
         const ext = foto.type && foto.type.includes("png") ? "png" : foto.type && foto.type.includes("webp") ? "webp" : "jpg";
         const path = `${eintrag.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        if (!foto || typeof foto.arrayBuffer !== "function") {
+          throw new Error("Foto-Daten konnten nicht gelesen werden");
+        }
+        const fotoDaten = await foto.arrayBuffer();
+        if (!fotoDaten || fotoDaten.byteLength === 0) {
+          throw new Error("Foto enthält keine Bilddaten");
+        }
         const { error: uploadError } = await mitTimeout(
-          sb.storage.from(BUCKET_FOTOS).upload(path, foto),
+          sb.storage.from(BUCKET_FOTOS).upload(path, fotoDaten, {
+            contentType: foto.type || "image/jpeg",
+            upsert: false,
+          }),
           20000,
           "Zeitüberschreitung beim Foto-Upload (Netzwerk antwortet nicht)"
         );
