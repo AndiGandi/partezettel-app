@@ -495,6 +495,7 @@ form.addEventListener("submit", async (e) => {
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
     sterbedatum: getDatum("sterbedatum"),
+      sterbejahr: document.getElementById("n-sterbe-jahr")?.value || null,
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
