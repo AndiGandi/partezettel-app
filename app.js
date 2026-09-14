@@ -3,6 +3,15 @@
 // ==========================================================
 
 // ---------- Sichtbares Debug-Log (funktioniert ohne Mac/Web-Inspector) ----------
+function sterbejahrAnzeige(person) {
+  if (!person) return "";
+  if (person.sterbedatum) {
+    const d = new Date(person.sterbedatum);
+    if (!Number.isNaN(d.getTime())) return String(d.getFullYear());
+  }
+  return person.sterbejahr ? String(person.sterbejahr) : "";
+}
+
 function debugLog(msg) {
   const el = document.getElementById("debug-log");
   const zeit = new Date().toLocaleTimeString("de-DE");
@@ -580,6 +589,7 @@ async function sendEintrag(eintrag, onProgress) {
         "Ledigenname": eintrag.ledigenname,
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
+      sterbejahr: null,
         Notiz: eintrag.notiz,
       }, { onConflict: "id" }),
       15000,

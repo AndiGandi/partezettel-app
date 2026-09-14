@@ -101,3 +101,5 @@
 @media(max-width:700px){
   .tree-family-block > .tree-couple > .tree-node{flex-basis:125px !important}
 }
+
+.field--year-only{margin-top:.4rem}
