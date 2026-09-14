@@ -452,13 +452,27 @@ function resetForm() {
   form.reset();
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
   document.getElementById("ledigenname").value = "";
+
+  // Neue Person beginnt nach dem Speichern garantiert ohne alte Medien.
   currentFotoBlobs = [];
   if (fotoWeiterBtn) fotoWeiterBtn.hidden = true;
+  if (fotoPreview) {
+    const oldUrl = fotoPreview.src;
+    fotoPreview.hidden = true;
+    fotoPreview.removeAttribute("src");
+    if (oldUrl && oldUrl.startsWith("blob:")) URL.revokeObjectURL(oldUrl);
+  }
+  if (fotoInput) fotoInput.value = "";
+  if (fotoInputGalerie) fotoInputGalerie.value = "";
+
   currentAudioBlob = null;
-  fotoPreview.hidden = true;
-  fotoStatus.textContent = "Kein Foto ausgewählt";
-  audioPreview.hidden = true;
-  audioStatus.textContent = "Keine Aufnahme";
+  audioChunks = [];
+  if (audioPreview) {
+    audioPreview.hidden = true;
+    audioPreview.removeAttribute("src");
+  }
+  if (audioStatus) audioStatus.textContent = "Keine Aufnahme";
+  if (fotoStatus) fotoStatus.textContent = "Kein Foto ausgewählt";
 }
 
 function mitTimeout(promise, ms, meldung) {
@@ -768,13 +782,15 @@ async function loadDetailFotos(personId) {
     div.className = "detail-media-item";
     div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">Foto</span><button class="del-btn" title="Löschen">🗑️</button>`;
     const fotoImg = div.querySelector("img");
-    fotoImg.addEventListener("click", () => {
+    const openFoto = (event) => {
+      if (event) event.stopPropagation();
       const viewer = document.getElementById("detail-photo-viewer");
       const viewerImg = document.getElementById("detail-photo-viewer-img");
       if (!viewer || !viewerImg || !fotoImg.src) return;
       viewerImg.src = fotoImg.src;
       viewer.hidden = false;
-    });
+    };
+    fotoImg.addEventListener("pointerup", openFoto);
     div.querySelector(".del-btn").addEventListener("click", async () => {
       await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
       await sb.from("fotos").delete().eq("id", foto.id);
@@ -811,7 +827,14 @@ function closeDetailPhotoViewer() {
 
 detailPhotoViewerClose?.addEventListener("click", closeDetailPhotoViewer);
 detailPhotoViewer?.addEventListener("click", (event) => {
-  if (event.target === detailPhotoViewer) closeDetailPhotoViewer();
+  if (event.target === detailPhotoViewer || event.target === detailPhotoViewerImg) closeDetailPhotoViewer();
+});
+
+// Auch das gerade ausgewählte Foto bei „Neu erfassen“ kann vergrößert werden.
+fotoPreview?.addEventListener("click", () => {
+  if (!fotoPreview.src || fotoPreview.hidden) return;
+  if (detailPhotoViewerImg) detailPhotoViewerImg.src = fotoPreview.src;
+  if (detailPhotoViewer) detailPhotoViewer.hidden = false;
 });
 
 document.getElementById("d-foto-input").addEventListener("change", async (e) => {
@@ -904,12 +927,18 @@ async function loadDetailFamilie(personId) {
   const childList = document.getElementById("d-kinder-list");
   if (!parentSelectVater || !parentSelectMutter || !partnerList || !childList) return;
 
-  const [{ data: childLinks, error: childError }, { data: partnerFamilies, error: partnerError }] = await Promise.all([
+  const [{ data: childLinks, error: childError }, partnerAResult, partnerBResult] = await Promise.all([
     sb.from("familien_kinder").select("id, familie_id, beziehungstyp").eq("kind_id", personId),
-    sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
+    sb.from("familien").select("*").eq("partner_a_id", personId),
+    sb.from("familien").select("*").eq("partner_b_id", personId),
   ]);
   if (childError) debugLog(`❌ Eltern laden: ${childError.message}`);
-  if (partnerError) debugLog(`❌ Familien laden: ${partnerError.message}`);
+  if (partnerAResult.error) debugLog(`❌ Familien laden (A): ${partnerAResult.error.message}`);
+  if (partnerBResult.error) debugLog(`❌ Familien laden (B): ${partnerBResult.error.message}`);
+  const partnerFamilies = [
+    ...(partnerAResult.data || []),
+    ...(partnerBResult.data || []),
+  ].filter((f, index, arr) => arr.findIndex((x) => x.id === f.id) === index);
 
   const parentFamilyIds = (childLinks || []).map((x) => x.familie_id);
   let parentFamilies = [];
@@ -1010,15 +1039,41 @@ function fillFamilienPersonSelect(selectId, excludePersonId) {
 }
 
 async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnerschaft", beginn = null, ende = null) {
-  let query = sb.from("familien").select("*");
+  if (!partnerAId) throw new Error("Partner A fehlt.");
+
   if (partnerBId) {
-    query = query.or(`and(partner_a_id.eq.${partnerAId},partner_b_id.eq.${partnerBId}),and(partner_a_id.eq.${partnerBId},partner_b_id.eq.${partnerAId})`);
+    // Immer dieselbe Familie verwenden – unabhängig davon, wer die Beziehung anlegt.
+    const [{ data: aRows, error: aError }, { data: bRows, error: bError }] = await Promise.all([
+      sb.from("familien").select("*").eq("partner_a_id", partnerAId).eq("partner_b_id", partnerBId),
+      sb.from("familien").select("*").eq("partner_a_id", partnerBId).eq("partner_b_id", partnerAId),
+    ]);
+    if (aError) throw aError;
+    if (bError) throw bError;
+
+    const existing = (aRows && aRows[0]) || (bRows && bRows[0]);
+    if (existing) {
+      // Falls die Familie bereits besteht, werden neu eingegebener Typ/Zeitraum übernommen,
+      // ohne eine zweite Gegenbeziehung anzulegen.
+      const update = {};
+      if (typ) update.familientyp = typ;
+      if (beginn !== null) update.beginn = beginn;
+      if (ende !== null) update.ende = ende;
+      if (Object.keys(update).length) {
+        const { error } = await sb.from("familien").update(update).eq("id", existing.id);
+        if (error) throw error;
+      }
+      return existing;
+    }
   } else {
-    query = query.eq("partner_a_id", partnerAId).is("partner_b_id", null);
+    const { data, error } = await sb.from("familien")
+      .select("*")
+      .eq("partner_a_id", partnerAId)
+      .is("partner_b_id", null)
+      .limit(1);
+    if (error) throw error;
+    if (data && data.length) return data[0];
   }
-  const { data, error } = await query.limit(1);
-  if (error) throw error;
-  if (data && data.length) return data[0];
+
   const { data: neu, error: insertError } = await sb.from("familien").insert({
     partner_a_id: partnerAId,
     partner_b_id: partnerBId || null,
@@ -1029,7 +1084,6 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
   if (insertError) throw insertError;
   return neu;
 }
-
 async function addKindZuFamilie(familieId, kindId, beziehungstyp = "biologisch") {
   const { error } = await sb.from("familien_kinder").upsert({
     familie_id: familieId,
@@ -1065,6 +1119,16 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
       document.getElementById("d-partner-beginn").value || null,
       document.getElementById("d-partner-ende").value || null);
     msg.textContent = "Partner/in hinzugefügt ✓";
+
+    // Die Familie ist ein gemeinsamer Datensatz. Sie wird deshalb auch bei der
+    // anderen Person automatisch sichtbar; hier prüfen wir das direkt.
+    const checkA = await sb.from("familien").select("id").eq("partner_a_id", currentDetailPersonId).eq("partner_b_id", partnerId);
+    const checkB = await sb.from("familien").select("id").eq("partner_a_id", partnerId).eq("partner_b_id", currentDetailPersonId);
+    if (!(checkA.data?.length || checkB.data?.length)) {
+      msg.textContent = "Fehler: Partnerschaft wurde nicht gespeichert.";
+      return;
+    }
+
     document.getElementById("d-partner-person").value = "";
     document.getElementById("d-partner-beginn").value = "";
     document.getElementById("d-partner-ende").value = "";
