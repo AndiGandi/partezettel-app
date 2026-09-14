@@ -1180,7 +1180,7 @@ async function loadDetailFamilie(personId) {
   for (const f of parentFamilies) {
     for (const id of [f.partner_a_id, f.partner_b_id]) {
       if (id && id !== personId && !potentialParents.some((x) => x.id === id)) {
-        const p = personenCache.find((x) => x.id === id);
+        const p = detailPerson(id);
         if (p) potentialParents.push(p);
       }
     }
@@ -1196,9 +1196,10 @@ async function loadDetailFamilie(personId) {
     });
   });
 
+  // Elternrollen strikt nach Geschlecht zuordnen.
+  // Ein einzelner Elternteil wird niemals automatisch als Vater eingetragen.
   parentSelectVater.value = potentialParents.find((p) => p.geschlecht === "männlich")?.id || "";
   parentSelectMutter.value = potentialParents.find((p) => p.geschlecht === "weiblich")?.id || "";
-  if (!parentSelectVater.value && potentialParents.length === 1) parentSelectVater.value = potentialParents[0].id;
 
   partnerList.innerHTML = "";
   for (const f of partnerFamilies || []) {
