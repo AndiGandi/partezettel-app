@@ -1053,72 +1053,32 @@ function fillFamilienPersonSelect(selectId, excludePersonId) {
 async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnerschaft", beginn = null, ende = null) {
   if (!partnerAId) throw new Error("Partner A fehlt.");
 
+  // Partnerschaft: bewusst nur EIN einfacher INSERT.
+  // Keine gegenseitige Prüfung, keine Vorab-Suche, kein RETURNING/SELECT.
   if (partnerBId) {
+    const neueId = crypto.randomUUID();
     const [firstId, secondId] = [partnerAId, partnerBId].sort();
 
-    debugLog(`Partnerschaft speichern: ${firstId} ↔ ${secondId} (${typ || "Partnerschaft"})`);
-
-    const { data: existingRows, error: findError } = await sb.from("familien")
-      .select("*")
-      .or(`and(partner_a_id.eq.${firstId},partner_b_id.eq.${secondId}),and(partner_a_id.eq.${secondId},partner_b_id.eq.${firstId})`)
-      .limit(1);
-    if (findError) throw findError;
-
-    const existing = existingRows?.[0] || null;
-    const werte = {
-      familientyp: typ || existing?.familientyp || "Partnerschaft",
-      beginn: beginn || existing?.beginn || null,
-      ende: ende || existing?.ende || null,
-    };
-
-    if (existing) {
-      const { error } = await sb.from("familien")
-        .update(werte)
-        .eq("id", existing.id);
-      if (error) throw error;
-      debugLog(`Partnerschaft aktualisiert: ${existing.id}`);
-      return { ...existing, ...werte };
-    }
-
-    // ID clientseitig erzeugen. Dadurch benötigen wir nach dem INSERT
-    // kein SELECT/RETURNING, um die neue Familie weiterzuverwenden.
-    const neueId = crypto.randomUUID();
-    const { error: insertError } = await sb.from("familien").insert({
+    const datensatz = {
       id: neueId,
       partner_a_id: firstId,
       partner_b_id: secondId,
-      ...werte,
-    });
-    if (insertError) throw insertError;
-
-    debugLog(`Partnerschaft gespeichert: ${neueId}`);
-    return {
-      id: neueId,
-      partner_a_id: firstId,
-      partner_b_id: secondId,
-      ...werte,
+      familientyp: typ || "Partnerschaft",
+      beginn: beginn || null,
+      ende: ende || null,
     };
+
+    debugLog(`Familien-INSERT: ${firstId} ↔ ${secondId}`);
+    const { error } = await sb.from("familien").insert(datensatz);
+    if (error) throw error;
+
+    debugLog(`Familien-INSERT erfolgreich: ${neueId}`);
+    return datensatz;
   }
 
-  const { data, error } = await sb.from("familien")
-    .select("*")
-    .eq("partner_a_id", partnerAId)
-    .is("partner_b_id", null)
-    .limit(1);
-  if (error) throw error;
-  if (data?.length) return data[0];
-
+  // Ein Eltern-/Einzel-Eltern-Familieneintrag.
   const neueId = crypto.randomUUID();
-  const { error: insertError } = await sb.from("familien").insert({
-    id: neueId,
-    partner_a_id: partnerAId,
-    partner_b_id: null,
-    familientyp: typ || "Partnerschaft",
-    beginn: beginn || null,
-    ende: ende || null,
-  });
-  if (insertError) throw insertError;
-  return {
+  const datensatz = {
     id: neueId,
     partner_a_id: partnerAId,
     partner_b_id: null,
@@ -1126,6 +1086,10 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
     beginn: beginn || null,
     ende: ende || null,
   };
+
+  const { error } = await sb.from("familien").insert(datensatz);
+  if (error) throw error;
+  return datensatz;
 }
 
 async function addKindZuFamilie(familieId, kindId, beziehungstyp = "biologisch") {
