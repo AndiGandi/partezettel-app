@@ -73,3 +73,11 @@
   .tree-marriage__label{font-size:.66rem}
   .tree-marriage__rings{font-size:1.25rem}
 }
+
+
+/* Stammbaum v33: Paare immer nebeneinander */
+.tree-couple{display:flex;align-items:center;justify-content:center;gap:.35rem;position:relative;flex-wrap:nowrap}
+.tree-relationship{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:58px;line-height:1}
+.tree-relationship .tree-partner-link{display:block;width:24px;height:2px;background:var(--accent);flex:0 0 24px}
+.tree-relationship--marriage .tree-marriage__label{margin-bottom:.15rem}
+@media(max-width:700px){.tree-couple{gap:.2rem}.tree-relationship{min-width:44px}.tree-relationship .tree-partner-link{width:18px;flex-basis:18px}.tree-marriage__label{font-size:.66rem}.tree-marriage__rings{font-size:1.25rem}}

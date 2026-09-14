@@ -1766,28 +1766,21 @@ function renderStammbaum(rootId) {
       const kids = treeChildrenForFamily(f.id);
       const isMarriage = String(f.familientyp || "").toLowerCase() === "ehe";
 
-      if (partner && isMarriage) {
-        block.innerHTML = `
-          <div class="tree-couple">
-            ${treePersonCard(root, rootId)}
-            <div class="tree-marriage" aria-label="Ehe">
-              <span class="tree-marriage__label">Ehe</span>
-              <span class="tree-marriage__rings" aria-hidden="true">◯◯</span>
-            </div>
-            ${treePersonCard(partner)}
-          </div>`;
-      } else {
-        block.innerHTML = `
-          <div class="tree-partners">
-            ${treePersonCard(root, rootId)}
-            <span class="tree-partner-link"></span>
-            ${partner ? treePersonCard(partner) : `<div class="tree-node"><span class="tree-node__placeholder">?</span><span class="tree-node__name">Unbekannter Partner</span></div>`}
-          </div>`;
-        const typeLabel = document.createElement("div");
-        typeLabel.className = "tree-label";
-        typeLabel.textContent = f.familientyp || "Partnerschaft";
-        block.appendChild(typeLabel);
-      }
+      // Paare werden immer nebeneinander dargestellt. Die Art der Verbindung
+      // steht mittig zwischen den beiden Personen; bei einer Ehe zusätzlich mit Ringen.
+      const partnerCard = partner
+        ? treePersonCard(partner)
+        : `<div class="tree-node"><span class="tree-node__placeholder">?</span><span class="tree-node__name">Unbekannter Partner</span></div>`;
+      const relationType = f.familientyp || "Partnerschaft";
+      block.innerHTML = `
+        <div class="tree-couple">
+          ${treePersonCard(root, rootId)}
+          <div class="tree-relationship ${isMarriage ? "tree-relationship--marriage" : ""}" aria-label="${escTree(relationType)}">
+            <span class="tree-marriage__label">${escTree(relationType)}</span>
+            ${isMarriage ? `<span class="tree-marriage__rings" aria-hidden="true">◯◯</span>` : `<span class="tree-partner-link" aria-hidden="true"></span>`}
+          </div>
+          ${partnerCard}
+        </div>`;
 
       if (kids.length) {
         const label = document.createElement("div");
