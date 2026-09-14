@@ -6,7 +6,7 @@
 function todesjahrAnzeige(person) {
   if (!person) return "";
   if (person.sterbejahr) return String(person.sterbejahr);
-  const raw = person.sterbedatum || person.todesdatum || "";
+  const raw = person.sterbedatum || "";
   if (!raw) return "";
   const d = new Date(raw);
   return Number.isNaN(d.getTime()) ? "" : String(d.getFullYear());
@@ -503,7 +503,8 @@ form.addEventListener("submit", async (e) => {
     geschlecht: document.getElementById("geschlecht").value || null,
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
-    sterbedatum: getDatum("sterbedatum"),
+    sterbedatum: getDatum("sterbedatum"),,
+      sterbejahr: (() => { const y = document.getElementById("n-sterbe-jahr")?.value; return y ? Number(y) : null; })()
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
