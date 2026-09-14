@@ -102,5 +102,4 @@
   .tree-family-block > .tree-couple > .tree-node{flex-basis:125px !important}
 }
 
-.sterbejahr-only-field{margin-top:.45rem}
-.sterbejahr-only-field input{width:100%;box-sizing:border-box}
+.sterbejahr-only-note{font-size:.86rem;opacity:.8;margin-top:.25rem}

@@ -1,4 +1,4 @@
-const CACHE_NAME = "partezettel-shell-v34-stammbaum";
+const CACHE_NAME = "partezettel-shell-v44-sterbejahr";
 const SHELL_FILES = [
   "./index.html",
   "./style.css",
