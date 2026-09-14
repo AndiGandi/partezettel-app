@@ -92,12 +92,12 @@
               <select id="sterbedatum-jahr"><option value="">Jahr</option></select>
             </div>
           </label>
-        </div>
-
         <label class="field">
           <span>Sterbejahr (nur Jahr bekannt)</span>
-          <input type="number" id="sterbejahr" min="1" max="9999" inputmode="numeric" placeholder="z. B. 1984">
+          <input type="number" id="sterbejahr" min="1600" max="9999" inputmode="numeric" placeholder="z. B. 1984">
         </label>
+
+        </div>
 
         <label class="field">
           <span>Notiz</span>
@@ -221,11 +221,12 @@
             <select id="d-sterbedatum-monat"><option value="">Monat</option></select>
             <select id="d-sterbedatum-jahr"><option value="">Jahr</option></select>
           </div></label>
-        </div>
         <label class="field">
           <span>Sterbejahr (nur Jahr bekannt)</span>
-          <input type="number" id="d-sterbejahr" min="1" max="9999" inputmode="numeric" placeholder="z. B. 1984">
+          <input type="number" id="d-sterbejahr" min="1600" max="9999" inputmode="numeric" placeholder="z. B. 1984">
         </label>
+
+        </div>
         <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
       </fieldset>
 
@@ -349,6 +350,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=18"></script>
+<script src="app.js?v=17"></script>
 </body>
 </html>

@@ -102,4 +102,5 @@
   .tree-family-block > .tree-couple > .tree-node{flex-basis:125px !important}
 }
 
-.sterbejahr-only-note{font-size:.86rem;opacity:.8;margin-top:.25rem}
+/* Sterbejahr – Angabe ohne genaues Sterbedatum */
+#sterbejahr,#d-sterbejahr{box-sizing:border-box;width:100%}
