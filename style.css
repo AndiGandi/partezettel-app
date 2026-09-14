@@ -102,5 +102,4 @@
   .tree-family-block > .tree-couple > .tree-node{flex-basis:125px !important}
 }
 
-.date-year-only{display:flex;align-items:center;gap:.4rem;font-size:.85rem;margin:.35rem 0}
-.date-year-only input{width:auto}
+.date-year-only{display:flex;align-items:center;gap:.4rem;font-size:.85rem;margin:.35rem 0}.date-year-only input{width:auto}

@@ -468,6 +468,13 @@ function getDatum(prefix) {
   const t=document.getElementById(prefix+"-tag")?.value, m=document.getElementById(prefix+"-monat")?.value, y=document.getElementById(prefix+"-jahr")?.value;
   return t&&m&&y ? `${y}-${m}-${t}` : null;
 }
+function getSterbedaten(prefix) {
+  const jahr = document.getElementById(prefix + "-jahr")?.value || "";
+  const nurJahr = document.getElementById(prefix === "sterbedatum" ? "sterbe-nur-jahr" : "d-sterbe-nur-jahr")?.checked;
+  if (nurJahr) return { datum: null, jahr: jahr ? Number(jahr) : null };
+  return { datum: getDatum(prefix), jahr: null };
+}
+
 function setDatum(prefix, value) {
   const t=document.getElementById(prefix+"-tag"),m=document.getElementById(prefix+"-monat"),y=document.getElementById(prefix+"-jahr");
   if(!t||!m||!y) return;
@@ -495,7 +502,6 @@ form.addEventListener("submit", async (e) => {
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
     sterbedatum: getDatum("sterbedatum"),
-      sterbejahr: document.getElementById("n-sterbe-jahr")?.value || null,
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
@@ -527,6 +533,7 @@ form.addEventListener("submit", async (e) => {
 function resetForm() {
   form.reset();
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
+  if (document.getElementById("sterbe-nur-jahr")) document.getElementById("sterbe-nur-jahr").checked = false;
   document.getElementById("ledigenname").value = "";
 
   // Neue Person beginnt nach dem Speichern garantiert ohne alte Medien.
@@ -581,6 +588,7 @@ async function sendEintrag(eintrag, onProgress) {
         "Ledigenname": eintrag.ledigenname,
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
+        sterbejahr: eintrag.sterbejahr,
         Notiz: eintrag.notiz,
       }, { onConflict: "id" }),
       15000,
@@ -729,7 +737,7 @@ async function loadPersonen() {
   const empty = document.getElementById("list-empty");
   const { data, error } = await sb
     .from("personen")
-    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, sterbedatum, Notiz")
+    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, Notiz")
     .order("nachname", { ascending: true });
 
   if (error) {
@@ -765,7 +773,9 @@ async function renderPersonenList(personen) {
   personen.forEach((p) => {
     const li = document.createElement("li");
     li.className = "person-card";
-    const jahre = [p.geburtsdatum, p.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
+    const gebJahr = p.geburtsdatum ? p.geburtsdatum.split("-")[0] : "";
+    const sterbJahr = p.sterbedatum ? p.sterbedatum.split("-")[0] : (p.sterbejahr ? String(p.sterbejahr) : "");
+    const jahre = [gebJahr, sterbJahr].filter(Boolean).join(" – ");
     const fotoUrl = schluesselfotoCache.get(p.id);
     li.innerHTML = `
       ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
@@ -838,6 +848,8 @@ async function openPersonDetail(personId) {
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
   setDatum("d-geburtsdatum", person.geburtsdatum);
   setDatum("d-sterbedatum", person.sterbedatum);
+  document.getElementById("d-sterbe-nur-jahr").checked = !person.sterbedatum && !!person.sterbejahr;
+  if (!person.sterbedatum && person.sterbejahr) document.getElementById("d-sterbedatum-jahr").value = String(person.sterbejahr);
   document.getElementById("d-notiz").value = person.Notiz || "";
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
@@ -875,7 +887,8 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     geschlecht: document.getElementById("d-geschlecht").value || null,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
     geburtsdatum: getDatum("d-geburtsdatum"),
-    sterbedatum: getDatum("d-sterbedatum"),
+    sterbedatum: getSterbedaten("d-sterbedatum").datum,
+    sterbejahr: getSterbedaten("d-sterbedatum").jahr,
     Notiz: document.getElementById("d-notiz").value.trim() || null,
   }).eq("id", currentDetailPersonId);
   msg.textContent = error ? `Fehler: ${error.message}` : "Gespeichert ✓";
@@ -1551,7 +1564,7 @@ document.getElementById("export-gedcom-btn").addEventListener("click", async () 
     else lines.push("1 SEX U");
     if (p.Ledigenname) lines.push(`1 NOTE Geburtsname: ${clean(p.Ledigenname)}`);
     if (p.geburtsdatum) { lines.push("1 BIRT"); lines.push(`2 DATE ${gedcomDate(p.geburtsdatum)}`); }
-    if (p.sterbedatum) { lines.push("1 DEAT"); lines.push(`2 DATE ${gedcomDate(p.sterbedatum)}`); }
+    if (p.sterbedatum || p.sterbejahr) { lines.push("1 DEAT"); lines.push(`2 DATE ${p.sterbedatum ? gedcomDate(p.sterbedatum) : String(p.sterbejahr)}`); }
     if (p.Notiz) lines.push(`1 NOTE ${clean(p.Notiz)}`);
     for (const fid of famsByPerson.get(p.id) || []) lines.push(`1 FAMS ${fidById.get(fid)}`);
     for (const fid of famcByPerson.get(p.id) || []) lines.push(`1 FAMC ${fidById.get(fid)}`);
@@ -1628,7 +1641,9 @@ document.getElementById("export-pdf-btn").addEventListener("click", async () => 
   y += 3;
   for (const p of personen) {
     addLine(`${p.vorname} ${p.nachname}${p.Ledigenname ? ` geb. ${p.Ledigenname}` : ""}`, 11, true);
-    const jahre = [p.geburtsdatum, p.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
+    const gebJahr = p.geburtsdatum ? p.geburtsdatum.split("-")[0] : "";
+    const sterbJahr = p.sterbedatum ? p.sterbedatum.split("-")[0] : (p.sterbejahr ? String(p.sterbejahr) : "");
+    const jahre = [gebJahr, sterbJahr].filter(Boolean).join(" – ");
     if (jahre) addLine(jahre);
     if (p.Notiz) addLine(p.Notiz);
     y += 2;
@@ -1656,7 +1671,9 @@ function escTree(value) {
 
 function treePersonCard(person, rootId = null, extraClass = "") {
   if (!person) return "";
-  const jahre = [person.geburtsdatum, person.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
+  const gebJahr = person.geburtsdatum ? person.geburtsdatum.split("-")[0] : "";
+  const sterbJahr = person.sterbedatum ? person.sterbedatum.split("-")[0] : (person.sterbejahr ? String(person.sterbejahr) : "");
+  const jahre = [gebJahr, sterbJahr].filter(Boolean).join(" – ");
   const foto = treeData.photos.get(person.id);
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
@@ -1684,7 +1701,7 @@ function treeParentFamiliesForPerson(id) {
 async function loadStammbaumData() {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
-    sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum, sterbedatum").order("nachname", { ascending: true }),
+    sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
     sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende"),
     sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
   ]);
