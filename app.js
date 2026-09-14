@@ -1058,6 +1058,12 @@ async function loadDetailFamilie(personId) {
   if (!childList.children.length) childList.innerHTML = '<span class="capture-status">Keine Kinder erfasst</span>';
 
   fillFamilienPersonSelect("d-partner-person", personId);
+  const partnerAddBtn = document.getElementById("d-add-partner-btn");
+  if (partnerAddBtn) {
+    const hatPartnerschaft = !!partnerList.querySelector(".familie-item");
+    partnerAddBtn.hidden = !hatPartnerschaft;
+    partnerAddBtn.textContent = hatPartnerschaft ? "Weitere Partnerschaft hinzufügen" : "Partnerschaft hinzufügen";
+  }
   fillFamilienPersonSelect("d-kind-person", personId);
   const familySelect = document.getElementById("d-kind-partner-family");
   familySelect.innerHTML = '<option value="">automatisch auswählen</option>';
@@ -1144,6 +1150,15 @@ document.getElementById("d-save-eltern-btn").addEventListener("click", async () 
   } catch (err) {
     msg.textContent = `Fehler: ${err.message}`;
   }
+});
+
+// Erste Partnerschaft: Sobald ein Partner ausgewählt wird, wird sie automatisch gespeichert.
+// Sobald bereits eine Partnerschaft vorhanden ist, bleibt der Button für weitere Partnerschaften sichtbar.
+document.getElementById("d-partner-person").addEventListener("change", async (event) => {
+  const partnerList = document.getElementById("d-partner-list");
+  const hatPartnerschaft = !!partnerList?.querySelector(".familie-item");
+  if (hatPartnerschaft || !event.target.value) return;
+  await document.getElementById("d-add-partner-btn").click();
 });
 
 document.getElementById("d-add-partner-btn").addEventListener("click", async () => {
