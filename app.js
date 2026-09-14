@@ -1720,19 +1720,135 @@ function downloadFile(filename, content, mimeType) {
   URL.revokeObjectURL(url);
 }
 
-async function fetchAllExportData() {
-  const [{ data: personen }, { data: familien }, { data: familien_kinder }, { data: fotos }, { data: sprachnotizen }] = await Promise.all([
-    sb.from("personen").select("*").order("nachname"),
-    sb.from("familien").select("*"),
-    sb.from("familien_kinder").select("*"),
-    sb.from("fotos").select("*"),
-    sb.from("sprachnotizen").select("*"),
-  ]);
-  return {
-    personen: personen || [], familien: familien || [], familien_kinder: familien_kinder || [],
-    fotos: fotos || [], sprachnotizen: sprachnotizen || []
-  };
+async function fetchAllTableRows(table, orderColumn = "id") {
+  const rows = [];
+  const pageSize = 500;
+  let from = 0;
+  while (true) {
+    const { data, error } = await sb.from(table).select("*").order(orderColumn).range(from, from + pageSize - 1);
+    if (error) throw error;
+    const page = data || [];
+    rows.push(...page);
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+  return rows;
 }
+
+async function fetchAllExportData() {
+  const [personen, familien, familien_kinder, fotos, sprachnotizen] = await Promise.all([
+    fetchAllTableRows("personen", "nachname"),
+    fetchAllTableRows("familien", "id"),
+    fetchAllTableRows("familien_kinder", "id"),
+    fetchAllTableRows("fotos", "id"),
+    fetchAllTableRows("sprachnotizen", "id"),
+  ]);
+  return { personen, familien, familien_kinder, fotos, sprachnotizen };
+}
+
+function backupDateiname() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `Partezettel_Backup_${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}.json`;
+}
+
+async function teileOderLadeDateiHerunter(file) {
+  if (navigator.share && navigator.canShare) {
+    try {
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({ title: "Partezettel Backup", text: "Partezettel Datenbank-Backup", files: [file] });
+        return "geteilt";
+      }
+    } catch (err) {
+      if (err && err.name === "AbortError") return "abgebrochen";
+      debugLog(`⚠️ Teilen nicht möglich, verwende Download: ${err.message || err}`);
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return "download";
+}
+
+async function erstelleICloudBackup() {
+  const msg = document.getElementById("backup-message");
+  msg.textContent = "Backup wird erstellt …";
+  try {
+    await ensureSession();
+    const data = await fetchAllExportData();
+    const backup = {
+      format: "partezettel-backup",
+      version: 1,
+      createdAt: new Date().toISOString(),
+      hinweis: "Fotos und Sprachnotizen sind als Datenbankeinträge enthalten; die eigentlichen Dateien bleiben in Supabase Storage.",
+      ...data
+    };
+    const file = new File([JSON.stringify(backup, null, 2)], backupDateiname(), { type: "application/json" });
+    const result = await teileOderLadeDateiHerunter(file);
+    if (result === "abgebrochen") {
+      msg.textContent = "Backup nicht gespeichert.";
+    } else if (result === "geteilt") {
+      msg.textContent = "Backup erstellt ✓ – jetzt in „Dateien“ / iCloud Drive sichern.";
+    } else {
+      msg.textContent = "Backup erstellt ✓ – die Datei kann über „Dateien“ in iCloud Drive gespeichert werden.";
+    }
+  } catch (err) {
+    msg.textContent = `Fehler: ${err.message || err}`;
+    debugLog(`❌ iCloud-Backup: ${err.message || err}`);
+  }
+}
+
+async function stelleBackupWiederHer(file) {
+  const msg = document.getElementById("backup-message");
+  if (!file) return;
+  if (!confirm("Dieses Backup in Supabase einspielen? Vorhandene Datensätze mit gleicher ID werden überschrieben.")) return;
+  msg.textContent = "Backup wird geprüft …";
+  try {
+    await ensureSession();
+    const text = await file.text();
+    const backup = JSON.parse(text);
+    if (!backup || backup.format !== "partezettel-backup" || !Array.isArray(backup.personen) || !Array.isArray(backup.familien) || !Array.isArray(backup.familien_kinder)) {
+      throw new Error("Keine gültige Partezettel-Backup-Datei.");
+    }
+
+    const upsertBatch = async (table, rows, label) => {
+      const batchSize = 100;
+      for (let i = 0; i < rows.length; i += batchSize) {
+        const batch = rows.slice(i, i + batchSize);
+        if (!batch.length) continue;
+        const { error } = await sb.from(table).upsert(batch, { onConflict: "id" });
+        if (error) throw new Error(`${label}: ${error.message}`);
+      }
+    };
+
+    // Erst Personen, dann Familien und Kinder, danach die Medien-Metadaten.
+    await upsertBatch("personen", backup.personen, "Personen");
+    await upsertBatch("familien", backup.familien || [], "Familien");
+    await upsertBatch("familien_kinder", backup.familien_kinder || [], "Kinder-Verknüpfungen");
+    await upsertBatch("fotos", backup.fotos || [], "Foto-Daten");
+    await upsertBatch("sprachnotizen", backup.sprachnotizen || [], "Sprachnotizen");
+
+    await loadPersonen();
+    msg.textContent = `Backup wiederhergestellt ✓ (${backup.personen.length} Personen).` + (backup.fotos?.length || backup.sprachnotizen?.length ? " Die zugehörigen Mediendateien bleiben in Supabase Storage." : "");
+  } catch (err) {
+    msg.textContent = `Fehler beim Wiederherstellen: ${err.message || err}`;
+    debugLog(`❌ Backup wiederherstellen: ${err.message || err}`);
+  }
+}
+
+const backupBtn = document.getElementById("backup-icloud-btn");
+if (backupBtn) backupBtn.addEventListener("click", erstelleICloudBackup);
+const backupInput = document.getElementById("backup-restore-input");
+if (backupInput) backupInput.addEventListener("change", async (event) => {
+  const file = event.target.files?.[0];
+  await stelleBackupWiederHer(file);
+  event.target.value = "";
+});
 
 document.getElementById("export-json-btn").addEventListener("click", async () => {
   const msg = document.getElementById("export-message");
