@@ -1294,25 +1294,68 @@ document.getElementById("d-delete-person-btn").addEventListener("click", async (
   if (!confirm("Diese Person inkl. aller Fotos, Sprachnotizen und Beziehungen unwiderruflich löschen?")) return;
   msg.textContent = "Lösche …";
 
-  const { data: fotos } = await sb.from("fotos").select("*").eq("personen_id", currentDetailPersonId);
-  for (const f of fotos || []) {
-    await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]);
-    await sb.from("fotos").delete().eq("id", f.id);
-  }
+  try {
+    await ensureSession();
 
-  const { data: audios } = await sb.from("sprachnotizen").select("*").eq("person_id", currentDetailPersonId);
-  for (const a of audios || []) {
-    await sb.storage.from(BUCKET_AUDIO).remove([a.dateipfad]);
-    await sb.from("sprachnotizen").delete().eq("id", a.id);
-  }
+    // Zuerst abhängige Datensätze löschen. Dadurch blockieren alte
+    // Beziehungen die Löschung der Person nicht mehr.
+    const { error: beziehungError } = await sb.from("beziehung")
+      .delete()
+      .or(`personen_a_id.eq.${currentDetailPersonId},personen_b_id.eq.${currentDetailPersonId}`);
+    if (beziehungError) throw beziehungError;
 
-  const { error } = await sb.from("personen").delete().eq("id", currentDetailPersonId);
+    // Familienzuordnungen explizit entfernen; vorhandene CASCADEs bleiben zusätzlich wirksam.
+    const { data: familien, error: familienFetchError } = await sb.from("familien")
+      .select("id")
+      .or(`partner_a_id.eq.${currentDetailPersonId},partner_b_id.eq.${currentDetailPersonId}`);
+    if (familienFetchError) throw familienFetchError;
 
-  if (error) {
-    msg.textContent = `Fehler: ${error.message}`;
-  } else {
+    const familienIds = (familien || []).map(f => f.id);
+    if (familienIds.length) {
+      const { error: kinderError } = await sb.from("familien_kinder")
+        .delete()
+        .in("familie_id", familienIds);
+      if (kinderError) throw kinderError;
+
+      const { error: familienError } = await sb.from("familien")
+        .delete()
+        .in("id", familienIds);
+      if (familienError) throw familienError;
+    }
+
+    const { data: fotos, error: fotoFetchError } = await sb.from("fotos")
+      .select("*").eq("personen_id", currentDetailPersonId);
+    if (fotoFetchError) throw fotoFetchError;
+
+    for (const f of fotos || []) {
+      if (f.dateipfad) await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]);
+      const { error } = await sb.from("fotos").delete().eq("id", f.id);
+      if (error) throw error;
+    }
+
+    const { data: audios, error: audioFetchError } = await sb.from("sprachnotizen")
+      .select("*").eq("person_id", currentDetailPersonId);
+    if (audioFetchError) throw audioFetchError;
+
+    for (const a of audios || []) {
+      if (a.dateipfad) await sb.storage.from(BUCKET_AUDIO).remove([a.dateipfad]);
+      const { error } = await sb.from("sprachnotizen").delete().eq("id", a.id);
+      if (error) throw error;
+    }
+
+    const { error: personError } = await sb.from("personen")
+      .delete()
+      .eq("id", currentDetailPersonId);
+    if (personError) throw personError;
+
     detailOverlay.hidden = true;
-    loadPersonen();
+    currentDetailPersonId = null;
+    msg.textContent = "";
+    await loadPersonen();
+  } catch (err) {
+    const detail = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";
+    msg.textContent = `Fehler: ${detail}`;
+    debugLog(`❌ Person löschen: ${detail}`);
   }
 });
 
