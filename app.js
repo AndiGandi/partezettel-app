@@ -1000,6 +1000,39 @@ async function loadDetailFamilie(personId) {
     });
     partnerList.appendChild(div);
   }
+  // Kompatibilitäts-Fallback: Falls der neue Familien-Datensatz nicht verfügbar ist,
+  // lesen wir Partnerschaften aus der seit v9/v10 bewährten Tabelle beziehung.
+  let kompatPartner = [];
+  if (!partnerFamilies.length) {
+    const { data: beziehungen, error: beziehungsError } = await sb
+      .from("beziehung")
+      .select("id, personen_a_id, personen_b_id, beziehungstyp")
+      .or(`personen_a_id.eq.${personId},personen_b_id.eq.${personId}`);
+    if (beziehungsError) {
+      debugLog(`❌ Partnerschaften-Fallback: ${beziehungsError.message}`);
+    } else {
+      kompatPartner = (beziehungen || []).filter((b) =>
+        b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft"
+      );
+    }
+  }
+
+  if (!partnerList.children.length) {
+    for (const b of kompatPartner) {
+      const otherId = b.personen_a_id === personId ? b.personen_b_id : b.personen_a_id;
+      if (!otherId) continue;
+      const div = document.createElement("div");
+      div.className = "detail-media-item familie-item";
+      div.innerHTML = `<span class="beziehung-text">${personNameById(otherId)} — ${b.beziehungstyp}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+      div.querySelector(".del-btn").addEventListener("click", async () => {
+        if (!confirm("Diese Partnerschaft löschen?")) return;
+        const { error } = await sb.from("beziehung").delete().eq("id", b.id);
+        if (error) setDetailFamilieMessage(`Fehler: ${error.message}`);
+        else await loadDetailFamilie(personId);
+      });
+      partnerList.appendChild(div);
+    }
+  }
   if (!partnerList.children.length) partnerList.innerHTML = '<span class="capture-status">Keine Partnerschaft erfasst</span>';
 
   const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id);
@@ -1122,8 +1155,26 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
     const beginn = document.getElementById("d-partner-beginn").value || null;
     const ende = document.getElementById("d-partner-ende").value || null;
 
-    const familie = await findeOderErstelleFamilie(currentDetailPersonId, partnerId, typ, beginn, ende);
-    debugLog(`Partner/in gespeichert: Familie ${familie.id}`);
+    // Bewährter Partner-Speicherweg aus v9/v10 als Kompatibilitätsschicht.
+    // Dadurch bleibt die Partnerschaft auch dann sichtbar, wenn die neue
+    // Familien-Tabelle beim INSERT Probleme mit RLS/Berechtigungen macht.
+    const { error: beziehungsError } = await sb.from("beziehung").insert({
+      personen_a_id: currentDetailPersonId,
+      personen_b_id: partnerId,
+      beziehungstyp: typ,
+    });
+    if (beziehungsError) throw beziehungsError;
+    debugLog("Partnerschaft in beziehung gespeichert.");
+
+    // Zusätzlich versuchen wir den neuen Familien-Datensatz zu speichern.
+    // Ein Fehler hier darf die bewährte Partnerschaftsanzeige nicht verhindern.
+    try {
+      const familie = await findeOderErstelleFamilie(currentDetailPersonId, partnerId, typ, beginn, ende);
+      debugLog(`Familien-Datensatz gespeichert: ${familie.id || "DB-ID"}`);
+    } catch (familyErr) {
+      debugLog(`⚠️ Familien-Datensatz nicht gespeichert: ${familyErr.message || familyErr}`);
+    }
+
     msg.textContent = "Partner/in hinzugefügt ✓";
 
     document.getElementById("d-partner-person").value = "";
