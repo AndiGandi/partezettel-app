@@ -693,7 +693,7 @@ async function renderPersonenList(personen) {
     const jahre = [p.geburtsdatum, p.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
     const fotoUrl = schluesselfotoCache.get(p.id);
     li.innerHTML = `
-      ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="">` : ""}
+      ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
       <div class="person-card__content">
         <div class="person-card__name">${p.vorname} ${p.nachname}</div>
         ${jahre ? `<div class="person-card__years">${jahre}</div>` : ""}
