@@ -1282,6 +1282,16 @@ async function loadDetailFamilie(personId) {
     childLinksForPerson = data || [];
   }
   childList.innerHTML = "";
+  childLinksForPerson.sort((a, b) => {
+    const childA = personenCache.find((p) => p.id === a.kind_id);
+    const childB = personenCache.find((p) => p.id === b.kind_id);
+    const dateA = childA?.geburtsdatum || "";
+    const dateB = childB?.geburtsdatum || "";
+    if (dateA && dateB) return dateA.localeCompare(dateB);
+    if (dateA) return -1;
+    if (dateB) return 1;
+    return personenAuswahlText(detailPerson(a.kind_id)).localeCompare(personenAuswahlText(detailPerson(b.kind_id)), "de", { sensitivity: "base" });
+  });
   for (const link of childLinksForPerson) {
     const child = personenCache.find((p) => p.id === link.kind_id);
     if (!child) continue;
@@ -2249,7 +2259,22 @@ function treeFamiliesForPerson(id) {
 }
 
 function treeChildrenForFamily(familyId) {
-  return treeData.kinder.filter((k) => k.familie_id === familyId).map((k) => ({ ...k, person: treePerson(k.kind_id) })).filter((k) => k.person);
+  return treeData.kinder
+    .filter((k) => k.familie_id === familyId)
+    .map((k) => ({ ...k, person: treePerson(k.kind_id) }))
+    .filter((k) => k.person)
+    .sort((a, b) => {
+      const dateA = a.person.geburtsdatum || "";
+      const dateB = b.person.geburtsdatum || "";
+      // Kinder werden chronologisch nach dem vollständigen Geburtsdatum angezeigt.
+      // Fehlende Geburtsdaten stehen am Ende.
+      if (dateA && dateB) return dateA.localeCompare(dateB);
+      if (dateA) return -1;
+      if (dateB) return 1;
+      const nameA = `${a.person.nachname || ""} ${a.person.vorname || ""}`;
+      const nameB = `${b.person.nachname || ""} ${b.person.vorname || ""}`;
+      return nameA.localeCompare(nameB, "de", { sensitivity: "base" });
+    });
 }
 
 function treeParentFamiliesForPerson(id) {
