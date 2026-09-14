@@ -1182,7 +1182,7 @@ async function loadDetailFamilie(personId) {
     div.className = "detail-media-item familie-item";
     const typ = f.familientyp || "Partnerschaft";
     const zeitraum = [f.beginn, f.ende].filter(Boolean).map((d) => d.split("-").reverse().join(".")).join(" – ");
-    div.innerHTML = `<span class="beziehung-text">${personNameById(otherId)}${typ ? ` — ${typ}` : ""}${zeitraum ? ` — ${zeitraum}` : ""}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(personenCache.find((p) => p.id === otherId))}${typ ? ` — ${typ}` : ""}${zeitraum ? ` — ${zeitraum}` : ""}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
       const { error } = await sb.from("familien").delete().eq("id", f.id);
@@ -1214,7 +1214,7 @@ async function loadDetailFamilie(personId) {
       if (!otherId) continue;
       const div = document.createElement("div");
       div.className = "detail-media-item familie-item";
-      div.innerHTML = `<span class="beziehung-text">${personNameById(otherId)} — ${b.beziehungstyp}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+      div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(personenCache.find((p) => p.id === otherId))} — ${b.beziehungstyp}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
       div.querySelector(".del-btn").addEventListener("click", async () => {
         if (!confirm("Diese Partnerschaft löschen?")) return;
         const { error } = await sb.from("beziehung").delete().eq("id", b.id);
@@ -1238,7 +1238,7 @@ async function loadDetailFamilie(personId) {
     if (!child) continue;
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
-    div.innerHTML = `<span class="beziehung-text">${child.vorname} ${child.nachname}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
+    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(child)}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
       if (error) setDetailFamilieMessage(`Fehler: ${error.message}`);
@@ -1263,7 +1263,7 @@ async function loadDetailFamilie(personId) {
     if (!otherId) continue;
     const opt = document.createElement("option");
     opt.value = f.id;
-    opt.textContent = `${personNameById(otherId)} — ${f.familientyp || "Partnerschaft"}`;
+    opt.textContent = `${personenAuswahlText(personenCache.find((p) => p.id === otherId))} — ${f.familientyp || "Partnerschaft"}`;
     familySelect.appendChild(opt);
   }
 }
