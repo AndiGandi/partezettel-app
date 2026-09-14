@@ -104,3 +104,9 @@
 
 /* Sterbejahr – Angabe ohne genaues Sterbedatum */
 #sterbejahr,#d-sterbejahr{box-sizing:border-box;width:100%}
+
+.personen-sortierung{display:flex;gap:.6rem;align-items:end;margin:0 0 1rem}
+.personen-sortierung .field{flex:1;margin-bottom:0}
+.personen-sortierung .field span{display:block;margin-bottom:.35rem}
+.personen-sortierung select{width:100%}
+.personen-sortierung .btn{min-width:3rem;height:2.75rem}

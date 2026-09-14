@@ -716,6 +716,37 @@ async function flushQueue() {
 
 window.addEventListener("online", flushQueue);
 
+
+let personenSortierung = "name";
+let personenSortRichtung = 1;
+function sortierJahr(person, feld) {
+  if (feld === "geburtsjahr") return person.geburtsdatum ? Number(String(person.geburtsdatum).slice(0,4)) : null;
+  if (feld === "sterbejahr") return person.sterbedatum ? Number(String(person.sterbedatum).slice(0,4)) : (person.sterbejahr ? Number(person.sterbejahr) : null);
+  return null;
+}
+function personenVergleich(a,b) {
+  if (personenSortierung === "geburtsjahr" || personenSortierung === "sterbejahr") {
+    const ay=sortierJahr(a,personenSortierung), by=sortierJahr(b,personenSortierung);
+    if (ay===null && by!==null) return 1; if (ay!==null && by===null) return -1;
+    if (ay!==null && by!==null && ay!==by) return ay-by;
+  } else if (personenSortierung === "erstellt") {
+    const at=new Date(a.created_at||a.erstellt_am||0).getTime(), bt=new Date(b.created_at||b.erstellt_am||0).getTime();
+    if (at!==bt) return bt-at;
+  } else if (personenSortierung === "familie") {
+    const af=String(a._familienSortKey||a.nachname||"").toLocaleLowerCase("de"), bf=String(b._familienSortKey||b.nachname||"").toLocaleLowerCase("de");
+    const fc=af.localeCompare(bf,"de"); if(fc) return fc;
+  }
+  const nc=String(a.nachname||"").localeCompare(String(b.nachname||""),"de",{sensitivity:"base"});
+  return nc || String(a.vorname||"").localeCompare(String(b.vorname||""),"de",{sensitivity:"base"});
+}
+function sortierePersonen(personen) { return [...personen].sort((a,b)=>personenVergleich(a,b)*personenSortRichtung); }
+function berechneFamilienSortKeys(personen,familien) {
+  const ids=new Set(personen.map(p=>p.id)), adj=new Map(personen.map(p=>[p.id,new Set()]));
+  for(const f of familien||[]) { const a=f.partner_a_id,b=f.partner_b_id; if(ids.has(a)&&ids.has(b)){adj.get(a).add(b);adj.get(b).add(a);} for(const k of f._kinder||[]){if(!ids.has(k))continue;if(ids.has(a)){adj.get(a).add(k);adj.get(k).add(a);}if(ids.has(b)){adj.get(b).add(k);adj.get(k).add(b);}}}
+  const byId=new Map(personen.map(p=>[p.id,p])),seen=new Set();
+  for(const p of personen){if(seen.has(p.id))continue;const stack=[p.id],comp=[];seen.add(p.id);while(stack.length){const id=stack.pop();comp.push(id);for(const n of adj.get(id)||[]){if(!seen.has(n)){seen.add(n);stack.push(n);}}}const key=comp.map(id=>byId.get(id)?.nachname||"").filter(Boolean).sort((x,y)=>x.localeCompare(y,"de",{sensitivity:"base"}))[0]||p.nachname||"";for(const id of comp)byId.get(id)._familienSortKey=key; }
+}
+
 // ---------- Personenliste laden ----------
 async function loadPersonen() {
   const banner = document.getElementById("pending-banner");
@@ -740,9 +771,18 @@ async function loadPersonen() {
   }
 
   personenCache = data || [];
+  try {
+    const [{ data: familien }, { data: familienKinder }] = await Promise.all([
+      sb.from("familien").select("id, partner_a_id, partner_b_id"),
+      sb.from("familien_kinder").select("familie_id, kind_id")
+    ]);
+    const kinderByFamilie = new Map();
+    for (const k of familienKinder || []) { if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []); kinderByFamilie.get(k.familie_id).push(k.kind_id); }
+    for (const f of familien || []) f._kinder=kinderByFamilie.get(f.id)||[];
+    berechneFamilienSortKeys(personenCache,familien||[]);
+  } catch (familyErr) { debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`); }
   if (banner) banner.hidden = true;
   renderPersonenList(personenCache);
-
   empty.hidden = personenCache.length > 0;
 }
 
@@ -761,6 +801,7 @@ async function ladeSchluesselfotos(personen) {
 }
 
 async function renderPersonenList(personen) {
+  personen = sortierePersonen(personen);
   const list = document.getElementById("personen-list");
   list.innerHTML = "";
   await ladeSchluesselfotos(personen);
@@ -796,6 +837,13 @@ document.getElementById("search-input").addEventListener("input", (e) => {
   );
   renderPersonenList(filtered);
 });
+
+
+const personenSortSelect=document.getElementById("personen-sortierung");
+const personenSortButton=document.getElementById("personen-sort-richtung");
+function aktualisierePersonenSortierung(){const q=(document.getElementById("search-input")?.value||"").toLowerCase();renderPersonenList(personenCache.filter(p=>`${p.vorname} ${p.nachname}`.toLowerCase().includes(q)));}
+if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});
+if(personenSortButton)personenSortButton.addEventListener("click",()=>{personenSortRichtung*=-1;personenSortButton.textContent=personenSortRichtung===1?"↑":"↓";aktualisierePersonenSortierung();});
 
 document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
 
