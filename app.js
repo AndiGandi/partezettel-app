@@ -669,22 +669,42 @@ async function loadPersonen() {
   empty.hidden = personenCache.length > 0;
 }
 
-function renderPersonenList(personen) {
+const schluesselfotoCache = new Map();
+
+async function ladeSchluesselfotos(personen) {
+  schluesselfotoCache.clear();
+  if (!personen.length) return;
+  const ids = personen.map(p => p.id);
+  const { data, error } = await sb.from("fotos").select("id, personen_id, dateipfad, ist_schluesselfoto").in("personen_id", ids).eq("ist_schluesselfoto", true);
+  if (error) { debugLog(`❌ Schlüsselfotos laden: ${error.message}`); return; }
+  for (const foto of data || []) {
+    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    if (signed?.signedUrl) schluesselfotoCache.set(foto.personen_id, signed.signedUrl);
+  }
+}
+
+async function renderPersonenList(personen) {
   const list = document.getElementById("personen-list");
   list.innerHTML = "";
+  await ladeSchluesselfotos(personen);
   personen.forEach((p) => {
     const li = document.createElement("li");
     li.className = "person-card";
     const jahre = [p.geburtsdatum, p.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
+    const fotoUrl = schluesselfotoCache.get(p.id);
     li.innerHTML = `
-      <div class="person-card__name">${p.vorname} ${p.nachname}</div>
-      ${jahre ? `<div class="person-card__years">${jahre}</div>` : ""}
-      ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
+      ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="">` : ""}
+      <div class="person-card__content">
+        <div class="person-card__name">${p.vorname} ${p.nachname}</div>
+        ${jahre ? `<div class="person-card__years">${jahre}</div>` : ""}
+        ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
+      </div>
     `;
     li.addEventListener("click", () => openPersonDetail(p.id));
     list.appendChild(li);
   });
 }
+
 
 
 document.getElementById("search-input").addEventListener("input", (e) => {
@@ -792,11 +812,12 @@ async function loadDetailFotos(personId) {
   container.innerHTML = "";
   const { data, error } = await sb.from("fotos").select("*").eq("personen_id", personId);
   if (error) { debugLog(`❌ Fotos laden: ${error.message}`); return; }
-  for (const foto of data || []) {
+  const fotos = [...(data || [])].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+  for (const foto of fotos) {
     const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">Foto</span><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐</button><button class="del-btn" title="Löschen">🗑️</button>`;
     const fotoImg = div.querySelector("img");
     const openFoto = (event) => {
       if (event) event.stopPropagation();
@@ -812,10 +833,22 @@ async function loadDetailFotos(personId) {
       if (event.target.closest(".del-btn")) return;
       openFoto(event);
     });
+    div.querySelector(".key-photo-btn").addEventListener("click", async () => {
+      const msg = document.getElementById("d-foto-message");
+      msg.textContent = "Schlüsselfoto wird gesetzt …";
+      const { error: resetError } = await sb.from("fotos").update({ ist_schluesselfoto: false }).eq("personen_id", personId);
+      if (resetError) { msg.textContent = `Fehler: ${resetError.message}`; return; }
+      const { error: keyError } = await sb.from("fotos").update({ ist_schluesselfoto: true }).eq("id", foto.id);
+      if (keyError) { msg.textContent = `Fehler: ${keyError.message}`; return; }
+      msg.textContent = "Schlüsselfoto gesetzt ✓";
+      await loadDetailFotos(personId);
+      await loadPersonen();
+    });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
       await sb.from("fotos").delete().eq("id", foto.id);
       loadDetailFotos(personId);
+      loadPersonen();
     });
     container.appendChild(div);
   }
@@ -831,7 +864,7 @@ async function uploadDetailFoto(file) {
   const path = `${currentDetailPersonId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
   const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, edited);
   if (uploadError) { msg.textContent = `Fehler: ${uploadError.message}`; return; }
-  const { error: insertError } = await sb.from("fotos").insert({ personen_id: currentDetailPersonId, dateipfad: path });
+  const { error: insertError } = await sb.from("fotos").insert({ personen_id: currentDetailPersonId, dateipfad: path, ist_schluesselfoto: false });
   msg.textContent = insertError ? `Fehler: ${insertError.message}` : "Foto hinzugefügt ✓";
   loadDetailFotos(currentDetailPersonId);
 }
