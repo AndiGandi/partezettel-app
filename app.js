@@ -707,6 +707,7 @@ document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
 // ==========================================================
 
 let currentDetailPersonId = null;
+let autoPartnerSave = false;
 let detailAudioMediaRecorder = null;
 let detailAudioChunks = [];
 let detailAudioStart = null;
@@ -1158,10 +1159,16 @@ document.getElementById("d-partner-person").addEventListener("change", async (ev
   const partnerList = document.getElementById("d-partner-list");
   const hatPartnerschaft = !!partnerList?.querySelector(".familie-item");
   if (hatPartnerschaft || !event.target.value) return;
-  await document.getElementById("d-add-partner-btn").click();
+  autoPartnerSave = true;
+  try {
+    await document.getElementById("d-add-partner-btn").click();
+  } finally {
+    autoPartnerSave = false;
+  }
 });
 
 document.getElementById("d-add-partner-btn").addEventListener("click", async () => {
+  const wasAutoPartnerSave = autoPartnerSave;
   const msg = document.getElementById("d-familie-message");
   const partnerId = document.getElementById("d-partner-person").value;
   if (!partnerId) { msg.textContent = "Bitte Partner/in auswählen."; return; }
@@ -1237,10 +1244,16 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
       msg.textContent = `✅ Beziehung gespeichert. ⚠️ Familien-INSERT Fehler: ${detail}`;
     }
 
-    document.getElementById("d-partner-person").value = "";
-    document.getElementById("d-partner-beginn").value = "";
-    document.getElementById("d-partner-ende").value = "";
+    if (!wasAutoPartnerSave) {
+      document.getElementById("d-partner-person").value = "";
+      document.getElementById("d-partner-beginn").value = "";
+      document.getElementById("d-partner-ende").value = "";
+    }
     await loadDetailFamilie(currentDetailPersonId);
+    if (wasAutoPartnerSave) {
+      const partnerSelect = document.getElementById("d-partner-person");
+      if (partnerSelect) partnerSelect.value = partnerId;
+    }
   } catch (err) {
     const detail = err?.message || String(err);
     debugLog(`❌ Partnerschaftstest AUSNAHME: ${detail}`);
