@@ -1180,7 +1180,7 @@ async function loadDetailFamilie(personId) {
   for (const f of parentFamilies) {
     for (const id of [f.partner_a_id, f.partner_b_id]) {
       if (id && id !== personId && !potentialParents.some((x) => x.id === id)) {
-        const p = detailPerson(id);
+        const p = personenCache.find((x) => x.id === id);
         if (p) potentialParents.push(p);
       }
     }
@@ -1196,10 +1196,9 @@ async function loadDetailFamilie(personId) {
     });
   });
 
-  // Elternrollen strikt nach Geschlecht zuordnen.
-  // Ein einzelner Elternteil wird niemals automatisch als Vater eingetragen.
   parentSelectVater.value = potentialParents.find((p) => p.geschlecht === "männlich")?.id || "";
   parentSelectMutter.value = potentialParents.find((p) => p.geschlecht === "weiblich")?.id || "";
+  if (!parentSelectVater.value && potentialParents.length === 1) parentSelectVater.value = potentialParents[0].id;
 
   partnerList.innerHTML = "";
   for (const f of partnerFamilies || []) {
@@ -1354,19 +1353,143 @@ async function addKindZuFamilie(familieId, kindId, beziehungstyp = "biologisch")
   if (error) throw error;
 }
 
+async function speichereElternZuKind(kindId, vaterId, mutterId) {
+  // Bestehende Elternfamilien des Kindes laden.
+  const { data: links, error: linksError } = await sb
+    .from("familien_kinder")
+    .select("id, familie_id, kind_id, beziehungstyp")
+    .eq("kind_id", kindId);
+  if (linksError) throw linksError;
+
+  const familieIds = (links || []).map((x) => x.familie_id);
+  let familien = [];
+  if (familieIds.length) {
+    const { data, error } = await sb
+      .from("familien")
+      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
+      .in("id", familieIds);
+    if (error) throw error;
+    familien = data || [];
+  }
+
+  // Nur Familien vom Typ "Eltern" werden als Elternbeziehung dieses Kindes
+  // behandelt. Partner-/Ehefamilien bleiben vollständig unangetastet.
+  const elternFamilien = familien.filter((f) => f.familientyp === "Eltern");
+
+  // Keine Eltern ausgewählt: die Elternverknüpfung dieses Kindes sauber entfernen.
+  if (!vaterId && !mutterId) {
+    for (const f of elternFamilien) {
+      const { error } = await sb.from("familien_kinder").delete().eq("id", (links || []).find((l) => l.familie_id === f.id)?.id);
+      if (error) throw error;
+
+      // Eine Elternfamilie ohne Kinder wird ebenfalls entfernt.
+      const { data: rest, error: restError } = await sb
+        .from("familien_kinder")
+        .select("id")
+        .eq("familie_id", f.id)
+        .limit(1);
+      if (restError) throw restError;
+      if (!rest || rest.length === 0) {
+        const { error: delFamilyError } = await sb.from("familien").delete().eq("id", f.id);
+        if (delFamilyError) throw delFamilyError;
+      }
+    }
+    return;
+  }
+
+  // Vorhandene Elternfamilie bevorzugen, die bereits einen der ausgewählten
+  // Elternteile enthält. So entsteht beim Speichern niemals eine unnötige
+  // zweite Elternfamilie für dasselbe Kind.
+  let familie = elternFamilien.find((f) =>
+    [f.partner_a_id, f.partner_b_id].includes(vaterId || mutterId)
+  );
+
+  // Falls Vater + Mutter vorhanden sind, zuerst eine Familie suchen, die
+  // bereits genau dieses Elternpaar enthält.
+  if (vaterId && mutterId) {
+    familie = elternFamilien.find((f) => {
+      const ids = [f.partner_a_id, f.partner_b_id];
+      return ids.includes(vaterId) && ids.includes(mutterId);
+    }) || familie;
+  }
+
+  if (!familie) {
+    // Keine passende Elternfamilie vorhanden: neue Familie für dieses Kind.
+    const { data, error } = await sb
+      .from("familien")
+      .insert({
+        partner_a_id: vaterId || mutterId,
+        partner_b_id: vaterId && mutterId ? mutterId : null,
+        familientyp: "Eltern"
+      })
+      .select("id, partner_a_id, partner_b_id, familientyp")
+      .single();
+    if (error) throw error;
+    familie = data;
+  } else {
+    // Bestehende Elternfamilie exakt auf den aktuellen Zustand setzen.
+    // Mutter-only bedeutet partner_a=mutter, partner_b=NULL.
+    const update = {
+      partner_a_id: vaterId || mutterId,
+      partner_b_id: vaterId && mutterId ? mutterId : null,
+      familientyp: "Eltern"
+    };
+    const { error } = await sb.from("familien").update(update).eq("id", familie.id);
+    if (error) throw error;
+  }
+
+  // Das Kind genau dieser Elternfamilie zuordnen.
+  const existingLink = (links || []).find((l) => l.familie_id === familie.id);
+  if (!existingLink) {
+    const { error } = await sb.from("familien_kinder").insert({
+      familie_id: familie.id,
+      kind_id: kindId,
+      beziehungstyp: "biologisch"
+    });
+    if (error) throw error;
+  } else {
+    const { error } = await sb.from("familien_kinder").update({
+      beziehungstyp: "biologisch"
+    }).eq("id", existingLink.id);
+    if (error) throw error;
+  }
+
+  // Alte Elternfamilien, die für dieses Kind nicht mehr benötigt werden,
+  // werden vom Kind getrennt. Familien mit anderen Kindern bleiben erhalten.
+  for (const f of elternFamilien) {
+    if (f.id === familie.id) continue;
+    const link = (links || []).find((l) => l.familie_id === f.id);
+    if (!link) continue;
+
+    const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
+    if (error) throw error;
+
+    const { data: rest, error: restError } = await sb
+      .from("familien_kinder")
+      .select("id")
+      .eq("familie_id", f.id)
+      .limit(1);
+    if (restError) throw restError;
+    if (!rest || rest.length === 0) {
+      const { error: delFamilyError } = await sb.from("familien").delete().eq("id", f.id);
+      if (delFamilyError) throw delFamilyError;
+    }
+  }
+}
+
 document.getElementById("d-save-eltern-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-familie-message");
   const vater = document.getElementById("d-vater").value || null;
   const mutter = document.getElementById("d-mutter").value || null;
-  if (!vater && !mutter) { msg.textContent = "Keine Eltern ausgewählt."; return; }
+
   msg.textContent = "Speichere Eltern …";
   try {
-    const familie = await findeOderErstelleFamilie(vater || mutter, vater && mutter ? mutter : null, "Eltern");
-    await addKindZuFamilie(familie.id, currentDetailPersonId, "biologisch");
+    await speichereElternZuKind(currentDetailPersonId, vater, mutter);
     msg.textContent = "Eltern gespeichert ✓";
     await loadDetailFamilie(currentDetailPersonId);
   } catch (err) {
     msg.textContent = `Fehler: ${err.message}`;
+    debugLog(`❌ Eltern speichern: ${err.message}`);
   }
 });
 
