@@ -850,8 +850,7 @@ async function renderPersonenList(personen) {
       ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
       <div class="person-card__content">
         <div class="person-card__name">${p.vorname} ${p.nachname}</div>
-        ${jahre ? `<div class="person-card__years">${jahre}</div>` : ""}
-        ${alterAnzeige ? `<div class="person-card__age">Alter: ${alterAnzeige}</div>` : ""}
+        ${jahre || alterAnzeige ? `<div class="person-card__years">${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}</div>` : ""}
         ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
       </div>
     `;
