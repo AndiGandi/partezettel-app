@@ -323,30 +323,32 @@
       <fieldset class="field-group">
         <legend>Partner / Partnerin</legend>
         <div id="d-partner-list" class="detail-media-list"></div>
-        <label class="field"><span>Partner / Partnerin</span>
+        <label class="field partner-new-person"><span>Partner / Partnerin</span>
           <select id="d-partner-person"><option value="">— auswählen —</option></select>
         </label>
-        <label class="field"><span>Art</span>
-          <select id="d-partner-typ">
-            <option value="">— bitte auswählen —</option>
-            <option value="Partnerschaft">Partnerschaft</option>
-            <option value="Ehe">Ehe</option>
-          </select>
-        </label>
-        <label class="field"><span>Beginn</span>
-          <div class="date-parts">
-            <select id="d-partner-beginn-tag"><option value="">Tag</option></select>
-            <select id="d-partner-beginn-monat"><option value="">Monat</option></select>
-            <select id="d-partner-beginn-jahr"><option value="">Jahr</option></select>
-          </div>
-        </label>
-        <label class="field"><span>Ende</span>
-          <div class="date-parts">
-            <select id="d-partner-ende-tag"><option value="">Tag</option></select>
-            <select id="d-partner-ende-monat"><option value="">Monat</option></select>
-            <select id="d-partner-ende-jahr"><option value="">Jahr</option></select>
-          </div>
-        </label>
+        <div class="partner-new-fields">
+          <label class="field"><span>Art</span>
+            <select id="d-partner-typ">
+              <option value="">— bitte auswählen —</option>
+              <option value="Partnerschaft">Partnerschaft</option>
+              <option value="Ehe">Ehe</option>
+            </select>
+          </label>
+          <label class="field"><span>Beginn</span>
+            <div class="date-parts">
+              <select id="d-partner-beginn-tag"><option value="">Tag</option></select>
+              <select id="d-partner-beginn-monat"><option value="">Monat</option></select>
+              <select id="d-partner-beginn-jahr"><option value="">Jahr</option></select>
+            </div>
+          </label>
+          <label class="field"><span>Ende</span>
+            <div class="date-parts">
+              <select id="d-partner-ende-tag"><option value="">Tag</option></select>
+              <select id="d-partner-ende-monat"><option value="">Monat</option></select>
+              <select id="d-partner-ende-jahr"><option value="">Jahr</option></select>
+            </div>
+          </label>
+        </div>
         <button type="button" id="d-add-partner-btn" class="btn btn--secondary btn--full">Partner/in hinzufügen</button>
       </fieldset>
 
