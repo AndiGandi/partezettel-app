@@ -509,14 +509,18 @@ photoCanvas.addEventListener("pointercancel", () => { fotoEditorDragging=false; 
 const MONATE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 function initDatum(prefix) {
   const tag=document.getElementById(prefix+"-tag"), monat=document.getElementById(prefix+"-monat"), jahr=document.getElementById(prefix+"-jahr");
-  if (!tag) return;
-  // Der Tag bleibt IMMER sichtbar und enthält 1–31. Er wird niemals beim Jahrwechsel verändert.
-  tag.innerHTML='<option value="">Tag</option>';
-  for(let i=1;i<=31;i++) tag.insertAdjacentHTML("beforeend",`<option value="${String(i).padStart(2,"0")}">${i}</option>`);
-  monat.innerHTML='<option value="">Monat</option>';
-  MONATE.forEach((m,i)=>monat.insertAdjacentHTML("beforeend",`<option value="${String(i+1).padStart(2,"0")}">${m}</option>`));
-  jahr.innerHTML='<option value="">Jahr</option>';
-  for(let y=new Date().getFullYear();y>=1600;y--) jahr.insertAdjacentHTML("beforeend",`<option value="${y}">${y}</option>`);
+  if (!tag || !monat || !jahr) return;
+  initDatumElemente(tag, monat, jahr);
+}
+function initDatumElemente(tag, monat, jahr) {
+  // Dynamische Partnerschaftsblöcke werden direkt über ihre Elemente initialisiert.
+  // Dadurch ist die Datumsauswahl unabhängig von dynamisch vergebenen DOM-IDs.
+  tag.replaceChildren(new Option("Tag", ""));
+  for(let i=1;i<=31;i++) tag.appendChild(new Option(String(i), String(i).padStart(2,"0")));
+  monat.replaceChildren(new Option("Monat", ""));
+  MONATE.forEach((m,i)=>monat.appendChild(new Option(m, String(i+1).padStart(2,"0"))));
+  jahr.replaceChildren(new Option("Jahr", ""));
+  for(let y=new Date().getFullYear();y>=1600;y--) jahr.appendChild(new Option(String(y), String(y)));
 }
 function getDatum(prefix) {
   const t=document.getElementById(prefix+"-tag")?.value, m=document.getElementById(prefix+"-monat")?.value, y=document.getElementById(prefix+"-jahr")?.value;
@@ -525,16 +529,24 @@ function getDatum(prefix) {
 function setDatum(prefix, value) {
   const t=document.getElementById(prefix+"-tag"),m=document.getElementById(prefix+"-monat"),y=document.getElementById(prefix+"-jahr");
   if(!t||!m||!y) return;
+  setDatumElemente(t,m,y,value);
+}
+function setDatumElemente(t,m,y,value) {
   if(!value){t.value="";m.value="";y.value="";return;}
-  const [yy,mm,dd]=String(value).slice(0,10).split("-");
-  // Keine Neuberechnung/Filterung des Tages beim Setzen des Monats oder Jahres.
-  y.value=/^\d{4}$/.test(yy||"") ? yy : "";
-  m.value=/^\d{2}$/.test(mm||"") ? mm : "";
-  t.value=/^\d{2}$/.test(dd||"") ? dd : "";
+  const teile=String(value).slice(0,10).split("-");
+  const yy=teile[0]||"", mm=teile[1]||"", dd=teile[2]||"";
+  // Nur Werte auswählen, die in den jeweiligen Selects tatsächlich vorhanden sind.
+  // So bleiben vollständige Daten sichtbar und Teilangaben (z. B. nur Jahr) möglich.
+  y.value=/^\d{4}$/.test(yy) ? yy : "";
+  m.value=/^\d{2}$/.test(mm) ? mm : "";
+  t.value=/^\d{2}$/.test(dd) ? dd : "";
 }
 function setDatumJahr(prefix, jahr) {
   const t=document.getElementById(prefix+"-tag"),m=document.getElementById(prefix+"-monat"),y=document.getElementById(prefix+"-jahr");
   if(!t||!m||!y) return;
+  setDatumJahrElemente(t,m,y,jahr);
+}
+function setDatumJahrElemente(t,m,y,jahr) {
   t.value="";
   m.value="";
   y.value=/^\d{4}$/.test(String(jahr||"")) ? String(jahr) : "";
@@ -1460,23 +1472,33 @@ async function loadDetailFamilie(personId) {
     endeEdit.querySelector(".familie-ende-tag").id = `${endePrefix}-tag`;
     endeEdit.querySelector(".familie-ende-monat").id = `${endePrefix}-monat`;
     endeEdit.querySelector(".familie-ende-jahr").id = `${endePrefix}-jahr`;
-    initDatum(beginnPrefix);
-    initDatum(endePrefix);
+    // Die dynamischen Selects direkt initialisieren. Das ist robuster als eine
+    // Suche über dynamisch erzeugte IDs und stellt sicher, dass Tag/Monat/Jahr
+    // immer vollständig als Auswahl vorhanden sind.
+    const beginnTag = beginnEdit.querySelector(".familie-beginn-tag");
+    const beginnMonat = beginnEdit.querySelector(".familie-beginn-monat");
+    const beginnJahr = beginnEdit.querySelector(".familie-beginn-jahr");
+    const endeTag = endeEdit.querySelector(".familie-ende-tag");
+    const endeMonat = endeEdit.querySelector(".familie-ende-monat");
+    const endeJahr = endeEdit.querySelector(".familie-ende-jahr");
+    initDatumElemente(beginnTag, beginnMonat, beginnJahr);
+    initDatumElemente(endeTag, endeMonat, endeJahr);
     const autoEndeEl = div.querySelector(".familie-auto-ende");
     typEdit.value = typ;
-    setDatum(beginnPrefix, f.beginn || null);
+    setDatumElemente(beginnTag, beginnMonat, beginnJahr, f.beginn || null);
     if (f.ende) {
       // Ein tatsächlich gespeichertes Ende hat immer Vorrang.
-      setDatum(endePrefix, f.ende);
+      setDatumElemente(endeTag, endeMonat, endeJahr, f.ende);
     } else if (tod?.exakt) {
-      // Exaktes Sterbedatum: nur für die Anzeige des automatisch ermittelten Endes.
-      setDatum(endePrefix, tod.datum);
+      // Exaktes Sterbedatum des zuerst verstorbenen Partners als Anzeige.
+      // Es wird erst beim ausdrücklichen Speichern in die Familienbeziehung übernommen.
+      setDatumElemente(endeTag, endeMonat, endeJahr, tod.datum);
     } else if (tod?.jahr) {
       // Nur Sterbejahr bekannt: ausschließlich das Jahr anzeigen.
-      // Es wird nicht als künstliches Datum (z. B. 01.01.) in der DB gespeichert.
-      setDatumJahr(endePrefix, tod.jahr);
+      // Kein künstliches Datum (z. B. 01.01.) in der Datenbank.
+      setDatumJahrElemente(endeTag, endeMonat, endeJahr, tod.jahr);
     } else {
-      setDatum(endePrefix, null);
+      setDatumElemente(endeTag, endeMonat, endeJahr, null);
     }
     if (!f.ende && tod) {
       autoEndeEl.textContent = tod.exakt
