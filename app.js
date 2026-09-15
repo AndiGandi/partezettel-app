@@ -1012,13 +1012,15 @@ async function openPersonDetail(personId) {
   setDetailFamilieMessage("");
   document.getElementById("d-delete-message").textContent = "";
 
-  await loadDetailFotos(personId);
-  await loadDetailAudio(personId);
+  // Personendaten sofort öffnen. Nachgelagerte Medien/Familien dürfen das
+  // Öffnen der Detailansicht nicht blockieren.
+  detailOverlay.hidden = false;
+
+  try { await loadDetailFotos(personId); } catch (err) { debugLog(`⚠️ Fotos der Person konnten nicht geladen werden: ${err.message || err}`); }
+  try { await loadDetailAudio(personId); } catch (err) { debugLog(`⚠️ Sprachnotizen der Person konnten nicht geladen werden: ${err.message || err}`); }
   // Für die Familienansicht immer aktuelle Personennamen verwenden.
   try { await loadPersonen(); } catch (_) {}
-  await loadDetailFamilie(personId);
-
-  detailOverlay.hidden = false;
+  try { await loadDetailFamilie(personId); } catch (err) { debugLog(`⚠️ Familienangaben konnten nicht geladen werden: ${err.message || err}`); }
 }
 
 document.getElementById("detail-close-btn").addEventListener("click", () => {
@@ -2605,8 +2607,10 @@ function renderStammbaum(rootId) {
   }
 
   stage.querySelectorAll("[data-tree-person]").forEach((el) => {
-    el.addEventListener("click", async () => {
+    const openTreePerson = async (event) => {
+      if (event) event.preventDefault();
       const id = el.dataset.treePerson;
+      if (!id) return;
       if (el.dataset.treeChild === "true") {
         // Kinder im Stammbaum öffnen direkt ihre Personendaten.
         await openPersonDetail(id);
@@ -2615,7 +2619,8 @@ function renderStammbaum(rootId) {
       const select = document.getElementById("tree-person-select");
       if (select) select.value = id;
       renderStammbaum(id);
-    });
+    };
+    el.addEventListener("click", openTreePerson);
   });
   if (message) message.textContent = "";
 }
