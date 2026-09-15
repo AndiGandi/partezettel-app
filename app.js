@@ -856,6 +856,53 @@ function berechneFamilienSortKeys(personen,familien) {
   for(const p of personen){if(seen.has(p.id))continue;const stack=[p.id],comp=[];seen.add(p.id);while(stack.length){const id=stack.pop();comp.push(id);for(const n of adj.get(id)||[]){if(!seen.has(n)){seen.add(n);stack.push(n);}}}const key=comp.map(id=>byId.get(id)?.nachname||"").filter(Boolean).sort((x,y)=>x.localeCompare(y,"de",{sensitivity:"base"}))[0]||p.nachname||"";for(const id of comp)byId.get(id)._familienSortKey=key; }
 }
 
+// ---------- Partnerschaftslogik ----------
+function datumAnzeige(datum) {
+  if (!datum) return "";
+  const teile = String(datum).split("-");
+  return teile.length === 3 ? teile.reverse().join(".") : String(datum);
+}
+
+function personAusLookup(lookup, id) {
+  if (!id) return null;
+  if (lookup instanceof Map) return lookup.get(id) || null;
+  return (lookup || []).find((p) => p.id === id) || null;
+}
+
+// Eine Partnerschaft gilt auch ohne gespeichertes Ende als beendet,
+// wenn einer der beiden Partner bereits verstorben ist. Dabei wird nichts
+// automatisch in der Datenbank überschrieben; die Information wird nur für
+// Auswahl und Anzeige verwendet.
+function partnerschaftTodesende(familie, lookup = personenCache) {
+  const totePartner = [familie?.partner_a_id, familie?.partner_b_id]
+    .map((id) => personAusLookup(lookup, id))
+    .filter((p) => p && (p.sterbedatum || p.sterbejahr));
+  if (!totePartner.length) return null;
+
+  const exakt = totePartner
+    .map((p) => p.sterbedatum)
+    .filter(Boolean)
+    .sort()[0];
+  if (exakt) return { datum: exakt, jahr: exakt.slice(0, 4), exakt: true };
+
+  const jahr = totePartner
+    .map((p) => Number(p.sterbejahr))
+    .filter((y) => Number.isFinite(y) && y > 0)
+    .sort((a, b) => a - b)[0];
+  return jahr ? { datum: null, jahr: String(jahr), exakt: false } : null;
+}
+
+function partnerschaftIstBeendet(familie, lookup = personenCache) {
+  return !!familie?.ende || !!partnerschaftTodesende(familie, lookup);
+}
+
+function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
+  if (familie?.ende) return `Ende: ${datumAnzeige(familie.ende)}`;
+  const tod = partnerschaftTodesende(familie, lookup);
+  if (!tod) return "Ende: offen";
+  return tod.exakt ? `Ende: ${datumAnzeige(tod.datum)} · Tod` : `Ende: Tod ${tod.jahr}`;
+}
+
 // ---------- Personenliste laden ----------
 async function loadPersonen() {
   const banner = document.getElementById("pending-banner");
@@ -893,7 +940,7 @@ async function loadPersonen() {
       const typ = String(f.familientyp || "").toLowerCase();
       // Nur laufende Ehe/Partnerschaft sperrt die Person in der Auswahl.
       // Beendete Beziehungen bleiben für eine spätere Ehe/Partnerschaft auswählbar.
-      if ((typ === "ehe" || typ === "partnerschaft") && !f.ende) {
+      if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
         if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
         if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
       }
@@ -1361,8 +1408,9 @@ async function loadDetailFamilie(personId) {
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
     const typ = f.familientyp || "Partnerschaft";
-    const zeitraum = [f.beginn, f.ende].filter(Boolean).map((d) => d.split("-").reverse().join(".")).join(" – ");
-    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(detailPerson(otherId))}${typ ? ` — ${typ}` : ""}${zeitraum ? ` — ${zeitraum}` : ""}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+    const beginnText = f.beginn ? `Beginn: ${datumAnzeige(f.beginn)}` : "Beginn: nicht angegeben";
+    const endeText = partnerschaftEndeAnzeige(f, detailPersonMap);
+    div.innerHTML = `<div class="beziehung-text"><strong>${personenAuswahlText(detailPerson(otherId))}</strong><br><span class="beziehung-meta">Art: ${typ}<br>${beginnText}<br>${endeText}</span></div><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
       const { error } = await sb.from("familien").delete().eq("id", f.id);
