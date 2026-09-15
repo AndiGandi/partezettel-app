@@ -122,6 +122,7 @@
 /* Editierbare bestehende Partnerschaften */
 .familie-edit-block { flex: 1; min-width: 0; }
 .familie-edit-fields { margin-top: 10px; }
+.familie-edit-fields .familie-typ-edit { width: 10rem; max-width: 100%; }
 .familie-edit-fields .field { margin-top: 8px; }
 .familie-save-btn { width: 100%; margin-top: 8px; }
 .familie-auto-ende { margin-top: 6px; }
