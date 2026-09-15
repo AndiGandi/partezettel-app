@@ -2595,7 +2595,8 @@ function renderStammbaum(rootId) {
         block.appendChild(label);
         const children = document.createElement("div");
         children.className = "tree-children";
-        children.innerHTML = kids.map((k) => treePersonCard(k.person, rootId)).join("");
+        children.innerHTML = kids.map((k) => treePersonCard(k.person, rootId, "tree-node--child")).join("");
+        children.querySelectorAll("[data-tree-person]").forEach((el) => el.dataset.treeChild = "true");
         block.appendChild(children);
       }
       familyWrap.appendChild(block);
@@ -2604,8 +2605,13 @@ function renderStammbaum(rootId) {
   }
 
   stage.querySelectorAll("[data-tree-person]").forEach((el) => {
-    el.addEventListener("click", () => {
+    el.addEventListener("click", async () => {
       const id = el.dataset.treePerson;
+      if (el.dataset.treeChild === "true") {
+        // Kinder im Stammbaum öffnen direkt ihre Personendaten.
+        await openPersonDetail(id);
+        return;
+      }
       const select = document.getElementById("tree-person-select");
       if (select) select.value = id;
       renderStammbaum(id);
