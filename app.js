@@ -1835,14 +1835,14 @@ async function loadDetailFamilie(personId) {
   }
   if (!childList.children.length) childList.innerHTML = '<span class="capture-status">Keine Kinder erfasst</span>';
 
-  fillFamilienPersonSelect("d-partner-person", personId);
+  await fillFamilienPersonSelect("d-partner-person", personId);
   const partnerAddBtn = document.getElementById("d-add-partner-btn");
   if (partnerAddBtn) {
     const hatPartnerschaft = !!partnerList.querySelector(".familie-item");
     partnerAddBtn.hidden = !hatPartnerschaft;
     partnerAddBtn.textContent = hatPartnerschaft ? "Weitere Partnerschaft hinzufügen" : "Partnerschaft hinzufügen";
   }
-  fillFamilienPersonSelect("d-kind-person", personId);
+  await fillFamilienPersonSelect("d-kind-person", personId);
   const familySelect = document.getElementById("d-kind-partner-family");
   familySelect.innerHTML = '<option value="">automatisch auswählen</option>';
   for (const f of partnerFamilies || []) {
@@ -1855,16 +1855,40 @@ async function loadDetailFamilie(personId) {
   }
 }
 
-function fillFamilienPersonSelect(selectId, excludePersonId) {
+async function fillFamilienPersonSelect(selectId, excludePersonId) {
   const select = document.getElementById(selectId);
   if (!select) return;
+
   select.innerHTML = '<option value="">— auswählen —</option>';
 
-  let kandidaten = personenCache.filter((p) => p.id !== excludePersonId);
+  // Für die Familienauswahl niemals davon ausgehen, dass personenCache
+  // vollständig ist. Die Auswahl wird deshalb direkt aus der Tabelle
+  // "personen" aufgebaut. Das verhindert, dass ein unvollständiger Cache
+  // die Kinderauswahl leer erscheinen lässt.
+  let personenFuerAuswahl = personenCache || [];
+  try {
+    const { data, error } = await sb.from("personen")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
+      .order("nachname", { ascending: true });
+    if (!error && Array.isArray(data)) {
+      personenFuerAuswahl = data;
+      // Cache nur ergänzen/aktualisieren; keine Beziehungen werden verändert.
+      const map = new Map((personenCache || []).map((p) => [p.id, p]));
+      for (const p of data) map.set(p.id, { ...map.get(p.id), ...p });
+      personenCache = Array.from(map.values());
+    } else if (error) {
+      debugLog(`⚠️ Personen für Auswahl: ${error.message}`);
+    }
+  } catch (err) {
+    debugLog(`⚠️ Personen für Auswahl: ${err.message || err}`);
+  }
 
+  let kandidaten = personenFuerAuswahl.filter((p) => p.id !== excludePersonId);
+
+  // Nur bei einer neuen Partnerschaft greifen die bestehenden sicheren
+  // Partnerfilter. Für Kinder gibt es bewusst KEINEN Filter danach, ob eine
+  // Person bereits irgendwo als Kind verwendet wurde.
   if (selectId === "d-partner-person") {
-    // Personen mit einer laufenden Ehe/Partnerschaft werden nicht als neuer
-    // Partner angeboten. Bereits beendete Beziehungen bleiben möglich.
     kandidaten = kandidaten.filter((p) => !partnerIdsAuswahlCache.has(p.id));
   }
 
