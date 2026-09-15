@@ -198,17 +198,32 @@
 #d-geschlecht { width: 12rem; max-width: 12rem; }
 
 
-/* v88: Ehejahre als eigenes Feld neben Art/Beginn/Ende. */
+/* v89: Ehejahre als echtes Eingabefeld – optisch passend zu den Datumsfeldern. */
 .familie-actions {
   display:flex;
-  align-items:center;
+  align-items:flex-end;
   gap:.45rem;
   flex:0 0 auto;
   margin-left:auto;
 }
+.familie-jahre-field {
+  min-width:5.5rem !important;
+}
 .familie-jahre {
-  font-size:.78rem;
-  color:var(--ink-soft);
+  min-width:5.5rem;
+  width:5.5rem;
+  height:2.45rem;
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:.5rem .35rem;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:#fff;
+  color:var(--ink);
+  font-size:.88rem;
+  line-height:1;
   white-space:nowrap;
 }
 .familie-actions .del-btn {
