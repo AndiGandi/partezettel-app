@@ -175,3 +175,21 @@
 #d-nachname,
 #d-ledigenname { width: min(100%, 34rem); }
 #d-geschlecht { width: 12rem; max-width: 12rem; }
+
+
+/* v86: Ehejahre direkt links neben dem Papierkorb. */
+.familie-actions {
+  display:flex;
+  align-items:center;
+  gap:.45rem;
+  flex:0 0 auto;
+  margin-left:auto;
+}
+.familie-jahre {
+  font-size:.78rem;
+  color:var(--ink-soft);
+  white-space:nowrap;
+}
+.familie-actions .del-btn {
+  flex:0 0 auto;
+}

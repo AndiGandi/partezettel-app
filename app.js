@@ -924,6 +924,37 @@ function partnerschaftIstBeendet(familie, lookup = personenCache) {
   return !!familie?.ende || !!partnerschaftTodesende(familie, lookup);
 }
 
+function ehejahreAnzeige(familie, lookup = personenCache) {
+  if (String(familie?.familientyp || "").toLowerCase() !== "ehe") return "";
+  const beginn = familie?.beginn ? String(familie.beginn).slice(0, 10) : "";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(beginn)) return "";
+
+  let ende = familie?.ende ? String(familie.ende).slice(0, 10) : "";
+  if (!ende) {
+    const tod = partnerschaftTodesende(familie, lookup);
+    if (tod?.exakt && tod.datum) ende = String(tod.datum).slice(0, 10);
+    else if (tod?.jahr) {
+      const startJahr = Number(beginn.slice(0, 4));
+      const endeJahr = Number(tod.jahr);
+      if (Number.isFinite(startJahr) && Number.isFinite(endeJahr) && endeJahr >= startJahr) {
+        return `${endeJahr - startJahr} Jahre`;
+      }
+      return "";
+    }
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ende)) return "";
+
+  const start = new Date(`${beginn}T00:00:00`);
+  const end = new Date(`${ende}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return "";
+
+  let jahre = end.getFullYear() - start.getFullYear();
+  const monatsTagEnde = end.getMonth() * 100 + end.getDate();
+  const monatsTagStart = start.getMonth() * 100 + start.getDate();
+  if (monatsTagEnde < monatsTagStart) jahre--;
+  return jahre >= 0 ? `${jahre} Jahre` : "";
+}
+
 function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
   if (familie?.ende) return `Ende: ${datumAnzeige(familie.ende)}`;
   const tod = partnerschaftTodesende(familie, lookup);
@@ -1573,7 +1604,10 @@ async function loadDetailFamilie(personId) {
           <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
         </div>
       </div>
-      <button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+      <div class="familie-actions">
+        <span class="familie-jahre">${ehejahreAnzeige(f, detailPersonMap) || ""}</span>
+        <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
+      </div>`;
 
     const typEdit = div.querySelector(".familie-typ-edit");
     const beginnEdit = div.querySelector(".familie-beginn-edit");
