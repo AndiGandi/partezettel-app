@@ -1757,7 +1757,7 @@ async function loadDetailFamilie(personId) {
   }
   if (!partnerList.children.length) partnerList.innerHTML = '<span class="capture-status">Keine Partnerschaft erfasst</span>';
 
-  const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id);
+  const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id).filter(Boolean);
   let childLinksForPerson = [];
   if (partnerFamilyIds.length) {
     const { data, error: childLinksError } = await sb.from("familien_kinder")
@@ -1767,6 +1767,29 @@ async function loadDetailFamilie(personId) {
       debugLog(`❌ Kinder laden: ${childLinksError.message}`);
     } else {
       childLinksForPerson = data || [];
+    }
+
+    // Fallback auf die bereits beim Personenladen vollständig aufgebauten
+    // _kinder-Listen der Familien. Das ist wichtig, weil diese Datenquelle
+    // auch im Stammbaum verwendet wird und damit sicherstellt, dass dieselben
+    // Familien-Kind-Verknüpfungen in Stammbaum und Bearbeitungsfenster
+    // dargestellt werden. Fehlende Verknüpfungen aus dem Direktabruf werden
+    // dabei nur ergänzt, niemals gelöscht oder verändert.
+    const vorhandeneKeys = new Set(childLinksForPerson.map((x) => `${x.familie_id}:${x.kind_id}`));
+    for (const familie of partnerFamilies) {
+      for (const kindId of (familie._kinder || [])) {
+        const key = `${familie.id}:${kindId}`;
+        if (!vorhandeneKeys.has(key)) {
+          childLinksForPerson.push({
+            id: null,
+            familie_id: familie.id,
+            kind_id: kindId,
+            beziehungstyp: "biologisch",
+            _ausFamilienCache: true
+          });
+          vorhandeneKeys.add(key);
+        }
+      }
     }
   }
 
@@ -1821,6 +1844,20 @@ async function loadDetailFamilie(personId) {
     });
     div.querySelector(".del-btn").addEventListener("click", async (event) => {
       event.stopPropagation();
+      if (!link.id) {
+        // Cache-Fallback ohne Datenbank-ID: vor dem Löschen nochmals den
+        // echten Datensatz ermitteln. Niemals mit id=null löschen.
+        const { data: realLink, error: findError } = await sb.from("familien_kinder")
+          .select("id")
+          .eq("familie_id", link.familie_id)
+          .eq("kind_id", link.kind_id)
+          .maybeSingle();
+        if (findError || !realLink?.id) {
+          setDetailFamilieMessage(findError ? `Fehler: ${findError.message}` : "Kind-Verknüpfung nicht gefunden.");
+          return;
+        }
+        link.id = realLink.id;
+      }
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
       if (error) {
         setDetailFamilieMessage(`Fehler: ${error.message}`);
