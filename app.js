@@ -1600,13 +1600,15 @@ async function loadDetailFamilie(personId) {
               <select class="familie-ende-jahr"><option value="">Jahr</option></select>
             </div>
           </label>
+          <label class="field familie-jahre-field"><span>Ehejahre</span>
+            <div class="familie-jahre">${ehejahreAnzeige({ ...f, familientyp: typ }, detailPersonMap) || "–"}</div>
+          </label>
+          <div class="familie-actions">
+            <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
+          </div>
           <div class="familie-auto-ende"></div>
           <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
         </div>
-      </div>
-      <div class="familie-actions">
-        <span class="familie-jahre">${ehejahreAnzeige({ ...f, familientyp: typ }, detailPersonMap) || ""}</span>
-        <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
       </div>`;
 
     const typEdit = div.querySelector(".familie-typ-edit");
@@ -2031,10 +2033,31 @@ document.getElementById("d-save-eltern-btn").addEventListener("click", async () 
 // Partner/in auswählen löst KEIN automatisches Speichern aus.
 // Zuerst Partner/in, Art (Partnerschaft/Ehe) und optional die Daten auswählen,
 // anschließend ausdrücklich auf „Partner/in hinzufügen“ tippen.
+function aktualisiereNeueEhejahre() {
+  const el = document.getElementById("d-partner-ehejahre");
+  if (!el) return;
+  const typ = document.getElementById("d-partner-typ")?.value || "";
+  if (typ.toLocaleLowerCase("de") !== "ehe") { el.textContent = "–"; return; }
+  const start = getDatum("d-partner-beginn");
+  let end = getDatum("d-partner-ende");
+  if (!start || !end) { el.textContent = "–"; return; }
+  const a = new Date(`${start}T00:00:00`);
+  const b = new Date(`${end}T00:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) { el.textContent = "–"; return; }
+  let jahre = b.getFullYear() - a.getFullYear();
+  if ((b.getMonth() * 100 + b.getDate()) < (a.getMonth() * 100 + a.getDate())) jahre--;
+  el.textContent = jahre >= 0 ? `${jahre} Jahre` : "–";
+}
+
 document.getElementById("d-partner-person").addEventListener("change", () => {
   const msg = document.getElementById("d-familie-message");
   if (msg) msg.textContent = "";
+  aktualisiereNeueEhejahre();
 });
+["d-partner-typ","d-partner-beginn-tag","d-partner-beginn-monat","d-partner-beginn-jahr","d-partner-ende-tag","d-partner-ende-monat","d-partner-ende-jahr"].forEach((id) => {
+  document.getElementById(id)?.addEventListener("change", aktualisiereNeueEhejahre);
+});
+aktualisiereNeueEhejahre();
 
 document.getElementById("d-add-partner-btn").addEventListener("click", async () => {
   const wasAutoPartnerSave = autoPartnerSave;

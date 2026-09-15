@@ -119,45 +119,66 @@
 }
 
 
-/* Editierbare bestehende Partnerschaften – kompakte Ein-Zeilen-Anordnung */
+/* Partnerschaften – kompakte Zeile mit Art, Beginn, Ende und Ehejahren. */
 .familie-edit-block { flex: 1; min-width: 0; }
 .familie-edit-fields {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: 8rem max-content max-content;
-  gap: 8px 10px;
+  grid-template-columns: 8rem max-content max-content 5.5rem 2rem;
+  gap: 8px 8px;
   align-items: end;
 }
 .familie-edit-fields .field { margin: 0; min-width: 0; }
 .familie-edit-fields .field > span { white-space: nowrap; }
 .familie-edit-fields .familie-typ-edit { width: 8rem; max-width: 8rem; }
-.familie-edit-fields .date-parts { width: max-content; }
+.familie-edit-fields .date-parts { width: max-content; grid-template-columns: 3.1rem 4.6rem 4.6rem; gap: .25rem; }
+.familie-jahre-field { min-width: 5.5rem !important; }
+.familie-jahre {
+  min-width: 5.5rem;
+  height: 2.45rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: .5rem .35rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font-size: .88rem;
+  white-space: nowrap;
+}
+.familie-edit-fields .familie-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  height: 2.45rem;
+  margin: 0;
+}
+.familie-edit-fields .familie-actions .del-btn { flex: 0 0 auto; }
 .familie-edit-fields .familie-auto-ende { grid-column: 1 / -1; margin: -2px 0 0; }
 .familie-save-btn { grid-column: 1 / -1; width: 100%; margin-top: 0; }
 .familie-auto-ende { margin-top: 6px; }
 
-/* Neue Partnerschaft – Partner separat, Art/Beginn/Ende in einer Zeile. */
+/* Neue Partnerschaft – ebenfalls Art/Beginn/Ende/Ehejahre in einer Zeile. */
 .partner-new-person { margin-bottom: 10px; }
 .partner-new-fields {
   display: grid;
-  grid-template-columns: 8rem max-content max-content;
-  gap: 8px 10px;
+  grid-template-columns: 8rem max-content max-content 5.5rem;
+  gap: 8px 8px;
   align-items: end;
 }
 .partner-new-fields .field { margin: 0; min-width: 0; }
 .partner-new-fields .field > span { white-space: nowrap; }
 .partner-new-fields select[id="d-partner-typ"] { width: 8rem; max-width: 8rem; }
-.partner-new-fields .date-parts { width: max-content; }
+.partner-new-fields .date-parts { width: max-content; grid-template-columns: 3.1rem 4.6rem 4.6rem; gap: .25rem; }
+.partner-new-fields .familie-jahre-field { min-width: 5.5rem !important; }
 @media(max-width:700px){
-  .familie-edit-fields, .partner-new-fields {
-    grid-template-columns: 7.5rem max-content max-content;
-    gap: 6px 7px;
-  }
-  .familie-edit-fields .familie-typ-edit, .partner-new-fields select[id="d-partner-typ"] {
-    width: 7.5rem;
-    max-width: 7.5rem;
-  }
-  .familie-edit-fields .date-parts, .partner-new-fields .date-parts { gap: .2rem; }
+  .familie-edit-fields { grid-template-columns: 6.5rem max-content max-content 5.2rem 2rem; gap: 6px 5px; }
+  .familie-edit-fields .familie-typ-edit { width: 6.5rem; max-width: 6.5rem; }
+  .familie-edit-fields .date-parts, .partner-new-fields .date-parts { grid-template-columns: 2.8rem 4.2rem 4.2rem; gap: .2rem; }
+  .familie-jahre, .familie-jahre-field { min-width: 5.2rem !important; }
+  .partner-new-fields { grid-template-columns: 6.5rem max-content max-content 5.2rem; gap: 6px 5px; }
+  .partner-new-fields select[id="d-partner-typ"] { width: 6.5rem; max-width: 6.5rem; }
 }
 
 /* Link vorhanden: Taufbuch/Sterbebuch deutlich als direkt erreichbare Quelle markieren. */
@@ -177,7 +198,7 @@
 #d-geschlecht { width: 12rem; max-width: 12rem; }
 
 
-/* v87: Ehejahre direkt links neben dem Papierkorb. */
+/* v88: Ehejahre als eigenes Feld neben Art/Beginn/Ende. */
 .familie-actions {
   display:flex;
   align-items:center;
