@@ -528,7 +528,16 @@ function setDatum(prefix, value) {
   if(!value){t.value="";m.value="";y.value="";return;}
   const [yy,mm,dd]=String(value).slice(0,10).split("-");
   // Keine Neuberechnung/Filterung des Tages beim Setzen des Monats oder Jahres.
-  y.value=yy||""; m.value=mm||""; t.value=dd||"";
+  y.value=/^\d{4}$/.test(yy||"") ? yy : "";
+  m.value=/^\d{2}$/.test(mm||"") ? mm : "";
+  t.value=/^\d{2}$/.test(dd||"") ? dd : "";
+}
+function setDatumJahr(prefix, jahr) {
+  const t=document.getElementById(prefix+"-tag"),m=document.getElementById(prefix+"-monat"),y=document.getElementById(prefix+"-jahr");
+  if(!t||!m||!y) return;
+  t.value="";
+  m.value="";
+  y.value=/^\d{4}$/.test(String(jahr||"")) ? String(jahr) : "";
 }
 ["geburtsdatum","sterbedatum","d-geburtsdatum","d-sterbedatum","d-partner-beginn","d-partner-ende"].forEach(initDatum);
 
@@ -1456,7 +1465,19 @@ async function loadDetailFamilie(personId) {
     const autoEndeEl = div.querySelector(".familie-auto-ende");
     typEdit.value = typ;
     setDatum(beginnPrefix, f.beginn || null);
-    setDatum(endePrefix, f.ende || autoEnde || null);
+    if (f.ende) {
+      // Ein tatsächlich gespeichertes Ende hat immer Vorrang.
+      setDatum(endePrefix, f.ende);
+    } else if (tod?.exakt) {
+      // Exaktes Sterbedatum: nur für die Anzeige des automatisch ermittelten Endes.
+      setDatum(endePrefix, tod.datum);
+    } else if (tod?.jahr) {
+      // Nur Sterbejahr bekannt: ausschließlich das Jahr anzeigen.
+      // Es wird nicht als künstliches Datum (z. B. 01.01.) in der DB gespeichert.
+      setDatumJahr(endePrefix, tod.jahr);
+    } else {
+      setDatum(endePrefix, null);
+    }
     if (!f.ende && tod) {
       autoEndeEl.textContent = tod.exakt
         ? `Ende automatisch durch Tod: ${datumAnzeige(tod.datum)}`
