@@ -1771,68 +1771,74 @@ async function loadDetailFamilie(personId) {
   }
   if (!partnerList.children.length) partnerList.innerHTML = '<span class="capture-status">Keine Partnerschaft erfasst</span>';
 
+  // Kinder ausschließlich über die Familien dieses konkreten Paares laden.
+  // Die Personenliste/der Cache darf die Anzeige nicht beeinflussen.
   const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id).filter(Boolean);
   let childLinksForPerson = [];
   if (partnerFamilyIds.length) {
     const { data, error } = await sb.from("familien_kinder")
       .select("id, familie_id, kind_id, beziehungstyp")
       .in("familie_id", partnerFamilyIds);
-    if (error) debugLog(`❌ Kinder laden: ${error.message}`);
-    childLinksForPerson = data || [];
+    if (error) {
+      debugLog(`❌ Kinder laden: ${error.message}`);
+    } else {
+      childLinksForPerson = data || [];
+    }
   }
 
-  // Die bereits verknüpften Kinder müssen immer aus den echten
-  // familien_kinder-Verknüpfungen angezeigt werden – unabhängig davon,
-  // ob sie vorher im globalen Cache vorhanden waren.
+  // Die zugehörigen Kinder immer direkt aus "personen" holen. Damit ist die
+  // Anzeige unabhängig vom globalen personenCache.
   const childIds = [...new Set(childLinksForPerson.map((x) => x.kind_id).filter(Boolean))];
+  const childPersonMap = new Map();
   if (childIds.length) {
-    const { data: childPersons, error: childPersonsError } = await sb
-      .from("personen")
-      .select("id, vorname, nachname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
+    const { data: childPersons, error: childPersonsError } = await sb.from("personen")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
       .in("id", childIds);
     if (childPersonsError) {
       debugLog(`❌ Kinderdaten laden: ${childPersonsError.message}`);
     } else {
-      for (const p of childPersons || []) personenCache = personenCache.some((x) => x.id === p.id)
-        ? personenCache.map((x) => x.id === p.id ? { ...x, ...p } : x)
-        : [...personenCache, p];
+      for (const p of childPersons || []) childPersonMap.set(p.id, p);
     }
   }
 
-  const childPersonMap = new Map(personenCache.map((p) => [p.id, p]));
   childList.innerHTML = "";
-  if (childLinksForPerson.length && childPersonMap.size === 0) {
-    debugLog(`⚠️ ${childLinksForPerson.length} Kinder-Verknüpfungen vorhanden, aber keine Personendaten im Cache.`);
-  }
   childLinksForPerson.sort((a, b) => {
-    const childA = childPersonMap.get(a.kind_id) || detailPerson(a.kind_id);
-    const childB = childPersonMap.get(b.kind_id) || detailPerson(b.kind_id);
+    const childA = childPersonMap.get(a.kind_id);
+    const childB = childPersonMap.get(b.kind_id);
     const dateA = childA?.geburtsdatum || "";
     const dateB = childB?.geburtsdatum || "";
+    // Früher war die Kinderliste nach Geburtsdatum sortiert: dieses Verhalten
+    // bleibt erhalten. Unbekannte Geburtsdaten kommen danach.
     if (dateA && dateB) return dateA.localeCompare(dateB);
     if (dateA) return -1;
     if (dateB) return 1;
-    return personenAuswahlText(childA || detailPerson(a.kind_id)).localeCompare(personenAuswahlText(childB || detailPerson(b.kind_id)), "de", { sensitivity: "base" });
+    return personenAuswahlText(childA || { vorname: "", nachname: "" })
+      .localeCompare(personenAuswahlText(childB || { vorname: "", nachname: "" }), "de", { sensitivity: "base" });
   });
+
   for (const link of childLinksForPerson) {
-    const child = childPersonMap.get(link.kind_id) || detailPerson(link.kind_id);
+    const child = childPersonMap.get(link.kind_id);
     if (!child) {
-      debugLog(`⚠️ Kind ${link.kind_id} ist verknüpft, aber Personendatensatz konnte nicht geladen werden.`);
+      debugLog(`⚠️ Kind ${link.kind_id} ist verknüpft, aber der Personendatensatz konnte nicht geladen werden.`);
       continue;
     }
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
-    div.innerHTML = `<span class="beziehung-text" role="button" tabindex="0" title="Personendaten öffnen">${personenAuswahlText(detailPerson(child.id))}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
+    div.innerHTML = `<span class="beziehung-text" role="button" tabindex="0" title="Personendaten öffnen">${personenAuswahlText(child)}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
     const childNameEl = div.querySelector(".beziehung-text");
     const openChild = async (event) => { if (event) event.stopPropagation(); await openPersonDetail(child.id); };
     childNameEl.addEventListener("click", openChild);
-    childNameEl.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openChild(event); } });
+    childNameEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openChild(event); }
+    });
     div.querySelector(".del-btn").addEventListener("click", async (event) => {
       event.stopPropagation();
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
       if (error) { setDetailFamilieMessage(`Fehler: ${error.message}`); return; }
-      try { await loescheElternfamilieWennLeer(link.familie_id); await loadDetailFamilie(personId); }
-      catch (err) { setDetailFamilieMessage(`Fehler: ${err.message}`); }
+      try {
+        await loescheElternfamilieWennLeer(link.familie_id);
+        await loadDetailFamilie(personId);
+      } catch (err) { setDetailFamilieMessage(`Fehler: ${err.message}`); }
     });
     childList.appendChild(div);
   }
@@ -1847,14 +1853,31 @@ async function loadDetailFamilie(personId) {
   }
   await fillFamilienPersonSelect("d-kind-person", personId);
   const familySelect = document.getElementById("d-kind-partner-family");
-  familySelect.innerHTML = '<option value="">automatisch auswählen</option>';
-  for (const f of partnerFamilies || []) {
+  familySelect.innerHTML = "";
+  const validPartnerFamilies = (partnerFamilies || []).filter((f) => {
     const otherId = familiePartnerIds(f, personId)[0];
-    if (!otherId) continue;
-    const opt = document.createElement("option");
-    opt.value = f.id;
-    opt.textContent = `${personenAuswahlText(detailPerson(otherId))} — ${f.familientyp || "Partnerschaft"}`;
-    familySelect.appendChild(opt);
+    return !!otherId;
+  });
+  if (!validPartnerFamilies.length) {
+    familySelect.appendChild(new Option("— keine Partnerschaft vorhanden —", ""));
+    familySelect.disabled = true;
+  } else {
+    familySelect.disabled = false;
+    familySelect.appendChild(new Option(
+      validPartnerFamilies.length === 1 ? "— diese Partnerschaft —" : "— Partnerschaft auswählen —",
+      ""
+    ));
+    for (const f of validPartnerFamilies) {
+      const otherId = familiePartnerIds(f, personId)[0];
+      const opt = document.createElement("option");
+      opt.value = f.id;
+      opt.textContent = `${personenAuswahlText(detailPerson(otherId))} — ${f.familientyp || "Partnerschaft"}`;
+      familySelect.appendChild(opt);
+    }
+    // Bei genau einem Paar ist dieses Paar eindeutig und wird automatisch
+    // ausgewählt. Bei mehreren Partnerschaften muss der Benutzer das Paar
+    // ausdrücklich auswählen. Andere Personen/Familien erscheinen hier nie.
+    if (validPartnerFamilies.length === 1) familySelect.value = validPartnerFamilies[0].id;
   }
 }
 
@@ -2221,9 +2244,20 @@ document.getElementById("d-add-kind-btn").addEventListener("click", async () => 
   try {
     let familie = null;
     const partnerFamilies = await sb.from("familien").select("*").or(`partner_a_id.eq.${currentDetailPersonId},partner_b_id.eq.${currentDetailPersonId}`);
+    const validPartnerFamilies = (partnerFamilies.data || []).filter((f) =>
+      familiePartnerIds(f, currentDetailPersonId)[0]
+    );
     const preferredPartnerId = document.getElementById("d-kind-partner-family").value || null;
-    if (preferredPartnerId) familie = (partnerFamilies.data || []).find((f) => f.id === preferredPartnerId);
-    if (!familie) familie = (partnerFamilies.data || [])[0] || await findeOderErstelleFamilie(currentDetailPersonId, null, "Eltern");
+    if (preferredPartnerId) familie = validPartnerFamilies.find((f) => f.id === preferredPartnerId) || null;
+    if (!familie && validPartnerFamilies.length === 1) familie = validPartnerFamilies[0];
+    if (!familie && validPartnerFamilies.length > 1) {
+      msg.textContent = "Bitte die Partnerschaft auswählen, zu der das Kind gehört.";
+      return;
+    }
+    if (!familie) {
+      // Keine Partnerschaft vorhanden: Einzel-Elternfamilie anlegen, wie bisher.
+      familie = await findeOderErstelleFamilie(currentDetailPersonId, null, "Eltern");
+    }
     await addKindZuFamilie(familie.id, kindId, document.getElementById("d-kind-typ").value || "biologisch");
     msg.textContent = "Kind hinzugefügt ✓";
     document.getElementById("d-kind-person").value = "";
