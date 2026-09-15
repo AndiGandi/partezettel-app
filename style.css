@@ -169,3 +169,9 @@
 .btn--link-present:active {
   background: #356a31;
 }
+
+/* Personendaten kompakter – iPad: Eingabefelder nicht unnötig über die volle Breite. */
+#d-vorname,
+#d-nachname,
+#d-ledigenname { width: min(100%, 34rem); }
+#d-geschlecht { width: 12rem; max-width: 12rem; }
