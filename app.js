@@ -1788,7 +1788,7 @@ async function loadDetailFamilie(personId) {
   if (childIds.length) {
     const { data: childPersons, error: childPersonsError } = await sb
       .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
+      .select("id, vorname, nachname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
       .in("id", childIds);
     if (childPersonsError) {
       debugLog(`❌ Kinderdaten laden: ${childPersonsError.message}`);
@@ -1801,6 +1801,9 @@ async function loadDetailFamilie(personId) {
 
   const childPersonMap = new Map(personenCache.map((p) => [p.id, p]));
   childList.innerHTML = "";
+  if (childLinksForPerson.length && childPersonMap.size === 0) {
+    debugLog(`⚠️ ${childLinksForPerson.length} Kinder-Verknüpfungen vorhanden, aber keine Personendaten im Cache.`);
+  }
   childLinksForPerson.sort((a, b) => {
     const childA = childPersonMap.get(a.kind_id) || detailPerson(a.kind_id);
     const childB = childPersonMap.get(b.kind_id) || detailPerson(b.kind_id);
@@ -1868,7 +1871,7 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
   let personenFuerAuswahl = personenCache || [];
   try {
     const { data, error } = await sb.from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
+      .select("id, vorname, nachname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
       .order("nachname", { ascending: true });
     if (!error && Array.isArray(data)) {
       personenFuerAuswahl = data;
@@ -1883,7 +1886,7 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
     debugLog(`⚠️ Personen für Auswahl: ${err.message || err}`);
   }
 
-  let kandidaten = personenFuerAuswahl.filter((p) => p.id !== excludePersonId);
+  let kandidaten = (Array.isArray(personenFuerAuswahl) ? personenFuerAuswahl : []).filter((p) => p.id !== excludePersonId);
 
   // Nur bei einer neuen Partnerschaft greifen die bestehenden sicheren
   // Partnerfilter. Für Kinder gibt es bewusst KEINEN Filter danach, ob eine
