@@ -777,11 +777,31 @@ function lebensalterInTagen(person) {
   if (!person?.geburtsdatum) return null;
   const geburt = new Date(`${person.geburtsdatum}T00:00:00`);
   if (Number.isNaN(geburt.getTime())) return null;
-  const ende = person.sterbedatum
-    ? new Date(`${person.sterbedatum}T00:00:00`)
-    : new Date();
+
+  // Ein Sterbejahr ohne genaues Sterbedatum wird ebenfalls berücksichtigt.
+  // Fehlen Sterbedatum UND Sterbejahr, darf kein aktuelles Datum als Todestag
+  // angenommen werden – sonst entstehen bei historischen Personen falsche
+  // Altersangaben von weit über 100 Jahren.
+  let ende = null;
+  if (person.sterbedatum) {
+    ende = new Date(`${person.sterbedatum}T00:00:00`);
+  } else if (person.sterbejahr) {
+    const jahr = Number(person.sterbejahr);
+    if (!Number.isInteger(jahr) || jahr < 1000 || jahr > 3000) return null;
+    ende = new Date(`${jahr}-12-31T00:00:00`);
+  } else {
+    return null;
+  }
   if (Number.isNaN(ende.getTime()) || ende < geburt) return null;
   return Math.floor((ende - geburt) / 86400000);
+}
+function lebensalterAnzeige(person) {
+  const tage = lebensalterInTagen(person);
+  if (tage === null) return "";
+  const jahre = Math.floor(tage / 365.2425);
+  // Nur das Sterbejahr bekannt -> Alter ist nur ungefähr bestimmbar.
+  const nurSterbejahr = !person.sterbedatum && !!person.sterbejahr;
+  return `${nurSterbejahr ? "ca. " : ""}${jahre} Jahre`;
 }
 function personenVergleich(a,b) {
   if (personenSortierung === "alter") {
@@ -892,8 +912,7 @@ async function renderPersonenList(personen) {
     const jahre = [p.geburtsdatum ? p.geburtsdatum.split("-")[0] : "", sterbeJahrAnzeige]
       .filter(Boolean)
       .join(" – ");
-    const alterTage = lebensalterInTagen(p);
-    const alterAnzeige = alterTage !== null ? `${Math.floor(alterTage / 365.2425)} Jahre` : "";
+    const alterAnzeige = lebensalterAnzeige(p);
     const fotoUrl = schluesselfotoCache.get(p.id);
     li.innerHTML = `
       ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
