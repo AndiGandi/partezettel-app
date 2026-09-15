@@ -2664,11 +2664,6 @@ function renderStammbaum(rootId) {
       if (event) event.preventDefault();
       const id = el.dataset.treePerson;
       if (!id) return;
-      if (el.dataset.treeChild === "true") {
-        // Kinder im Stammbaum öffnen direkt ihre Personendaten.
-        await openPersonDetail(id);
-        return;
-      }
       const select = document.getElementById("tree-person-select");
       if (select) select.value = id;
       renderStammbaum(id);
