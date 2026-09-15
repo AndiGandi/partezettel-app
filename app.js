@@ -56,7 +56,6 @@ let personenCache = []; // {id, vorname, nachname, ...}
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
-let kinderIdsAuswahlCache = new Set();
 let partnerIdsAuswahlCache = new Set();
 
 // ---------- Anmeldung ----------
@@ -994,7 +993,6 @@ async function loadPersonen() {
       sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
     ]);
     familienAuswahlCache = familien || [];
-    kinderIdsAuswahlCache = new Set((familienKinder || []).map((k) => k.kind_id).filter(Boolean));
     partnerIdsAuswahlCache = new Set();
     for (const f of familienAuswahlCache) {
       const typ = String(f.familientyp || "").toLowerCase();
@@ -1760,60 +1758,17 @@ async function loadDetailFamilie(personId) {
   const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id).filter(Boolean);
   let childLinksForPerson = [];
   if (partnerFamilyIds.length) {
-    const { data, error: childLinksError } = await sb.from("familien_kinder")
+    const { data, error } = await sb.from("familien_kinder")
       .select("id, familie_id, kind_id, beziehungstyp")
       .in("familie_id", partnerFamilyIds);
-    if (childLinksError) {
-      debugLog(`❌ Kinder laden: ${childLinksError.message}`);
-    } else {
-      childLinksForPerson = data || [];
-    }
-
-    // Fallback auf die bereits beim Personenladen vollständig aufgebauten
-    // _kinder-Listen der Familien. Das ist wichtig, weil diese Datenquelle
-    // auch im Stammbaum verwendet wird und damit sicherstellt, dass dieselben
-    // Familien-Kind-Verknüpfungen in Stammbaum und Bearbeitungsfenster
-    // dargestellt werden. Fehlende Verknüpfungen aus dem Direktabruf werden
-    // dabei nur ergänzt, niemals gelöscht oder verändert.
-    const vorhandeneKeys = new Set(childLinksForPerson.map((x) => `${x.familie_id}:${x.kind_id}`));
-    for (const familie of partnerFamilies) {
-      for (const kindId of (familie._kinder || [])) {
-        const key = `${familie.id}:${kindId}`;
-        if (!vorhandeneKeys.has(key)) {
-          childLinksForPerson.push({
-            id: null,
-            familie_id: familie.id,
-            kind_id: kindId,
-            beziehungstyp: "biologisch",
-            _ausFamilienCache: true
-          });
-          vorhandeneKeys.add(key);
-        }
-      }
-    }
-  }
-
-  // Die Kinder dieser Person werden erst hier ermittelt. Sie gehören zu den
-  // Kind-Verknüpfungen der Familien, an denen die Person als Elternteil
-  // beteiligt ist. Deshalb müssen ihre Personendaten separat geladen werden,
-  // bevor die Liste aufgebaut wird.
-  const kindIds = [...new Set(childLinksForPerson.map((link) => link.kind_id).filter(Boolean))];
-  if (kindIds.length) {
-    const { data: childPersons, error: childPersonsError } = await sb
-      .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
-      .in("id", kindIds);
-    if (childPersonsError) {
-      debugLog(`❌ Kinderdaten laden: ${childPersonsError.message}`);
-    } else {
-      for (const p of childPersons || []) detailPersonMap.set(p.id, p);
-    }
+    if (error) debugLog(`❌ Kinder laden: ${error.message}`);
+    childLinksForPerson = data || [];
   }
 
   childList.innerHTML = "";
   childLinksForPerson.sort((a, b) => {
-    const childA = detailPerson(a.kind_id);
-    const childB = detailPerson(b.kind_id);
+    const childA = personenCache.find((p) => p.id === a.kind_id);
+    const childB = personenCache.find((p) => p.id === b.kind_id);
     const dateA = childA?.geburtsdatum || "";
     const dateB = childB?.geburtsdatum || "";
     if (dateA && dateB) return dateA.localeCompare(dateB);
@@ -1822,53 +1777,21 @@ async function loadDetailFamilie(personId) {
     return personenAuswahlText(detailPerson(a.kind_id)).localeCompare(personenAuswahlText(detailPerson(b.kind_id)), "de", { sensitivity: "base" });
   });
   for (const link of childLinksForPerson) {
-    // Für die Detailansicht immer die bereits separat geladenen Personendaten
-    // verwenden. Dadurch verschwinden Kinder nicht aus der Liste, wenn sie
-    // nicht (mehr) im globalen personenCache enthalten sind.
-    const child = detailPerson(link.kind_id);
+    const child = personenCache.find((p) => p.id === link.kind_id);
     if (!child) continue;
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
     div.innerHTML = `<span class="beziehung-text" role="button" tabindex="0" title="Personendaten öffnen">${personenAuswahlText(detailPerson(child.id))}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
     const childNameEl = div.querySelector(".beziehung-text");
-    const openChild = async (event) => {
-      if (event) event.stopPropagation();
-      await openPersonDetail(child.id);
-    };
+    const openChild = async (event) => { if (event) event.stopPropagation(); await openPersonDetail(child.id); };
     childNameEl.addEventListener("click", openChild);
-    childNameEl.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" || event.key === " ") {
-        event.preventDefault();
-        openChild(event);
-      }
-    });
+    childNameEl.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openChild(event); } });
     div.querySelector(".del-btn").addEventListener("click", async (event) => {
       event.stopPropagation();
-      if (!link.id) {
-        // Cache-Fallback ohne Datenbank-ID: vor dem Löschen nochmals den
-        // echten Datensatz ermitteln. Niemals mit id=null löschen.
-        const { data: realLink, error: findError } = await sb.from("familien_kinder")
-          .select("id")
-          .eq("familie_id", link.familie_id)
-          .eq("kind_id", link.kind_id)
-          .maybeSingle();
-        if (findError || !realLink?.id) {
-          setDetailFamilieMessage(findError ? `Fehler: ${findError.message}` : "Kind-Verknüpfung nicht gefunden.");
-          return;
-        }
-        link.id = realLink.id;
-      }
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
-      if (error) {
-        setDetailFamilieMessage(`Fehler: ${error.message}`);
-        return;
-      }
-      try {
-        await loescheElternfamilieWennLeer(link.familie_id);
-        await loadDetailFamilie(personId);
-      } catch (err) {
-        setDetailFamilieMessage(`Fehler: ${err.message}`);
-      }
+      if (error) { setDetailFamilieMessage(`Fehler: ${error.message}`); return; }
+      try { await loescheElternfamilieWennLeer(link.familie_id); await loadDetailFamilie(personId); }
+      catch (err) { setDetailFamilieMessage(`Fehler: ${err.message}`); }
     });
     childList.appendChild(div);
   }
@@ -1901,11 +1824,7 @@ function fillFamilienPersonSelect(selectId, excludePersonId) {
 
   let kandidaten = personenCache.filter((p) => p.id !== excludePersonId);
 
-  if (selectId === "d-kind-person") {
-    // Eine Person, die bereits irgendwo als Kind definiert ist, wird
-    // standardmäßig nicht nochmals als Kind angeboten.
-    kandidaten = kandidaten.filter((p) => !kinderIdsAuswahlCache.has(p.id));
-  } else if (selectId === "d-partner-person") {
+  if (selectId === "d-partner-person") {
     // Personen mit einer laufenden Ehe/Partnerschaft werden nicht als neuer
     // Partner angeboten. Bereits beendete Beziehungen bleiben möglich.
     kandidaten = kandidaten.filter((p) => !partnerIdsAuswahlCache.has(p.id));
