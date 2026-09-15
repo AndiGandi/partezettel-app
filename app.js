@@ -925,7 +925,7 @@ function partnerschaftIstBeendet(familie, lookup = personenCache) {
 }
 
 function ehejahreAnzeige(familie, lookup = personenCache) {
-  if (String(familie?.familientyp || "").toLowerCase() !== "ehe") return "";
+  if (String(familie?.familientyp || "").trim().toLocaleLowerCase("de") !== "ehe") return "";
   const beginn = familie?.beginn ? String(familie.beginn).slice(0, 10) : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(beginn)) return "";
 
@@ -1605,7 +1605,7 @@ async function loadDetailFamilie(personId) {
         </div>
       </div>
       <div class="familie-actions">
-        <span class="familie-jahre">${ehejahreAnzeige(f, detailPersonMap) || ""}</span>
+        <span class="familie-jahre">${ehejahreAnzeige({ ...f, familientyp: typ }, detailPersonMap) || ""}</span>
         <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
       </div>`;
 
@@ -1689,6 +1689,36 @@ async function loadDetailFamilie(personId) {
       else await loadDetailFamilie(personId);
     });
     partnerList.appendChild(div);
+
+    // Dauer der Ehe immer direkt nach dem Einfügen berechnen. Die Anzeige
+    // hängt damit nicht davon ab, ob die vorherige HTML-Erzeugung den
+    // Familientyp bereits korrekt normalisiert hat.
+    const jahreEl = div.querySelector(".familie-jahre");
+    const aktualisiereEhejahre = () => {
+      const start = getDatumElemente(beginnTag, beginnMonat, beginnJahr);
+      const end = getDatumElemente(endeTag, endeMonat, endeJahr);
+      let text = "";
+      if (String(typEdit.value || "").trim().toLocaleLowerCase("de") === "ehe" && start) {
+        let endeDatum = end;
+        if (!endeDatum && tod?.exakt) endeDatum = tod.datum;
+        if (endeDatum) {
+          const a = new Date(`${start}T00:00:00`);
+          const b = new Date(`${String(endeDatum).slice(0,10)}T00:00:00`);
+          if (!Number.isNaN(a.getTime()) && !Number.isNaN(b.getTime()) && b >= a) {
+            let j = b.getFullYear() - a.getFullYear();
+            if ((b.getMonth() * 100 + b.getDate()) < (a.getMonth() * 100 + a.getDate())) j--;
+            if (j >= 0) text = `${j} Jahre`;
+          }
+        } else if (tod?.jahr) {
+          const sj = Number(String(start).slice(0,4));
+          const ej = Number(tod.jahr);
+          if (Number.isFinite(sj) && Number.isFinite(ej) && ej >= sj) text = `${ej-sj} Jahre`;
+        }
+      }
+      jahreEl.textContent = text;
+    };
+    [beginnTag, beginnMonat, beginnJahr, endeTag, endeMonat, endeJahr, typEdit].forEach((el) => el.addEventListener("change", aktualisiereEhejahre));
+    aktualisiereEhejahre();
   }
   // Kompatibilitäts-Fallback: Falls der neue Familien-Datensatz nicht verfügbar ist,
   // lesen wir Partnerschaften aus der seit v9/v10 bewährten Tabelle beziehung.
