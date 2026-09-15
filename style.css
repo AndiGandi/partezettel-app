@@ -126,3 +126,13 @@
 .familie-edit-fields .field { margin-top: 8px; }
 .familie-save-btn { width: 100%; margin-top: 8px; }
 .familie-auto-ende { margin-top: 6px; }
+
+
+/* Link vorhanden: Taufbuch/Sterbebuch deutlich als direkt erreichbare Quelle markieren. */
+.btn--link-present {
+  background: #3f7d3a;
+  color: #fff;
+}
+.btn--link-present:active {
+  background: #356a31;
+}

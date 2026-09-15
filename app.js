@@ -1098,8 +1098,24 @@ async function openPersonDetail(personId) {
   document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
   const taufLink = document.getElementById("d-taufbuch-open");
   const sterbeLink = document.getElementById("d-sterbebuch-open");
-  if (person.taufbuch_link) { taufLink.href = person.taufbuch_link; taufLink.hidden = false; } else { taufLink.href = "#"; taufLink.hidden = true; }
-  if (person.sterbebuch_link) { sterbeLink.href = person.sterbebuch_link; sterbeLink.hidden = false; } else { sterbeLink.href = "#"; sterbeLink.hidden = true; }
+  if (person.taufbuch_link) {
+    taufLink.href = person.taufbuch_link;
+    taufLink.hidden = false;
+    taufLink.classList.add("btn--link-present");
+  } else {
+    taufLink.href = "#";
+    taufLink.hidden = true;
+    taufLink.classList.remove("btn--link-present");
+  }
+  if (person.sterbebuch_link) {
+    sterbeLink.href = person.sterbebuch_link;
+    sterbeLink.hidden = false;
+    sterbeLink.classList.add("btn--link-present");
+  } else {
+    sterbeLink.href = "#";
+    sterbeLink.hidden = true;
+    sterbeLink.classList.remove("btn--link-present");
+  }
   document.getElementById("d-notiz").value = person.Notiz || "";
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
@@ -1500,7 +1516,12 @@ async function loadDetailFamilie(personId) {
     } else {
       setDatumElemente(endeTag, endeMonat, endeJahr, null);
     }
-    if (!f.ende && tod) {
+    // Der Hinweis zum Tod bleibt auch nach dem Speichern sichtbar, wenn das
+    // gespeicherte Ende genau dem bekannten Sterbedatum des Partners entspricht.
+    // Ein anderes, bereits manuell eingetragenes Ende (z. B. Scheidung) bleibt
+    // davon unberührt. Bei nur bekanntem Sterbejahr bleibt der Hinweis ebenfalls
+    // sichtbar, solange kein exaktes Ende gespeichert wurde.
+    if (tod && (!f.ende || (tod.exakt && f.ende === tod.datum))) {
       autoEndeEl.textContent = tod.exakt
         ? `Ende automatisch durch Tod: ${datumAnzeige(tod.datum)}`
         : `Ende automatisch durch Tod: ${tod.jahr}`;
