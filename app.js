@@ -1145,6 +1145,70 @@ document.getElementById("detail-close-btn").addEventListener("click", () => {
   loadPersonen();
 });
 
+// Trauungsbuch-Link bei Ehepartnern synchronisieren.
+// Es wird ausschließlich das Trauungsbuch-Feld behandelt. Bereits vorhandene
+// Links werden nicht überschrieben; nur ein fehlender Link wird ergänzt.
+async function synchronisiereTrauungsbuchEhepartner(personId, link) {
+  const eigenerLink = String(link || "").trim();
+  if (!personId || !eigenerLink) return;
+
+  const { data: familien, error: familienError } = await sb.from("familien")
+    .select("id, partner_a_id, partner_b_id, familientyp")
+    .or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`)
+    .eq("familientyp", "Ehe");
+  if (familienError) throw familienError;
+
+  const partnerIds = [...new Set((familien || [])
+    .map((f) => familiePartnerIds(f, personId)[0])
+    .filter(Boolean))];
+  if (!partnerIds.length) return;
+
+  const { data: partnerPersonen, error: partnerError } = await sb.from("personen")
+    .select("id, trauungsbuch_link")
+    .in("id", partnerIds);
+  if (partnerError) throw partnerError;
+
+  for (const partner of partnerPersonen || []) {
+    // Bestehende Daten des Partners niemals überschreiben.
+    if (String(partner.trauungsbuch_link || "").trim()) continue;
+    const { error } = await sb.from("personen")
+      .update({ trauungsbuch_link: eigenerLink })
+      .eq("id", partner.id);
+    if (error) throw error;
+  }
+}
+
+// Bei einer neu angelegten Ehe kann der Link bereits beim anderen Ehepartner
+// vorhanden sein. In diesem Fall wird nur die fehlende Seite ergänzt.
+async function synchronisiereTrauungsbuchBeiEhe(personAId, personBId) {
+  if (!personAId || !personBId) return;
+
+  const { data: personen, error } = await sb.from("personen")
+    .select("id, trauungsbuch_link")
+    .in("id", [personAId, personBId]);
+  if (error) throw error;
+
+  const a = (personen || []).find((p) => p.id === personAId);
+  const b = (personen || []).find((p) => p.id === personBId);
+  const linkA = String(a?.trauungsbuch_link || "").trim();
+  const linkB = String(b?.trauungsbuch_link || "").trim();
+  const gemeinsamerLink = linkA || linkB;
+  if (!gemeinsamerLink) return;
+
+  if (!linkA) {
+    const { error: e } = await sb.from("personen")
+      .update({ trauungsbuch_link: gemeinsamerLink })
+      .eq("id", personAId);
+    if (e) throw e;
+  }
+  if (!linkB) {
+    const { error: e } = await sb.from("personen")
+      .update({ trauungsbuch_link: gemeinsamerLink })
+      .eq("id", personBId);
+    if (e) throw e;
+  }
+}
+
 // ---- Person-Felder speichern ----
 document.getElementById("d-save-person-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-person-message");
@@ -1172,6 +1236,17 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     msg.textContent = `Fehler: ${error.message}`;
     return;
   }
+  // Nur das Trauungsbuch darf bei einer Ehe auf den Partner ergänzt werden.
+  // Leere Partnerfelder werden gefüllt; bestehende Partner-Links bleiben unangetastet.
+  try {
+    await synchronisiereTrauungsbuchEhepartner(
+      currentDetailPersonId,
+      document.getElementById("d-trauungsbuch-link").value.trim()
+    );
+  } catch (err) {
+    debugLog(`⚠️ Trauungsbuch-Synchronisierung: ${err.message || err}`);
+  }
+
   msg.textContent = "Gespeichert ✓";
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
   aktualisiereLinkButton("d-trauungsbuch-open", document.getElementById("d-trauungsbuch-link").value.trim());
@@ -1970,6 +2045,15 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
         msg.textContent = `✅ Beziehung gespeichert. ⚠️ Familien-INSERT Fehler: ${detail}`;
       } else {
         debugLog(`✅ FAMILIEN-INSERT ERFOLGREICH: ${JSON.stringify(familienData)}`);
+        // Nur bei einer Ehe: derselbe Trauungsbuch-Link darf beim anderen
+        // Ehepartner ergänzt werden. Andere Buch-Links werden nicht angefasst.
+        if (typ === "Ehe") {
+          try {
+            await synchronisiereTrauungsbuchBeiEhe(currentDetailPersonId, partnerId);
+          } catch (syncErr) {
+            debugLog(`⚠️ Trauungsbuch-Synchronisierung bei Ehe: ${syncErr.message || syncErr}`);
+          }
+        }
         msg.textContent = `✅ INSERT erfolgreich – Beziehung + Familie gespeichert`;
       }
     } catch (familyErr) {
