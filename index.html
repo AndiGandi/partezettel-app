@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=83">
+<link rel="stylesheet" href="style.css?v=84">
 </head>
 <body>
 
@@ -103,6 +103,10 @@
           <label class="field">
             <span>Taufbuch-Link</span>
             <input type="url" id="taufbuch-link" placeholder="https://…" inputmode="url">
+          </label>
+          <label class="field">
+            <span>Trauungsbuch-Link</span>
+            <input type="url" id="trauungsbuch-link" placeholder="https://…" inputmode="url">
           </label>
           <label class="field">
             <span>Sterbebuch-Link</span>
@@ -275,12 +279,17 @@
             <input type="url" id="d-taufbuch-link" placeholder="https://…" inputmode="url">
           </label>
           <label class="field">
+            <span>Trauungsbuch-Link</span>
+            <input type="url" id="d-trauungsbuch-link" placeholder="https://…" inputmode="url">
+          </label>
+          <label class="field">
             <span>Sterbebuch-Link</span>
             <input type="url" id="d-sterbebuch-link" placeholder="https://…" inputmode="url">
           </label>
         </div>
         <div class="capture-row detail-links-row">
           <a id="d-taufbuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Taufbuch öffnen</a>
+          <a id="d-trauungsbuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Trauungsbuch öffnen</a>
           <a id="d-sterbebuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Sterbebuch öffnen</a>
         </div>
         <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
@@ -418,6 +427,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=83"></script>
+<script src="app.js?v=84"></script>
 </body>
 </html>

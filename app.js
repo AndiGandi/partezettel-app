@@ -572,6 +572,7 @@ form.addEventListener("submit", async (e) => {
     sterbedatum: getDatum("sterbedatum"),
     sterbejahr: getDatum("sterbedatum") ? null : (document.getElementById("sterbejahr").value.trim() ? Number(document.getElementById("sterbejahr").value.trim()) : null),
     taufbuch_link: document.getElementById("taufbuch-link").value.trim() || null,
+    trauungsbuch_link: document.getElementById("trauungsbuch-link").value.trim() || null,
     sterbebuch_link: document.getElementById("sterbebuch-link").value.trim() || null,
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
@@ -606,6 +607,7 @@ function resetForm() {
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
   document.getElementById("sterbejahr").value = "";
   document.getElementById("taufbuch-link").value = "";
+  document.getElementById("trauungsbuch-link").value = "";
   document.getElementById("sterbebuch-link").value = "";
   document.getElementById("ledigenname").value = "";
 
@@ -663,6 +665,7 @@ async function sendEintrag(eintrag, onProgress) {
         sterbedatum: eintrag.sterbedatum,
         sterbejahr: eintrag.sterbejahr,
         taufbuch_link: eintrag.taufbuch_link,
+        trauungsbuch_link: eintrag.trauungsbuch_link,
         sterbebuch_link: eintrag.sterbebuch_link,
         Notiz: eintrag.notiz,
       }, { onConflict: "id" }),
@@ -1114,8 +1117,10 @@ async function openPersonDetail(personId) {
   setDatum("d-sterbedatum", person.sterbedatum);
   document.getElementById("d-sterbejahr").value = person.sterbejahr ? String(person.sterbejahr) : "";
   document.getElementById("d-taufbuch-link").value = person.taufbuch_link || "";
+  document.getElementById("d-trauungsbuch-link").value = person.trauungsbuch_link || "";
   document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
   aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
+  aktualisiereLinkButton("d-trauungsbuch-open", person.trauungsbuch_link);
   aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
   document.getElementById("d-notiz").value = person.Notiz || "";
   document.getElementById("d-person-message").textContent = "";
@@ -1159,6 +1164,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     sterbedatum: getDatum("d-sterbedatum"),
     sterbejahr: getDatum("d-sterbedatum") ? null : (document.getElementById("d-sterbejahr").value.trim() ? Number(document.getElementById("d-sterbejahr").value.trim()) : null),
     taufbuch_link: document.getElementById("d-taufbuch-link").value.trim() || null,
+    trauungsbuch_link: document.getElementById("d-trauungsbuch-link").value.trim() || null,
     sterbebuch_link: document.getElementById("d-sterbebuch-link").value.trim() || null,
     Notiz: document.getElementById("d-notiz").value.trim() || null,
   }).eq("id", currentDetailPersonId);
@@ -1168,11 +1174,15 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   }
   msg.textContent = "Gespeichert ✓";
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
+  aktualisiereLinkButton("d-trauungsbuch-open", document.getElementById("d-trauungsbuch-link").value.trim());
   aktualisiereLinkButton("d-sterbebuch-open", document.getElementById("d-sterbebuch-link").value.trim());
 });
 
 document.getElementById("d-taufbuch-link")?.addEventListener("input", (e) => {
   aktualisiereLinkButton("d-taufbuch-open", e.target.value);
+});
+document.getElementById("d-trauungsbuch-link")?.addEventListener("input", (e) => {
+  aktualisiereLinkButton("d-trauungsbuch-open", e.target.value);
 });
 document.getElementById("d-sterbebuch-link")?.addEventListener("input", (e) => {
   aktualisiereLinkButton("d-sterbebuch-open", e.target.value);
