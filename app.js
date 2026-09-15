@@ -545,6 +545,8 @@ form.addEventListener("submit", async (e) => {
     geburtsdatum: getDatum("geburtsdatum"),
     sterbedatum: getDatum("sterbedatum"),
     sterbejahr: getDatum("sterbedatum") ? null : (document.getElementById("sterbejahr").value.trim() ? Number(document.getElementById("sterbejahr").value.trim()) : null),
+    taufbuch_link: document.getElementById("taufbuch-link").value.trim() || null,
+    sterbebuch_link: document.getElementById("sterbebuch-link").value.trim() || null,
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
@@ -577,6 +579,8 @@ function resetForm() {
   form.reset();
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
   document.getElementById("sterbejahr").value = "";
+  document.getElementById("taufbuch-link").value = "";
+  document.getElementById("sterbebuch-link").value = "";
   document.getElementById("ledigenname").value = "";
 
   // Neue Person beginnt nach dem Speichern garantiert ohne alte Medien.
@@ -632,6 +636,8 @@ async function sendEintrag(eintrag, onProgress) {
         geburtsdatum: eintrag.geburtsdatum,
         sterbedatum: eintrag.sterbedatum,
         sterbejahr: eintrag.sterbejahr,
+        taufbuch_link: eintrag.taufbuch_link,
+        sterbebuch_link: eintrag.sterbebuch_link,
         Notiz: eintrag.notiz,
       }, { onConflict: "id" }),
       15000,
@@ -993,6 +999,12 @@ async function openPersonDetail(personId) {
   setDatum("d-geburtsdatum", person.geburtsdatum);
   setDatum("d-sterbedatum", person.sterbedatum);
   document.getElementById("d-sterbejahr").value = person.sterbejahr ? String(person.sterbejahr) : "";
+  document.getElementById("d-taufbuch-link").value = person.taufbuch_link || "";
+  document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
+  const taufLink = document.getElementById("d-taufbuch-open");
+  const sterbeLink = document.getElementById("d-sterbebuch-open");
+  if (person.taufbuch_link) { taufLink.href = person.taufbuch_link; taufLink.hidden = false; } else { taufLink.href = "#"; taufLink.hidden = true; }
+  if (person.sterbebuch_link) { sterbeLink.href = person.sterbebuch_link; sterbeLink.hidden = false; } else { sterbeLink.href = "#"; sterbeLink.hidden = true; }
   document.getElementById("d-notiz").value = person.Notiz || "";
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
@@ -1032,6 +1044,8 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     geburtsdatum: getDatum("d-geburtsdatum"),
     sterbedatum: getDatum("d-sterbedatum"),
     sterbejahr: getDatum("d-sterbedatum") ? null : (document.getElementById("d-sterbejahr").value.trim() ? Number(document.getElementById("d-sterbejahr").value.trim()) : null),
+    taufbuch_link: document.getElementById("d-taufbuch-link").value.trim() || null,
+    sterbebuch_link: document.getElementById("d-sterbebuch-link").value.trim() || null,
     Notiz: document.getElementById("d-notiz").value.trim() || null,
   }).eq("id", currentDetailPersonId);
   msg.textContent = error ? `Fehler: ${error.message}` : "Gespeichert ✓";
