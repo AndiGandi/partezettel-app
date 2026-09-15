@@ -530,7 +530,7 @@ function setDatum(prefix, value) {
   // Keine Neuberechnung/Filterung des Tages beim Setzen des Monats oder Jahres.
   y.value=yy||""; m.value=mm||""; t.value=dd||"";
 }
-["geburtsdatum","sterbedatum","d-geburtsdatum","d-sterbedatum"].forEach(initDatum);
+["geburtsdatum","sterbedatum","d-geburtsdatum","d-sterbedatum","d-partner-beginn","d-partner-ende"].forEach(initDatum);
 
 // ---------- Formular absenden ----------
 const form = document.getElementById("person-form");
@@ -1408,9 +1408,79 @@ async function loadDetailFamilie(personId) {
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
     const typ = f.familientyp || "Partnerschaft";
-    const beginnText = f.beginn ? `Beginn: ${datumAnzeige(f.beginn)}` : "Beginn: nicht angegeben";
-    const endeText = partnerschaftEndeAnzeige(f, detailPersonMap);
-    div.innerHTML = `<div class="beziehung-text"><strong>${personenAuswahlText(detailPerson(otherId))}</strong><br><span class="beziehung-meta">Art: ${typ}<br>${beginnText}<br>${endeText}</span></div><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+    const tod = partnerschaftTodesende(f, detailPersonMap);
+    const autoEnde = !f.ende && tod ? (tod.exakt ? tod.datum : "") : "";
+    div.innerHTML = `
+      <div class="beziehung-text familie-edit-block">
+        <strong>${personenAuswahlText(detailPerson(otherId))}</strong>
+        <div class="familie-edit-fields">
+          <label class="field"><span>Art</span>
+            <select class="familie-typ-edit">
+              <option value="Partnerschaft">Partnerschaft</option>
+              <option value="Ehe">Ehe</option>
+            </select>
+          </label>
+          <label class="field"><span>Beginn</span>
+            <div class="date-parts familie-beginn-edit">
+              <select class="familie-beginn-tag"><option value="">Tag</option></select>
+              <select class="familie-beginn-monat"><option value="">Monat</option></select>
+              <select class="familie-beginn-jahr"><option value="">Jahr</option></select>
+            </div>
+          </label>
+          <label class="field"><span>Ende</span>
+            <div class="date-parts familie-ende-edit">
+              <select class="familie-ende-tag"><option value="">Tag</option></select>
+              <select class="familie-ende-monat"><option value="">Monat</option></select>
+              <select class="familie-ende-jahr"><option value="">Jahr</option></select>
+            </div>
+          </label>
+          <div class="familie-auto-ende"></div>
+          <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
+        </div>
+      </div>
+      <button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
+
+    const typEdit = div.querySelector(".familie-typ-edit");
+    const beginnEdit = div.querySelector(".familie-beginn-edit");
+    const endeEdit = div.querySelector(".familie-ende-edit");
+    const beginnPrefix = `familie-${f.id}-beginn`;
+    const endePrefix = `familie-${f.id}-ende`;
+    beginnEdit.querySelector(".familie-beginn-tag").id = `${beginnPrefix}-tag`;
+    beginnEdit.querySelector(".familie-beginn-monat").id = `${beginnPrefix}-monat`;
+    beginnEdit.querySelector(".familie-beginn-jahr").id = `${beginnPrefix}-jahr`;
+    endeEdit.querySelector(".familie-ende-tag").id = `${endePrefix}-tag`;
+    endeEdit.querySelector(".familie-ende-monat").id = `${endePrefix}-monat`;
+    endeEdit.querySelector(".familie-ende-jahr").id = `${endePrefix}-jahr`;
+    initDatum(beginnPrefix);
+    initDatum(endePrefix);
+    const autoEndeEl = div.querySelector(".familie-auto-ende");
+    typEdit.value = typ;
+    setDatum(beginnPrefix, f.beginn || null);
+    setDatum(endePrefix, f.ende || autoEnde || null);
+    if (!f.ende && tod) {
+      autoEndeEl.textContent = tod.exakt
+        ? `Ende automatisch durch Tod: ${datumAnzeige(tod.datum)}`
+        : `Ende automatisch durch Tod: ${tod.jahr}`;
+      autoEndeEl.className = "familie-auto-ende capture-status";
+    }
+
+    div.querySelector(".familie-save-btn").addEventListener("click", async () => {
+      const updates = {
+        familientyp: typEdit.value || "Partnerschaft",
+        beginn: getDatum(beginnPrefix),
+        ende: getDatum(endePrefix),
+      };
+      const msg = document.getElementById("d-familie-message");
+      msg.textContent = "Partnerschaft wird gespeichert …";
+      const { error } = await sb.from("familien").update(updates).eq("id", f.id);
+      if (error) {
+        msg.textContent = `Fehler: ${error.message}`;
+      } else {
+        msg.textContent = "Partnerschaft gespeichert ✓";
+        await loadDetailFamilie(personId);
+      }
+    });
+
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
       const { error } = await sb.from("familien").delete().eq("id", f.id);
@@ -1564,6 +1634,8 @@ async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnersc
       partner_a_id: partnerAId,
       partner_b_id: partnerBId,
       familientyp: typ || "Partnerschaft",
+      beginn: beginn || null,
+      ende: ende || null,
     };
 
     debugLog(`Familien-INSERT: ${partnerAId} ↔ ${partnerBId}`);
@@ -1751,8 +1823,8 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
       msg.textContent = "Bitte zuerst Partnerschaft oder Ehe auswählen.";
       return;
     }
-    const beginn = document.getElementById("d-partner-beginn").value || null;
-    const ende = document.getElementById("d-partner-ende").value || null;
+    const beginn = getDatum("d-partner-beginn");
+    const ende = getDatum("d-partner-ende");
 
     const beziehungsDatensatz = {
       personen_a_id: currentDetailPersonId,
@@ -1816,8 +1888,8 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
 
     if (!wasAutoPartnerSave) {
       document.getElementById("d-partner-person").value = "";
-      document.getElementById("d-partner-beginn").value = "";
-      document.getElementById("d-partner-ende").value = "";
+      setDatum("d-partner-beginn", null);
+      setDatum("d-partner-ende", null);
     }
     await loadDetailFamilie(currentDetailPersonId);
     if (wasAutoPartnerSave) {
