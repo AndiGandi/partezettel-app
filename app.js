@@ -262,6 +262,55 @@ function closePhotoEditor(result) {
   if (resolve) resolve(result);
 }
 
+async function blobZuJPEGUnter200KB(blob) {
+  if (!blob) return null;
+  const MAX_BYTES = 200 * 1024;
+  if (blob.size <= MAX_BYTES && blob.type === "image/jpeg") return new File([blob], "partezettel.jpg", { type: "image/jpeg" });
+
+  const img = await loadImage(await bildZuDataURL(blob));
+  let scale = 1;
+  let quality = 0.82;
+
+  const encode = (width, height, q) => new Promise(resolve => {
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(width));
+    canvas.height = Math.max(1, Math.round(height));
+    const ctx = canvas.getContext("2d", { alpha: false });
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    canvas.toBlob(resolve, "image/jpeg", q);
+  });
+
+  // Zuerst nur die JPEG-Qualität reduzieren. Erst wenn das nicht reicht,
+  // wird die Auflösung schrittweise reduziert. Dadurch bleiben kleine Bilder
+  // und bereits gut komprimierte Fotos unverändert bzw. möglichst groß.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const candidate = await encode(img.naturalWidth * scale, img.naturalHeight * scale, quality);
+    if (candidate && candidate.size <= MAX_BYTES) {
+      return new File([candidate], "partezettel.jpg", { type: "image/jpeg" });
+    }
+    if (quality > 0.42) {
+      quality -= 0.08;
+    } else {
+      scale *= 0.88;
+      quality = 0.76;
+    }
+  }
+
+  // Letzter Versuch mit stärkerer Reduzierung, damit das Ziel auch bei
+  // sehr detailreichen Bildern möglichst zuverlässig erreicht wird.
+  while (scale > 0.25) {
+    const candidate = await encode(img.naturalWidth * scale, img.naturalHeight * scale, 0.68);
+    if (candidate && candidate.size <= MAX_BYTES) {
+      return new File([candidate], "partezettel.jpg", { type: "image/jpeg" });
+    }
+    scale *= 0.82;
+  }
+  const fallback = await encode(img.naturalWidth * scale, img.naturalHeight * scale, 0.60);
+  return fallback ? new File([fallback], "partezettel.jpg", { type: "image/jpeg" }) : null;
+}
+
 function exportEditedPhoto() {
   if (!fotoEditorImage || !fotoEditorBaseCanvas.width) return null;
   const src = fotoEditorBaseCanvas;
@@ -272,7 +321,7 @@ function exportEditedPhoto() {
   const out = document.createElement("canvas");
   out.width = w; out.height = h;
   out.getContext("2d").drawImage(src, x, y, w, h, 0, 0, w, h);
-  return new Promise(resolve => out.toBlob(blob => resolve(blob ? new File([blob], "partezettel.jpg", {type:"image/jpeg"}) : null), "image/jpeg", .92));
+  return new Promise(resolve => out.toBlob(async blob => resolve(blob ? await blobZuJPEGUnter200KB(blob) : null), "image/jpeg", .92));
 }
 
 async function bearbeiteFotos(files) {
@@ -1022,10 +1071,14 @@ async function uploadDetailFoto(file) {
   msg.textContent = "Foto anpassen …";
   const edited = await openPhotoEditor(file);
   if (!edited) { msg.textContent = "Foto nicht übernommen."; return; }
-  msg.textContent = "Lade hoch …";
-  const ext = edited.type.includes("png") ? "png" : "jpg";
-  const path = `${currentDetailPersonId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.${ext}`;
-  const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, edited);
+  const optimiert = await blobZuJPEGUnter200KB(edited);
+  if (!optimiert) { msg.textContent = "Foto konnte nicht optimiert werden."; return; }
+  msg.textContent = `Lade hoch … (${Math.round(optimiert.size / 1024)} KB)`;
+  const path = `${currentDetailPersonId}/${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
+  const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, optimiert, {
+    contentType: "image/jpeg",
+    upsert: false,
+  });
   if (uploadError) { msg.textContent = `Fehler: ${uploadError.message}`; return; }
   const { error: insertError } = await sb.from("fotos").insert({ personen_id: currentDetailPersonId, dateipfad: path, ist_schluesselfoto: false });
   msg.textContent = insertError ? `Fehler: ${insertError.message}` : "Foto hinzugefügt ✓";
@@ -1761,6 +1814,80 @@ async function fetchAllTableRows(table, orderColumn = "id") {
   return rows;
 }
 
+async function optimiereBestehendeFotos() {
+  const msg = document.getElementById("foto-optimieren-message");
+  if (!msg) return;
+  msg.textContent = "Fotos werden geprüft …";
+  try {
+    await ensureSession();
+    const { data: fotos, error } = await sb.from("fotos").select("id, dateipfad");
+    if (error) throw error;
+    const eintraege = (fotos || []).filter(f => f.dateipfad);
+    let gesamtAlt = 0;
+    let ueberLimit = 0;
+    const kandidaten = [];
+
+    for (let i = 0; i < eintraege.length; i++) {
+      const foto = eintraege[i];
+      msg.textContent = `Fotos prüfen … ${i + 1}/${eintraege.length}`;
+      const { data: blob, error: downloadError } = await sb.storage.from(BUCKET_FOTOS).download(foto.dateipfad);
+      if (downloadError || !blob) continue;
+      gesamtAlt += blob.size;
+      if (blob.size > 200 * 1024) {
+        ueberLimit++;
+        kandidaten.push(foto);
+      }
+    }
+
+    const altMB = gesamtAlt / 1024 / 1024;
+    if (!kandidaten.length) {
+      msg.textContent = `Keine Optimierung nötig. ${eintraege.length} Fotos · ${altMB.toFixed(2)} MB.`;
+      return;
+    }
+
+    const ok = confirm(`${eintraege.length} Fotos · ${altMB.toFixed(2)} MB\n\n${ueberLimit} Fotos sind größer als 200 KB und werden optimiert.\n\nDie Originale auf deinem Gerät bleiben unverändert. Nur die Dateien in Supabase werden ersetzt.\n\nOptimierung starten?`);
+    if (!ok) {
+      msg.textContent = "Optimierung abgebrochen.";
+      return;
+    }
+
+    let verarbeitet = 0;
+    let altKandidaten = 0;
+    let neuKandidaten = 0;
+    let fehler = 0;
+
+    for (let i = 0; i < kandidaten.length; i++) {
+      const foto = kandidaten[i];
+      msg.textContent = `Foto optimieren … ${i + 1}/${kandidaten.length}`;
+      try {
+        const { data: original, error: downloadError } = await sb.storage.from(BUCKET_FOTOS).download(foto.dateipfad);
+        if (downloadError || !original) throw new Error(downloadError?.message || "Foto konnte nicht geladen werden");
+        const optimiert = await blobZuJPEGUnter200KB(original);
+        if (!optimiert) throw new Error("Optimierung fehlgeschlagen");
+        altKandidaten += original.size;
+        neuKandidaten += optimiert.size;
+
+        const { error: updateError } = await sb.storage.from(BUCKET_FOTOS).update(foto.dateipfad, optimiert, {
+          contentType: "image/jpeg",
+          cacheControl: "3600",
+        });
+        if (updateError) throw updateError;
+        verarbeitet++;
+      } catch (err) {
+        fehler++;
+        debugLog(`❌ Fotooptimierung ${foto.dateipfad}: ${err.message || err}`);
+      }
+    }
+
+    const altMB2 = altKandidaten / 1024 / 1024;
+    const neuMB2 = neuKandidaten / 1024 / 1024;
+    msg.textContent = `${verarbeitet} Fotos optimiert ✓ · ${altMB2.toFixed(2)} MB → ${neuMB2.toFixed(2)} MB${fehler ? ` · ${fehler} Fehler` : ""}`;
+  } catch (err) {
+    msg.textContent = `Fehler: ${err.message || err}`;
+    debugLog(`❌ Fotooptimierung: ${err.message || err}`);
+  }
+}
+
 async function fetchAllExportData() {
   const [personen, familien, familien_kinder, fotos, sprachnotizen] = await Promise.all([
     fetchAllTableRows("personen", "nachname"),
@@ -2081,6 +2208,9 @@ async function stelleBackupWiederHer(file) {
     debugLog(`❌ Backup wiederherstellen: ${err.message || err}`);
   }
 }
+
+const fotoOptimierenBtn = document.getElementById("foto-optimieren-btn");
+if (fotoOptimierenBtn) fotoOptimierenBtn.addEventListener("click", optimiereBestehendeFotos);
 
 const backupBtn = document.getElementById("backup-icloud-btn");
 if (backupBtn) backupBtn.addEventListener("click", erstelleICloudBackup);
