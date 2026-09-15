@@ -724,8 +724,22 @@ function sortierJahr(person, feld) {
   if (feld === "sterbejahr") return person.sterbedatum ? Number(String(person.sterbedatum).slice(0,4)) : (person.sterbejahr ? Number(person.sterbejahr) : null);
   return null;
 }
+function lebensalterInTagen(person) {
+  if (!person?.geburtsdatum) return null;
+  const geburt = new Date(`${person.geburtsdatum}T00:00:00`);
+  if (Number.isNaN(geburt.getTime())) return null;
+  const ende = person.sterbedatum
+    ? new Date(`${person.sterbedatum}T00:00:00`)
+    : new Date();
+  if (Number.isNaN(ende.getTime()) || ende < geburt) return null;
+  return Math.floor((ende - geburt) / 86400000);
+}
 function personenVergleich(a,b) {
-  if (personenSortierung === "geburtsjahr" || personenSortierung === "sterbejahr") {
+  if (personenSortierung === "alter") {
+    const aa=lebensalterInTagen(a), ab=lebensalterInTagen(b);
+    if (aa===null && ab!==null) return 1; if (aa!==null && ab===null) return -1;
+    if (aa!==null && ab!==null && aa!==ab) return aa-ab;
+  } else if (personenSortierung === "geburtsjahr" || personenSortierung === "sterbejahr") {
     const ay=sortierJahr(a,personenSortierung), by=sortierJahr(b,personenSortierung);
     if (ay===null && by!==null) return 1; if (ay!==null && by===null) return -1;
     if (ay!==null && by!==null && ay!==by) return ay-by;
