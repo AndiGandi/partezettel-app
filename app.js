@@ -1,4 +1,4 @@
-// v91 Kinderliste: Kinderdatensätze werden separat nachgeladen.
+// v92 Kinderliste: Kinderdatensätze werden separat nachgeladen.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -1511,7 +1511,6 @@ async function loadDetailFamilie(personId) {
   for (const f of parentFamilies) {
     for (const id of [f.partner_a_id, f.partner_b_id]) if (id) detailPersonIds.add(id);
   }
-
   const detailPersonMap = new Map(personenCache.map((p) => [p.id, p]));
   if (detailPersonIds.size) {
     const { data: detailPersons, error: detailPersonsError } = await sb
@@ -1770,6 +1769,24 @@ async function loadDetailFamilie(personId) {
       childLinksForPerson = data || [];
     }
   }
+
+  // Die Kinder dieser Person werden erst hier ermittelt. Sie gehören zu den
+  // Kind-Verknüpfungen der Familien, an denen die Person als Elternteil
+  // beteiligt ist. Deshalb müssen ihre Personendaten separat geladen werden,
+  // bevor die Liste aufgebaut wird.
+  const kindIds = [...new Set(childLinksForPerson.map((link) => link.kind_id).filter(Boolean))];
+  if (kindIds.length) {
+    const { data: childPersons, error: childPersonsError } = await sb
+      .from("personen")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
+      .in("id", kindIds);
+    if (childPersonsError) {
+      debugLog(`❌ Kinderdaten laden: ${childPersonsError.message}`);
+    } else {
+      for (const p of childPersons || []) detailPersonMap.set(p.id, p);
+    }
+  }
+
   childList.innerHTML = "";
   childLinksForPerson.sort((a, b) => {
     const childA = detailPerson(a.kind_id);
