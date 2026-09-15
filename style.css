@@ -119,41 +119,46 @@
 }
 
 
-/* Editierbare bestehende Partnerschaften */
+/* Editierbare bestehende Partnerschaften – kompakte Ein-Zeilen-Anordnung */
 .familie-edit-block { flex: 1; min-width: 0; }
 .familie-edit-fields {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: 10rem auto auto;
-  gap: 8px 12px;
+  grid-template-columns: 8rem max-content max-content;
+  gap: 8px 10px;
   align-items: end;
 }
 .familie-edit-fields .field { margin: 0; min-width: 0; }
-.familie-edit-fields .familie-typ-edit { width: 10rem; max-width: 100%; }
+.familie-edit-fields .field > span { white-space: nowrap; }
+.familie-edit-fields .familie-typ-edit { width: 8rem; max-width: 8rem; }
 .familie-edit-fields .date-parts { width: max-content; }
 .familie-edit-fields .familie-auto-ende { grid-column: 1 / -1; margin: -2px 0 0; }
 .familie-save-btn { grid-column: 1 / -1; width: 100%; margin-top: 0; }
 .familie-auto-ende { margin-top: 6px; }
 
-/* Neue Partnerschaft: Partner separat, Art/Beginn/Ende kompakt in einer Zeile. */
+/* Neue Partnerschaft – Partner separat, Art/Beginn/Ende in einer Zeile. */
 .partner-new-person { margin-bottom: 10px; }
 .partner-new-fields {
   display: grid;
-  grid-template-columns: 10rem auto auto;
-  gap: 8px 12px;
+  grid-template-columns: 8rem max-content max-content;
+  gap: 8px 10px;
   align-items: end;
 }
 .partner-new-fields .field { margin: 0; min-width: 0; }
+.partner-new-fields .field > span { white-space: nowrap; }
+.partner-new-fields select[id="d-partner-typ"] { width: 8rem; max-width: 8rem; }
 .partner-new-fields .date-parts { width: max-content; }
 @media(max-width:700px){
   .familie-edit-fields, .partner-new-fields {
-    grid-template-columns: 8.5rem auto auto;
-    gap: 6px 8px;
+    grid-template-columns: 7.5rem max-content max-content;
+    gap: 6px 7px;
   }
-  .familie-edit-fields .familie-typ-edit, .partner-new-fields select[id="d-partner-typ"] { width: 8.5rem; }
-  .familie-edit-fields .date-parts, .partner-new-fields .date-parts { gap: .25rem; }
+  .familie-edit-fields .familie-typ-edit, .partner-new-fields select[id="d-partner-typ"] {
+    width: 7.5rem;
+    max-width: 7.5rem;
+  }
+  .familie-edit-fields .date-parts, .partner-new-fields .date-parts { gap: .2rem; }
 }
-
 
 /* Link vorhanden: Taufbuch/Sterbebuch deutlich als direkt erreichbare Quelle markieren. */
 .btn--link-present {

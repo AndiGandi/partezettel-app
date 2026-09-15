@@ -1084,6 +1084,21 @@ function setDetailFamilieMessage(text) {
   if (detailFamilieMessage) detailFamilieMessage.textContent = text || "";
 }
 
+function aktualisiereLinkButton(id, wert) {
+  const btn = document.getElementById(id);
+  if (!btn) return;
+  const link = String(wert || "").trim();
+  if (link) {
+    btn.href = link;
+    btn.hidden = false;
+    btn.classList.add("btn--link-present");
+  } else {
+    btn.href = "#";
+    btn.hidden = true;
+    btn.classList.remove("btn--link-present");
+  }
+}
+
 async function openPersonDetail(personId) {
   currentDetailPersonId = personId;
   await ensureSession();
@@ -1100,26 +1115,8 @@ async function openPersonDetail(personId) {
   document.getElementById("d-sterbejahr").value = person.sterbejahr ? String(person.sterbejahr) : "";
   document.getElementById("d-taufbuch-link").value = person.taufbuch_link || "";
   document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
-  const taufLink = document.getElementById("d-taufbuch-open");
-  const sterbeLink = document.getElementById("d-sterbebuch-open");
-  if (person.taufbuch_link) {
-    taufLink.href = person.taufbuch_link;
-    taufLink.hidden = false;
-    taufLink.classList.add("btn--link-present");
-  } else {
-    taufLink.href = "#";
-    taufLink.hidden = true;
-    taufLink.classList.remove("btn--link-present");
-  }
-  if (person.sterbebuch_link) {
-    sterbeLink.href = person.sterbebuch_link;
-    sterbeLink.hidden = false;
-    sterbeLink.classList.add("btn--link-present");
-  } else {
-    sterbeLink.href = "#";
-    sterbeLink.hidden = true;
-    sterbeLink.classList.remove("btn--link-present");
-  }
+  aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
+  aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
   document.getElementById("d-notiz").value = person.Notiz || "";
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
@@ -1170,21 +1167,15 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     return;
   }
   msg.textContent = "Gespeichert ✓";
-  const aktualisiereLinkButton = (id, wert) => {
-    const btn = document.getElementById(id);
-    if (!btn) return;
-    if (wert) {
-      btn.href = wert;
-      btn.hidden = false;
-      btn.classList.add("btn--link-present");
-    } else {
-      btn.href = "#";
-      btn.hidden = true;
-      btn.classList.remove("btn--link-present");
-    }
-  };
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
   aktualisiereLinkButton("d-sterbebuch-open", document.getElementById("d-sterbebuch-link").value.trim());
+});
+
+document.getElementById("d-taufbuch-link")?.addEventListener("input", (e) => {
+  aktualisiereLinkButton("d-taufbuch-open", e.target.value);
+});
+document.getElementById("d-sterbebuch-link")?.addEventListener("input", (e) => {
+  aktualisiereLinkButton("d-sterbebuch-open", e.target.value);
 });
 
 // ---- Fotos im Detail ----
