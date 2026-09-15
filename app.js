@@ -1,4 +1,4 @@
-// v92 Kinderliste: Kinderdatensätze werden separat nachgeladen.
+// v95 Kinderliste: Kinderdatensätze werden separat nachgeladen.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -1474,6 +1474,22 @@ async function loadDetailFamilie(personId) {
   const childList = document.getElementById("d-kinder-list");
   if (!parentSelectVater || !parentSelectMutter || !partnerList || !childList) return;
 
+  // Die Familienansicht darf nicht davon abhängen, ob die globale Personenliste
+  // vorher geladen wurde. Das Stammbaum-Fenster lädt Personen separat.
+  // Deshalb wird hier sichergestellt, dass die Auswahl und die Kinderliste
+  // einen vollständigen Personenbestand haben.
+  if (personenCache.length < 2) {
+    const { data: familienPersonen, error: familienPersonenError } = await sb
+      .from("personen")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht, Notiz")
+      .order("nachname", { ascending: true });
+    if (familienPersonenError) {
+      debugLog(`❌ Personen für Familienauswahl laden: ${familienPersonenError.message}`);
+    } else if (Array.isArray(familienPersonen)) {
+      personenCache = familienPersonen;
+    }
+  }
+
   const [{ data: childLinks, error: childError }, partnerAResult, partnerBResult] = await Promise.all([
     sb.from("familien_kinder").select("id, familie_id, beziehungstyp").eq("kind_id", personId),
     sb.from("familien").select("*").eq("partner_a_id", personId),
@@ -1765,20 +1781,42 @@ async function loadDetailFamilie(personId) {
     childLinksForPerson = data || [];
   }
 
+  // Die bereits verknüpften Kinder müssen immer aus den echten
+  // familien_kinder-Verknüpfungen angezeigt werden – unabhängig davon,
+  // ob sie vorher im globalen Cache vorhanden waren.
+  const childIds = [...new Set(childLinksForPerson.map((x) => x.kind_id).filter(Boolean))];
+  if (childIds.length) {
+    const { data: childPersons, error: childPersonsError } = await sb
+      .from("personen")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, sterbedatum, sterbejahr, geschlecht")
+      .in("id", childIds);
+    if (childPersonsError) {
+      debugLog(`❌ Kinderdaten laden: ${childPersonsError.message}`);
+    } else {
+      for (const p of childPersons || []) personenCache = personenCache.some((x) => x.id === p.id)
+        ? personenCache.map((x) => x.id === p.id ? { ...x, ...p } : x)
+        : [...personenCache, p];
+    }
+  }
+
+  const childPersonMap = new Map(personenCache.map((p) => [p.id, p]));
   childList.innerHTML = "";
   childLinksForPerson.sort((a, b) => {
-    const childA = personenCache.find((p) => p.id === a.kind_id);
-    const childB = personenCache.find((p) => p.id === b.kind_id);
+    const childA = childPersonMap.get(a.kind_id) || detailPerson(a.kind_id);
+    const childB = childPersonMap.get(b.kind_id) || detailPerson(b.kind_id);
     const dateA = childA?.geburtsdatum || "";
     const dateB = childB?.geburtsdatum || "";
     if (dateA && dateB) return dateA.localeCompare(dateB);
     if (dateA) return -1;
     if (dateB) return 1;
-    return personenAuswahlText(detailPerson(a.kind_id)).localeCompare(personenAuswahlText(detailPerson(b.kind_id)), "de", { sensitivity: "base" });
+    return personenAuswahlText(childA || detailPerson(a.kind_id)).localeCompare(personenAuswahlText(childB || detailPerson(b.kind_id)), "de", { sensitivity: "base" });
   });
   for (const link of childLinksForPerson) {
-    const child = personenCache.find((p) => p.id === link.kind_id);
-    if (!child) continue;
+    const child = childPersonMap.get(link.kind_id) || detailPerson(link.kind_id);
+    if (!child) {
+      debugLog(`⚠️ Kind ${link.kind_id} ist verknüpft, aber Personendatensatz konnte nicht geladen werden.`);
+      continue;
+    }
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
     div.innerHTML = `<span class="beziehung-text" role="button" tabindex="0" title="Personendaten öffnen">${personenAuswahlText(detailPerson(child.id))}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
