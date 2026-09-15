@@ -1401,8 +1401,21 @@ async function loadDetailFamilie(personId) {
     if (!child) continue;
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
-    div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(detailPerson(child.id))}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
-    div.querySelector(".del-btn").addEventListener("click", async () => {
+    div.innerHTML = `<span class="beziehung-text" role="button" tabindex="0" title="Personendaten öffnen">${personenAuswahlText(detailPerson(child.id))}${link.beziehungstyp && link.beziehungstyp !== "biologisch" ? ` — ${link.beziehungstyp}` : ""}</span><button class="del-btn" title="Kind-Verknüpfung löschen">🗑️</button>`;
+    const childNameEl = div.querySelector(".beziehung-text");
+    const openChild = async (event) => {
+      if (event) event.stopPropagation();
+      await openPersonDetail(child.id);
+    };
+    childNameEl.addEventListener("click", openChild);
+    childNameEl.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openChild(event);
+      }
+    });
+    div.querySelector(".del-btn").addEventListener("click", async (event) => {
+      event.stopPropagation();
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
       if (error) {
         setDetailFamilieMessage(`Fehler: ${error.message}`);
