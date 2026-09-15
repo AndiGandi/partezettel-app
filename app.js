@@ -52,6 +52,11 @@ let audioChunks = [];
 let recordStartTime = null;
 let isRecording = false;
 let personenCache = []; // {id, vorname, nachname, ...}
+// Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
+// verändern keine bestehenden Familien- oder Kinderverknüpfungen.
+let familienAuswahlCache = [];
+let kinderIdsAuswahlCache = new Set();
+let partnerIdsAuswahlCache = new Set();
 
 // ---------- Anmeldung ----------
 async function ensureSession() {
@@ -876,10 +881,32 @@ async function loadPersonen() {
 
   personenCache = data || [];
   try {
-    const [{ data: familien }, { data: familienKinder }] = await Promise.all([
-      sb.from("familien").select("id, partner_a_id, partner_b_id"),
-      sb.from("familien_kinder").select("familie_id, kind_id")
+    const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
+      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende"),
+      sb.from("familien_kinder").select("familie_id, kind_id"),
+      sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
     ]);
+    familienAuswahlCache = familien || [];
+    kinderIdsAuswahlCache = new Set((familienKinder || []).map((k) => k.kind_id).filter(Boolean));
+    partnerIdsAuswahlCache = new Set();
+    for (const f of familienAuswahlCache) {
+      const typ = String(f.familientyp || "").toLowerCase();
+      // Nur laufende Ehe/Partnerschaft sperrt die Person in der Auswahl.
+      // Beendete Beziehungen bleiben für eine spätere Ehe/Partnerschaft auswählbar.
+      if ((typ === "ehe" || typ === "partnerschaft") && !f.ende) {
+        if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+        if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+      }
+    }
+    // Ältere Daten können noch ausschließlich in "beziehung" stehen.
+    // Diese werden ebenfalls nur dann als belegte Partnerschaft behandelt,
+    // wenn sie ausdrücklich Ehe oder Partnerschaft sind.
+    for (const b of beziehungen || []) {
+      if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+        if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+        if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+      }
+    }
     const kinderByFamilie = new Map();
     for (const k of familienKinder || []) { if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []); kinderByFamilie.get(k.familie_id).push(k.kind_id); }
     for (const f of familien || []) f._kinder=kinderByFamilie.get(f.id)||[];
@@ -1456,7 +1483,20 @@ function fillFamilienPersonSelect(selectId, excludePersonId) {
   const select = document.getElementById(selectId);
   if (!select) return;
   select.innerHTML = '<option value="">— auswählen —</option>';
-  personenCache.filter((p) => p.id !== excludePersonId).forEach((p) => {
+
+  let kandidaten = personenCache.filter((p) => p.id !== excludePersonId);
+
+  if (selectId === "d-kind-person") {
+    // Eine Person, die bereits irgendwo als Kind definiert ist, wird
+    // standardmäßig nicht nochmals als Kind angeboten.
+    kandidaten = kandidaten.filter((p) => !kinderIdsAuswahlCache.has(p.id));
+  } else if (selectId === "d-partner-person") {
+    // Personen mit einer laufenden Ehe/Partnerschaft werden nicht als neuer
+    // Partner angeboten. Bereits beendete Beziehungen bleiben möglich.
+    kandidaten = kandidaten.filter((p) => !partnerIdsAuswahlCache.has(p.id));
+  }
+
+  kandidaten.forEach((p) => {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = personenAuswahlText(p);
