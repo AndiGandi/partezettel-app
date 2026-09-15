@@ -2045,6 +2045,8 @@ function mediaZipPath(bucket, path) {
 
 async function sammleMedien(backupData, msg) {
   const media = [];
+  const fehlendeFotos = [];
+  const fehlendeAudio = [];
   const seen = new Set();
   const quellen = [
     ...(backupData.fotos || []).map((row) => ({ bucket: BUCKET_FOTOS, path: row.dateipfad, type: "foto" })),
@@ -2058,8 +2060,12 @@ async function sammleMedien(backupData, msg) {
     index++;
     msg.textContent = `Medien sichern … ${index}/${quellen.length}`;
     const { data, error } = await sb.storage.from(quelle.bucket).download(quelle.path);
-    if (error) throw new Error(`${quelle.path}: ${error.message}`);
-    if (!data) throw new Error(`${quelle.path}: Datei konnte nicht geladen werden.`);
+    if (error || !data) {
+      if (quelle.type === "foto") fehlendeFotos.push(quelle.path);
+      else fehlendeAudio.push(quelle.path);
+      debugLog(`⚠️ Mediendatei fehlt und wird im Backup übersprungen: ${quelle.bucket}/${quelle.path}`);
+      continue;
+    }
     const bytes = new Uint8Array(await data.arrayBuffer());
     media.push({
       bucket: quelle.bucket,
@@ -2070,7 +2076,7 @@ async function sammleMedien(backupData, msg) {
       bytes,
     });
   }
-  return media;
+  return { media, fehlendeFotos, fehlendeAudio };
 }
 
 async function teileOderLadeDateiHerunter(file) {
@@ -2102,7 +2108,25 @@ async function erstelleICloudBackup() {
   try {
     await ensureSession();
     const data = await fetchAllExportData();
-    const media = await sammleMedien(data, msg);
+    const gesammelt = await sammleMedien(data, msg);
+    const media = gesammelt.media;
+
+    // Verwaiste Foto-Einträge werden beim Backup ebenfalls bereinigt.
+    // Das verhindert, dass ein bereits gelöschtes Storage-Objekt später
+    // beim Backup oder Restore wieder als defekter Foto-Datensatz auftaucht.
+    if (gesammelt.fehlendeFotos.length) {
+      const fehlendeSet = new Set(gesammelt.fehlendeFotos);
+      data.fotos = (data.fotos || []).filter(row => !fehlendeSet.has(row.dateipfad));
+      for (const path of gesammelt.fehlendeFotos) {
+        const { error: deleteError } = await sb.from("fotos").delete().eq("dateipfad", path);
+        if (deleteError) debugLog(`⚠️ Verwaister Fotoeintrag konnte nicht gelöscht werden: ${path} – ${deleteError.message}`);
+      }
+    }
+    if (gesammelt.fehlendeAudio.length) {
+      const fehlendeSet = new Set(gesammelt.fehlendeAudio);
+      data.sprachnotizen = (data.sprachnotizen || []).filter(row => !fehlendeSet.has(row.dateipfad));
+    }
+
     const manifest = {
       format: "partezettel-complete-backup",
       version: 2,
@@ -2121,9 +2145,11 @@ async function erstelleICloudBackup() {
     const zipBytes = erstelleZip(entries);
     const file = new File([zipBytes], backupDateiname(), { type: "application/zip" });
     const result = await teileOderLadeDateiHerunter(file);
+    const bereinigt = gesammelt.fehlendeFotos.length + gesammelt.fehlendeAudio.length;
+    const hinweis = bereinigt ? ` · ${bereinigt} verwaiste Medieneinträge übersprungen` : "";
     if (result === "abgebrochen") msg.textContent = "Backup nicht gespeichert.";
-    else if (result === "geteilt") msg.textContent = `Vollständiges Backup erstellt ✓ (${media.length} Mediendateien). Über „Dateien“ kannst du es in iCloud Drive speichern.`;
-    else msg.textContent = `Vollständiges Backup erstellt ✓ (${media.length} Mediendateien).`;
+    else if (result === "geteilt") msg.textContent = `Vollständiges Backup erstellt ✓ (${media.length} Mediendateien). Über „Dateien“ kannst du es in iCloud Drive speichern.${hinweis}`;
+    else msg.textContent = `Vollständiges Backup erstellt ✓ (${media.length} Mediendateien).${hinweis}`;
   } catch (err) {
     msg.textContent = `Fehler: ${err.message || err}`;
     debugLog(`❌ Vollständiges Backup: ${err.message || err}`);
