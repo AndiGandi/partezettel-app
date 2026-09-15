@@ -894,8 +894,12 @@ function personAusLookup(lookup, id) {
 // wenn einer der beiden Partner bereits verstorben ist. Dabei wird nichts
 // automatisch in der Datenbank überschrieben; die Information wird nur für
 // Auswahl und Anzeige verwendet.
-function partnerschaftTodesende(familie, lookup = personenCache) {
+function partnerschaftTodesende(familie, lookup = personenCache, bezugsPersonId = null) {
+  // Im Bearbeitungsfenster zählt ausschließlich der Tod des jeweils anderen
+  // Partners. Der Tod der gerade geöffneten Person darf diese Partnerschaft
+  // nicht fälschlich beenden.
   const totePartner = [familie?.partner_a_id, familie?.partner_b_id]
+    .filter((id) => id && (!bezugsPersonId || id !== bezugsPersonId))
     .map((id) => personAusLookup(lookup, id))
     .filter((p) => p && (p.sterbedatum || p.sterbejahr));
   if (!totePartner.length) return null;
@@ -1161,7 +1165,26 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     sterbebuch_link: document.getElementById("d-sterbebuch-link").value.trim() || null,
     Notiz: document.getElementById("d-notiz").value.trim() || null,
   }).eq("id", currentDetailPersonId);
-  msg.textContent = error ? `Fehler: ${error.message}` : "Gespeichert ✓";
+  if (error) {
+    msg.textContent = `Fehler: ${error.message}`;
+    return;
+  }
+  msg.textContent = "Gespeichert ✓";
+  const aktualisiereLinkButton = (id, wert) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (wert) {
+      btn.href = wert;
+      btn.hidden = false;
+      btn.classList.add("btn--link-present");
+    } else {
+      btn.href = "#";
+      btn.hidden = true;
+      btn.classList.remove("btn--link-present");
+    }
+  };
+  aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
+  aktualisiereLinkButton("d-sterbebuch-open", document.getElementById("d-sterbebuch-link").value.trim());
 });
 
 // ---- Fotos im Detail ----
@@ -1445,8 +1468,7 @@ async function loadDetailFamilie(personId) {
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
     const typ = f.familientyp || "Partnerschaft";
-    const tod = partnerschaftTodesende(f, detailPersonMap);
-    const autoEnde = !f.ende && tod ? (tod.exakt ? tod.datum : "") : "";
+    const tod = partnerschaftTodesende(f, detailPersonMap, personId);
     div.innerHTML = `
       <div class="beziehung-text familie-edit-block">
         <strong>${personenAuswahlText(detailPerson(otherId))}</strong>
@@ -1516,11 +1538,10 @@ async function loadDetailFamilie(personId) {
     } else {
       setDatumElemente(endeTag, endeMonat, endeJahr, null);
     }
-    // Der Hinweis zum Tod bleibt auch nach dem Speichern sichtbar, wenn das
-    // gespeicherte Ende genau dem bekannten Sterbedatum des Partners entspricht.
-    // Ein anderes, bereits manuell eingetragenes Ende (z. B. Scheidung) bleibt
-    // davon unberührt. Bei nur bekanntem Sterbejahr bleibt der Hinweis ebenfalls
-    // sichtbar, solange kein exaktes Ende gespeichert wurde.
+    // Der Hinweis gehört dauerhaft zur Partnerschaft, wenn ihr Ende durch den
+    // Tod des ANDEREN Partners bestimmt wurde. Ein manuelles Ende (z. B.
+    // Scheidung) bleibt davon unberührt. Bei nur bekanntem Sterbejahr kann das
+    // Jahr angezeigt werden, ohne ein künstliches Datum zu speichern.
     if (tod && (!f.ende || (tod.exakt && f.ende === tod.datum))) {
       autoEndeEl.textContent = tod.exakt
         ? `Ende automatisch durch Tod: ${datumAnzeige(tod.datum)}`
@@ -1529,10 +1550,16 @@ async function loadDetailFamilie(personId) {
     }
 
     div.querySelector(".familie-save-btn").addEventListener("click", async () => {
+      let eingegebenesEnde = getDatum(endePrefix);
+      // Ist kein manuelles Ende eingegeben und ist der Todestag des anderen
+      // Partners bekannt, wird dieser beim Speichern als Partnerschaftsende
+      // übernommen. Bei nur bekanntem Sterbejahr bleibt das Ende absichtlich
+      // NULL; der Hinweis bleibt trotzdem erhalten.
+      if (!eingegebenesEnde && tod?.exakt) eingegebenesEnde = tod.datum;
       const updates = {
         familientyp: typEdit.value || "Partnerschaft",
         beginn: getDatum(beginnPrefix),
-        ende: getDatum(endePrefix),
+        ende: eingegebenesEnde,
       };
       const msg = document.getElementById("d-familie-message");
       msg.textContent = "Partnerschaft wird gespeichert …";

@@ -130,8 +130,9 @@
 
 /* Link vorhanden: Taufbuch/Sterbebuch deutlich als direkt erreichbare Quelle markieren. */
 .btn--link-present {
-  background: #3f7d3a;
-  color: #fff;
+  background: #3f7d3a !important;
+  color: #fff !important;
+  border: 1px solid #356a31 !important;
 }
 .btn--link-present:active {
   background: #356a31;
