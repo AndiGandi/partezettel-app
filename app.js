@@ -1760,13 +1760,19 @@ async function loadDetailFamilie(personId) {
   const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id);
   let childLinksForPerson = [];
   if (partnerFamilyIds.length) {
-    const { data } = await sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").in("familie_id", partnerFamilyIds);
-    childLinksForPerson = data || [];
+    const { data, error: childLinksError } = await sb.from("familien_kinder")
+      .select("id, familie_id, kind_id, beziehungstyp")
+      .in("familie_id", partnerFamilyIds);
+    if (childLinksError) {
+      debugLog(`❌ Kinder laden: ${childLinksError.message}`);
+    } else {
+      childLinksForPerson = data || [];
+    }
   }
   childList.innerHTML = "";
   childLinksForPerson.sort((a, b) => {
-    const childA = personenCache.find((p) => p.id === a.kind_id);
-    const childB = personenCache.find((p) => p.id === b.kind_id);
+    const childA = detailPerson(a.kind_id);
+    const childB = detailPerson(b.kind_id);
     const dateA = childA?.geburtsdatum || "";
     const dateB = childB?.geburtsdatum || "";
     if (dateA && dateB) return dateA.localeCompare(dateB);
@@ -1775,7 +1781,10 @@ async function loadDetailFamilie(personId) {
     return personenAuswahlText(detailPerson(a.kind_id)).localeCompare(personenAuswahlText(detailPerson(b.kind_id)), "de", { sensitivity: "base" });
   });
   for (const link of childLinksForPerson) {
-    const child = personenCache.find((p) => p.id === link.kind_id);
+    // Für die Detailansicht immer die bereits separat geladenen Personendaten
+    // verwenden. Dadurch verschwinden Kinder nicht aus der Liste, wenn sie
+    // nicht (mehr) im globalen personenCache enthalten sind.
+    const child = detailPerson(link.kind_id);
     if (!child) continue;
     const div = document.createElement("div");
     div.className = "detail-media-item familie-item";
