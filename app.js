@@ -572,7 +572,7 @@ form.addEventListener("submit", async (e) => {
     id: crypto.randomUUID(),
     vorname: document.getElementById("vorname").value.trim(),
     nachname: document.getElementById("nachname").value.trim(),
-    geschlecht: document.getElementById("geschlecht").value || "unbekannt",
+    geschlecht: document.getElementById("geschlecht").value || null,
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
     sterbedatum: getDatum("sterbedatum"),
@@ -1147,7 +1147,7 @@ async function openPersonDetail(personId) {
 
   document.getElementById("d-vorname").value = person.vorname || "";
   document.getElementById("d-nachname").value = person.nachname || "";
-  document.getElementById("d-geschlecht").value = person.geschlecht || "unbekannt";
+  document.getElementById("d-geschlecht").value = person.geschlecht || "";
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
   setDatum("d-geburtsdatum", person.geburtsdatum);
   setDatum("d-sterbedatum", person.sterbedatum);
@@ -1258,7 +1258,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   const { error } = await sb.from("personen").update({
     vorname,
     nachname,
-    geschlecht: document.getElementById("d-geschlecht").value || "unbekannt",
+    geschlecht: document.getElementById("d-geschlecht").value || null,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
     geburtsdatum: getDatum("d-geburtsdatum"),
     sterbedatum: getDatum("d-sterbedatum"),
@@ -3054,25 +3054,41 @@ function renderStammbaum(rootId) {
     return;
   }
 
-  // Eltern des Mittelpunktes – alle vorhandenen Elternfamilien werden berücksichtigt.
+  // Eltern des Mittelpunktes: Das Elternpaar wird als zusammengehörige
+  // Familie dargestellt und mit einer eindeutigen Linie zum Mittelpunkt
+  // verbunden. Dadurch ist sofort erkennbar, welches Paar die Eltern sind.
   const parentFamilies = treeParentFamiliesForPerson(rootId);
   if (parentFamilies.length) {
-    const parentGeneration = document.createElement("div");
-    parentGeneration.className = "tree-generation";
-    const uniqueParents = [];
+    const parentsSection = document.createElement("div");
+    parentsSection.className = "tree-parents-section";
+
+    const parentsLabel = document.createElement("div");
+    parentsLabel.className = "tree-label tree-parents-label";
+    parentsLabel.textContent = `Eltern von ${root.vorname || ""} ${root.nachname || ""}`.trim();
+    parentsSection.appendChild(parentsLabel);
+
     for (const f of parentFamilies) {
-      for (const id of [f.partner_a_id, f.partner_b_id]) {
-        if (id && id !== rootId && treePerson(id) && !uniqueParents.some((p) => p.id === id)) uniqueParents.push(treePerson(id));
+      const parentPair = document.createElement("div");
+      parentPair.className = "tree-parent-pair";
+      const parentA = treePerson(f.partner_a_id);
+      const parentB = treePerson(f.partner_b_id);
+      const cards = [];
+      if (parentA && parentA.id !== rootId) cards.push(treePersonCard(parentA));
+      if (parentB && parentB.id !== rootId) cards.push(treePersonCard(parentB));
+
+      if (cards.length === 2) {
+        parentPair.innerHTML = `${cards[0]}<div class="tree-parent-relation" aria-label="Eltern"><span>Eltern</span><i aria-hidden="true"></i></div>${cards[1]}`;
+      } else if (cards.length === 1) {
+        parentPair.innerHTML = cards[0];
+      }
+      if (parentPair.innerHTML) {
+        parentsSection.appendChild(parentPair);
+        const down = document.createElement("div");
+        down.className = "tree-parent-downline";
+        parentsSection.appendChild(down);
       }
     }
-    if (uniqueParents.length) {
-      parentGeneration.innerHTML = uniqueParents.map((p) => treePersonCard(p, rootId)).join('<div class="tree-parent-join"></div>');
-      stage.appendChild(parentGeneration);
-      const label = document.createElement("div");
-      label.className = "tree-label";
-      label.textContent = uniqueParents.length > 2 ? "Eltern / weitere Elternverknüpfungen" : "Eltern";
-      stage.appendChild(label);
-    }
+    stage.appendChild(parentsSection);
   }
 
   const partnerFamilies = treeFamiliesForPerson(rootId);

@@ -82,6 +82,21 @@
 .tree-relationship--marriage .tree-marriage__label{margin-bottom:.15rem}
 @media(max-width:700px){.tree-couple{gap:.2rem}.tree-relationship{min-width:44px}.tree-relationship .tree-partner-link{width:18px;flex-basis:18px}.tree-marriage__label{font-size:.66rem}.tree-marriage__rings{font-size:1.25rem}}
 
+
+/* Stammbaum: Elternpaar eindeutig mit dem Mittelpunkt verbinden */
+.tree-parents-section{display:flex;flex-direction:column;align-items:center;gap:.55rem;position:relative}
+.tree-parents-label{margin:0 0 .05rem;font-weight:500;font-style:italic}
+.tree-parent-pair{display:flex;align-items:center;justify-content:center;gap:.35rem;position:relative}
+.tree-parent-relation{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:58px;gap:.15rem}
+.tree-parent-relation span{font-size:.72rem;color:var(--ink-soft);font-style:italic}
+.tree-parent-relation i{display:block;width:24px;height:2px;background:var(--accent)}
+.tree-parent-downline{width:2px;height:1.15rem;background:var(--accent);margin-bottom:-.1rem}
+@media(max-width:700px){
+ .tree-parent-pair{gap:.2rem}
+ .tree-parent-relation{min-width:44px}
+ .tree-parent-relation i{width:18px}
+}
+
 /* Stammbaum v34: Partnerpaare konsequent horizontal */
 .tree-family-block > .tree-couple{
   display:flex !important;
