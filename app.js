@@ -572,7 +572,7 @@ form.addEventListener("submit", async (e) => {
     id: crypto.randomUUID(),
     vorname: document.getElementById("vorname").value.trim(),
     nachname: document.getElementById("nachname").value.trim(),
-    geschlecht: document.getElementById("geschlecht").value || null,
+    geschlecht: document.getElementById("geschlecht").value || "unbekannt",
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
     sterbedatum: getDatum("sterbedatum"),
@@ -1147,7 +1147,7 @@ async function openPersonDetail(personId) {
 
   document.getElementById("d-vorname").value = person.vorname || "";
   document.getElementById("d-nachname").value = person.nachname || "";
-  document.getElementById("d-geschlecht").value = person.geschlecht || "";
+  document.getElementById("d-geschlecht").value = person.geschlecht || "unbekannt";
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
   setDatum("d-geburtsdatum", person.geburtsdatum);
   setDatum("d-sterbedatum", person.sterbedatum);
@@ -1258,7 +1258,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   const { error } = await sb.from("personen").update({
     vorname,
     nachname,
-    geschlecht: document.getElementById("d-geschlecht").value || null,
+    geschlecht: document.getElementById("d-geschlecht").value || "unbekannt",
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
     geburtsdatum: getDatum("d-geburtsdatum"),
     sterbedatum: getDatum("d-sterbedatum"),
