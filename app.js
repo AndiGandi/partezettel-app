@@ -1984,10 +1984,41 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
 
   let kandidaten = personenFuerAuswahl.filter((p) => p.id !== excludePersonId);
 
-  // Nur die Partnerauswahl hat einen Partnerfilter. Für Kinder gibt es
-  // ausdrücklich KEINEN Filter: jede andere Person muss auswählbar sein.
+  // Partnerauswahl: eine Person mit einer laufenden Ehe/Partnerschaft
+  // steht nicht nochmals als laufender Partner zur Verfügung.
   if (selectId === "d-partner-person") {
     kandidaten = kandidaten.filter((p) => !partnerIdsAuswahlCache.has(p.id));
+  }
+
+  // Kinder: Eine Person, die bereits als Kind einer Familie eingetragen ist,
+  // soll nicht ein zweites Mal ein Elternpaar bekommen. Außerdem darf ein
+  // Elternteil der aktuell bearbeiteten Person nicht gleichzeitig als deren
+  // Kind ausgewählt werden. Das ist nur ein Auswahlfilter und verändert keine
+  // bestehenden Daten.
+  if (selectId === "d-kind-person") {
+    try {
+      const [{ data: kinderLinks, error: kinderError }, { data: eigeneFamilien, error: familienError }] = await Promise.all([
+        sb.from("familien_kinder").select("kind_id"),
+        sb.from("familien").select("partner_a_id, partner_b_id").or(`partner_a_id.eq.${excludePersonId},partner_b_id.eq.${excludePersonId}`)
+      ]);
+      if (kinderError) throw kinderError;
+      if (familienError) throw familienError;
+
+      const hatBereitsEltern = new Set((kinderLinks || []).map((k) => k.kind_id).filter(Boolean));
+      const eigeneElternteile = new Set();
+      for (const f of eigeneFamilien || []) {
+        if (f.partner_a_id && f.partner_a_id !== excludePersonId) eigeneElternteile.add(f.partner_a_id);
+        if (f.partner_b_id && f.partner_b_id !== excludePersonId) eigeneElternteile.add(f.partner_b_id);
+      }
+
+      kandidaten = kandidaten.filter((p) =>
+        !hatBereitsEltern.has(p.id) && !eigeneElternteile.has(p.id)
+      );
+    } catch (err) {
+      debugLog(`⚠️ Kinder-Auswahlfilter: ${err.message || err}`);
+      // Bei einem Filterfehler keine Daten verstecken. Die Auswahl bleibt
+      // wie bisher funktionsfähig.
+    }
   }
 
   kandidaten.sort((a, b) => {
