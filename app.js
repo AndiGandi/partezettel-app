@@ -886,6 +886,45 @@ function berechneFamilienSortKeys(personen,familien) {
   for(const p of personen){if(seen.has(p.id))continue;const stack=[p.id],comp=[];seen.add(p.id);while(stack.length){const id=stack.pop();comp.push(id);for(const n of adj.get(id)||[]){if(!seen.has(n)){seen.add(n);stack.push(n);}}}const key=comp.map(id=>byId.get(id)?.nachname||"").filter(Boolean).sort((x,y)=>x.localeCompare(y,"de",{sensitivity:"base"}))[0]||p.nachname||"";for(const id of comp)byId.get(id)._familienSortKey=key; }
 }
 
+
+// Wenn ein Todesdatum nachträglich erfasst wird, wird ein noch offenes
+// Ehe-/Partnerschaftsende automatisch mit diesem Datum befüllt.
+// Ein bereits vorhandenes Ende (z. B. Scheidung) wird niemals überschrieben.
+// Bei ausschließlich bekanntem Sterbejahr bleibt das Datenbankfeld "ende"
+// leer; die bestehende Anzeige kennzeichnet die Partnerschaft dennoch als
+// durch den Tod beendet.
+async function synchronisierePartnerschaftsEndeBeiTod(personId, sterbedatum, sterbejahr) {
+  if (!personId || (!sterbedatum && !sterbejahr)) return;
+
+  const { data: familien, error } = await sb
+    .from("familien")
+    .select("id, partner_a_id, partner_b_id, familientyp, ende")
+    .or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`);
+
+  if (error) throw error;
+
+  const typErlaubt = (typ) => {
+    const t = String(typ || "").trim().toLocaleLowerCase("de");
+    return t === "ehe" || t === "partnerschaft";
+  };
+
+  for (const familie of familien || []) {
+    if (!typErlaubt(familie.familientyp) || familie.ende) continue;
+
+    if (sterbedatum) {
+      const { error: updateError } = await sb
+        .from("familien")
+        .update({ ende: sterbedatum })
+        .eq("id", familie.id)
+        .is("ende", null);
+
+      if (updateError) throw updateError;
+    }
+    // Bei einem reinen Sterbejahr kein künstliches Datum speichern.
+    // partnerschaftTodesende() liefert das Jahr weiterhin für die Anzeige.
+  }
+}
+
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
   if (!datum) return "";
@@ -904,11 +943,11 @@ function personAusLookup(lookup, id) {
 // automatisch in der Datenbank überschrieben; die Information wird nur für
 // Auswahl und Anzeige verwendet.
 function partnerschaftTodesende(familie, lookup = personenCache, bezugsPersonId = null) {
-  // Im Bearbeitungsfenster zählt ausschließlich der Tod des jeweils anderen
-  // Partners. Der Tod der gerade geöffneten Person darf diese Partnerschaft
-  // nicht fälschlich beenden.
+  // Der Tod eines der beiden Partner beendet die Ehe/Partnerschaft.
+  // bezugsPersonId wird aus Kompatibilitätsgründen weiter akzeptiert, darf
+  // aber den Tod des aktuell geöffneten Partners nicht ausblenden.
   const totePartner = [familie?.partner_a_id, familie?.partner_b_id]
-    .filter((id) => id && (!bezugsPersonId || id !== bezugsPersonId))
+    .filter(Boolean)
     .map((id) => personAusLookup(lookup, id))
     .filter((p) => p && (p.sterbedatum || p.sterbejahr));
   if (!totePartner.length) return null;
@@ -1272,6 +1311,34 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     msg.textContent = `Fehler: ${error.message}`;
     return;
   }
+
+  // Wird ein Todesdatum nachträglich eingetragen, ein bisher offenes
+  // Ehe-/Partnerschaftsende automatisch übernehmen. Ein vorhandenes
+  // manuelles Ende wird dabei niemals verändert.
+  try {
+    await synchronisierePartnerschaftsEndeBeiTod(
+      currentDetailPersonId,
+      getDatum("d-sterbedatum"),
+      document.getElementById("d-sterbejahr").value.trim()
+        ? Number(document.getElementById("d-sterbejahr").value.trim())
+        : null
+    );
+  } catch (err) {
+    debugLog(`⚠️ Partnerschaftsende durch Tod: ${err.message || err}`);
+  }
+
+  // Lokalen Cache sofort aktualisieren, damit die Partnerschaftsanzeige
+  // unmittelbar nach dem Speichern den neuen Tod berücksichtigt.
+  const cachePerson = personenCache.find((p) => p.id === currentDetailPersonId);
+  if (cachePerson) {
+    cachePerson.sterbedatum = getDatum("d-sterbedatum");
+    cachePerson.sterbejahr = cachePerson.sterbedatum ? null : (
+      document.getElementById("d-sterbejahr").value.trim()
+        ? Number(document.getElementById("d-sterbejahr").value.trim())
+        : null
+    );
+  }
+
   // Nur das Trauungsbuch darf bei einer Ehe auf den Partner ergänzt werden.
   // Leere Partnerfelder werden gefüllt; bestehende Partner-Links bleiben unangetastet.
   try {
@@ -1287,6 +1354,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
   aktualisiereLinkButton("d-trauungsbuch-open", document.getElementById("d-trauungsbuch-link").value.trim());
   aktualisiereLinkButton("d-sterbebuch-open", document.getElementById("d-sterbebuch-link").value.trim());
+  await loadDetailFamilie(currentDetailPersonId);
 });
 
 document.getElementById("d-taufbuch-link")?.addEventListener("input", (e) => {
