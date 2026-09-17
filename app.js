@@ -1842,6 +1842,8 @@ async function loadDetailFamilie(personId) {
     });
     div.querySelector(".del-btn").addEventListener("click", async (event) => {
       event.stopPropagation();
+      const childName = personenAuswahlText(child);
+      if (!confirm(`Möchtest du die Kinder-Verknüpfung von „${childName}“ wirklich löschen?`)) return;
       const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
       if (error) { setDetailFamilieMessage(`Fehler: ${error.message}`); return; }
       try {
