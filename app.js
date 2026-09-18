@@ -585,6 +585,9 @@ form.addEventListener("submit", async (e) => {
     taufbuch_link: document.getElementById("taufbuch-link").value.trim() || null,
     trauungsbuch_link: document.getElementById("trauungsbuch-link").value.trim() || null,
     sterbebuch_link: document.getElementById("sterbebuch-link").value.trim() || null,
+    taufbuch_zeile: document.getElementById("taufbuch-zeile").value.trim() ? Number(document.getElementById("taufbuch-zeile").value) : null,
+    trauungsbuch_zeile: document.getElementById("trauungsbuch-zeile").value.trim() ? Number(document.getElementById("trauungsbuch-zeile").value) : null,
+    sterbebuch_zeile: document.getElementById("sterbebuch-zeile").value.trim() ? Number(document.getElementById("sterbebuch-zeile").value) : null,
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     audio: currentAudioBlob,
@@ -620,6 +623,9 @@ function resetForm() {
   document.getElementById("taufbuch-link").value = "";
   document.getElementById("trauungsbuch-link").value = "";
   document.getElementById("sterbebuch-link").value = "";
+  document.getElementById("taufbuch-zeile").value = "";
+  document.getElementById("trauungsbuch-zeile").value = "";
+  document.getElementById("sterbebuch-zeile").value = "";
   document.getElementById("ledigenname").value = "";
 
   // Neue Person beginnt nach dem Speichern garantiert ohne alte Medien.
@@ -678,6 +684,9 @@ async function sendEintrag(eintrag, onProgress) {
         taufbuch_link: eintrag.taufbuch_link,
         trauungsbuch_link: eintrag.trauungsbuch_link,
         sterbebuch_link: eintrag.sterbebuch_link,
+        taufbuch_zeile: eintrag.taufbuch_zeile,
+        trauungsbuch_zeile: eintrag.trauungsbuch_zeile,
+        sterbebuch_zeile: eintrag.sterbebuch_zeile,
         Notiz: eintrag.notiz,
       }, { onConflict: "id" }),
       15000,
@@ -1239,6 +1248,9 @@ async function openPersonDetail(personId, options = {}) {
   document.getElementById("d-taufbuch-link").value = person.taufbuch_link || "";
   document.getElementById("d-trauungsbuch-link").value = person.trauungsbuch_link || "";
   document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
+  document.getElementById("d-taufbuch-zeile").value = person.taufbuch_zeile ?? "";
+  document.getElementById("d-trauungsbuch-zeile").value = person.trauungsbuch_zeile ?? "";
+  document.getElementById("d-sterbebuch-zeile").value = person.sterbebuch_zeile ?? "";
   aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
   aktualisiereLinkButton("d-trauungsbuch-open", person.trauungsbuch_link);
   aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
@@ -1368,6 +1380,9 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     taufbuch_link: document.getElementById("d-taufbuch-link").value.trim() || null,
     trauungsbuch_link: document.getElementById("d-trauungsbuch-link").value.trim() || null,
     sterbebuch_link: document.getElementById("d-sterbebuch-link").value.trim() || null,
+    taufbuch_zeile: document.getElementById("d-taufbuch-zeile").value.trim() ? Number(document.getElementById("d-taufbuch-zeile").value) : null,
+    trauungsbuch_zeile: document.getElementById("d-trauungsbuch-zeile").value.trim() ? Number(document.getElementById("d-trauungsbuch-zeile").value) : null,
+    sterbebuch_zeile: document.getElementById("d-sterbebuch-zeile").value.trim() ? Number(document.getElementById("d-sterbebuch-zeile").value) : null,
     Notiz: document.getElementById("d-notiz").value.trim() || null,
   }).eq("id", currentDetailPersonId);
   if (error) {

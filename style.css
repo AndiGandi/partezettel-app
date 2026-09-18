@@ -256,3 +256,21 @@
 .tree-line-color-3 .tree-line-legend__dot{background:#876B9C}.tree-node.tree-line-color-3{border-color:#876B9C}
 .tree-line-color-4 .tree-line-legend__dot{background:#A06A63}.tree-node.tree-line-color-4{border-color:#A06A63}
 .tree-line-color-5 .tree-line-legend__dot{background:#7B8060}.tree-node.tree-line-color-5{border-color:#7B8060}
+
+/* v111: Zeile zur Matricula-Quelle */
+.source-link-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 4.5rem;
+  gap: .5rem;
+  align-items: end;
+  margin-bottom: .7rem;
+}
+.source-link-field .field,
+.source-line-field { margin-bottom: 0; min-width: 0; }
+.source-line-field > span { display:block; font-size:.82rem; color:var(--ink-soft); margin-bottom:.25rem; }
+.source-link-field input[type="url"],
+.source-line-field input[type="number"] {
+  width:100%; min-width:0; padding:.55rem .6rem; border:1px solid var(--line); border-radius:7px;
+  font-size:.95rem; background:#fff; color:var(--ink); font-family:inherit;
+}
+.source-line-field input[type="number"] { text-align:center; }

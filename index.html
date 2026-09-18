@@ -101,18 +101,36 @@
         </div>
 
         <div class="field-row">
-          <label class="field">
-            <span>Taufbuch-Link</span>
-            <input type="url" id="taufbuch-link" placeholder="https://…" inputmode="url">
-          </label>
-          <label class="field">
-            <span>Trauungsbuch-Link</span>
-            <input type="url" id="trauungsbuch-link" placeholder="https://…" inputmode="url">
-          </label>
-          <label class="field">
-            <span>Sterbebuch-Link</span>
-            <input type="url" id="sterbebuch-link" placeholder="https://…" inputmode="url">
-          </label>
+          <div class="source-link-field">
+            <label class="field">
+              <span>Taufbuch-Link</span>
+              <input type="url" id="taufbuch-link" placeholder="https://…" inputmode="url">
+            </label>
+            <label class="source-line-field">
+              <span>Zeile</span>
+              <input type="number" id="taufbuch-zeile" min="1" step="1" inputmode="numeric" placeholder="–">
+            </label>
+          </div>
+          <div class="source-link-field">
+            <label class="field">
+              <span>Trauungsbuch-Link</span>
+              <input type="url" id="trauungsbuch-link" placeholder="https://…" inputmode="url">
+            </label>
+            <label class="source-line-field">
+              <span>Zeile</span>
+              <input type="number" id="trauungsbuch-zeile" min="1" step="1" inputmode="numeric" placeholder="–">
+            </label>
+          </div>
+          <div class="source-link-field">
+            <label class="field">
+              <span>Sterbebuch-Link</span>
+              <input type="url" id="sterbebuch-link" placeholder="https://…" inputmode="url">
+            </label>
+            <label class="source-line-field">
+              <span>Zeile</span>
+              <input type="number" id="sterbebuch-zeile" min="1" step="1" inputmode="numeric" placeholder="–">
+            </label>
+          </div>
         </div>
 
         <label class="field">
@@ -275,18 +293,36 @@
 
         </div>
         <div class="field-row">
-          <label class="field">
-            <span>Taufbuch-Link</span>
-            <input type="url" id="d-taufbuch-link" placeholder="https://…" inputmode="url">
-          </label>
-          <label class="field">
-            <span>Trauungsbuch-Link</span>
-            <input type="url" id="d-trauungsbuch-link" placeholder="https://…" inputmode="url">
-          </label>
-          <label class="field">
-            <span>Sterbebuch-Link</span>
-            <input type="url" id="d-sterbebuch-link" placeholder="https://…" inputmode="url">
-          </label>
+          <div class="source-link-field">
+            <label class="field">
+              <span>Taufbuch-Link</span>
+              <input type="url" id="d-taufbuch-link" placeholder="https://…" inputmode="url">
+            </label>
+            <label class="source-line-field">
+              <span>Zeile</span>
+              <input type="number" id="d-taufbuch-zeile" min="1" step="1" inputmode="numeric" placeholder="–">
+            </label>
+          </div>
+          <div class="source-link-field">
+            <label class="field">
+              <span>Trauungsbuch-Link</span>
+              <input type="url" id="d-trauungsbuch-link" placeholder="https://…" inputmode="url">
+            </label>
+            <label class="source-line-field">
+              <span>Zeile</span>
+              <input type="number" id="d-trauungsbuch-zeile" min="1" step="1" inputmode="numeric" placeholder="–">
+            </label>
+          </div>
+          <div class="source-link-field">
+            <label class="field">
+              <span>Sterbebuch-Link</span>
+              <input type="url" id="d-sterbebuch-link" placeholder="https://…" inputmode="url">
+            </label>
+            <label class="source-line-field">
+              <span>Zeile</span>
+              <input type="number" id="d-sterbebuch-zeile" min="1" step="1" inputmode="numeric" placeholder="–">
+            </label>
+          </div>
         </div>
         <div class="capture-row detail-links-row">
           <a id="d-taufbuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Taufbuch öffnen</a>
@@ -431,6 +467,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=110"></script>
+<script src="app.js?v=111"></script>
 </body>
 </html>
