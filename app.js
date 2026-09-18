@@ -3360,6 +3360,67 @@ async function loadStammbaumData() {
   }
 }
 
+function treeUniquePeople(ids) {
+  const seen = new Set();
+  const result = [];
+  for (const id of ids || []) {
+    if (!id || seen.has(id) || !treePerson(id)) continue;
+    seen.add(id);
+    result.push(treePerson(id));
+  }
+  return result;
+}
+
+function treeParentIdsForPeople(ids) {
+  const parents = [];
+  for (const id of ids || []) {
+    for (const family of treeParentFamiliesForPerson(id)) {
+      if (family.partner_a_id) parents.push(family.partner_a_id);
+      if (family.partner_b_id) parents.push(family.partner_b_id);
+    }
+  }
+  return [...new Set(parents)];
+}
+
+function treeChildIdsForPeople(ids) {
+  const children = [];
+  for (const id of ids || []) {
+    for (const family of treeFamiliesForPerson(id)) {
+      for (const child of treeChildrenForFamily(family.id)) children.push(child.person.id);
+    }
+  }
+  return [...new Set(children)];
+}
+
+function treeGenerationName(distance, direction) {
+  const names = {
+    1: direction === "up" ? "Eltern" : "Kinder",
+    2: direction === "up" ? "Großeltern" : "Enkelkinder",
+    3: direction === "up" ? "Urgroßeltern" : "Urenkelkinder",
+    4: direction === "up" ? "Ururgroßeltern" : "Ururenkelkinder",
+    5: direction === "up" ? "Urururgroßeltern" : "Urururenkelkinder"
+  };
+  return names[distance] || `${distance}. Generation`;
+}
+
+function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = "") {
+  const people = treeUniquePeople(personIds);
+  if (!people.length) return null;
+  const section = document.createElement("div");
+  section.className = `tree-deep-generation ${extraClass}`.trim();
+
+  const title = document.createElement("div");
+  title.className = "tree-deep-generation__label";
+  title.textContent = label;
+  section.appendChild(title);
+
+  const row = document.createElement("div");
+  row.className = "tree-generation tree-deep-generation__row";
+  row.innerHTML = people.map((person) => treePersonCard(person, rootId, "", stammlinie)).join("");
+  section.appendChild(row);
+  return section;
+}
+
 function renderStammbaum(rootId) {
   const stage = document.getElementById("tree-stage");
   const message = document.getElementById("tree-message");
@@ -3379,71 +3440,69 @@ function renderStammbaum(rootId) {
   legend.innerHTML = `<span class="tree-line-legend__dot" aria-hidden="true"></span><span>Stammlinie: <strong>${escTree(stammlinie || "unbekannt")}</strong></span>`;
   stage.appendChild(legend);
 
-  // Eltern des Mittelpunktes: Das Elternpaar wird als zusammengehörige
-  // Familie dargestellt und mit einer eindeutigen Linie zum Mittelpunkt
-  // verbunden. Dadurch ist sofort erkennbar, welches Paar die Eltern sind.
-  const parentFamilies = treeParentFamiliesForPerson(rootId);
-  if (parentFamilies.length) {
-    const parentsSection = document.createElement("div");
-    parentsSection.className = "tree-parents-section";
+  // Die Stammlinienansicht zeigt mindestens fünf Generationsebenen:
+  // zwei Ebenen oberhalb, die ausgewählte Person in der Mitte und zwei Ebenen
+  // darunter. Wenn weitere Eltern oder Nachkommen vorhanden sind, werden diese
+  // ebenfalls angezeigt. Bereits besuchte Personen verhindern Schleifen.
+  const MAX_GENERATIONS = 12;
+  const ancestorLevels = [];
+  const descendantLevels = [];
 
-    const parentsLabel = document.createElement("div");
-    parentsLabel.className = "tree-label tree-parents-label";
-    parentsLabel.textContent = `Eltern von ${root.vorname || ""} ${root.nachname || ""}`.trim();
-    parentsSection.appendChild(parentsLabel);
-
-    for (const f of parentFamilies) {
-      const parentPair = document.createElement("div");
-      parentPair.className = "tree-parent-pair";
-      const parentA = treePerson(f.partner_a_id);
-      const parentB = treePerson(f.partner_b_id);
-      const cards = [];
-      if (parentA && parentA.id !== rootId) cards.push(treePersonCard(parentA, null, "", stammlinie));
-      if (parentB && parentB.id !== rootId) cards.push(treePersonCard(parentB, null, "", stammlinie));
-
-      if (cards.length === 2) {
-        parentPair.innerHTML = `${cards[0]}<div class="tree-parent-relation" aria-label="Eltern"><span>Eltern</span><i aria-hidden="true"></i></div>${cards[1]}`;
-      } else if (cards.length === 1) {
-        parentPair.innerHTML = cards[0];
-      }
-      if (parentPair.innerHTML) {
-        parentsSection.appendChild(parentPair);
-        const down = document.createElement("div");
-        down.className = "tree-parent-downline";
-        parentsSection.appendChild(down);
-      }
-    }
-    stage.appendChild(parentsSection);
+  let currentUp = [rootId];
+  const seenUp = new Set([rootId]);
+  for (let distance = 1; distance <= MAX_GENERATIONS; distance += 1) {
+    const next = treeUniquePeople(treeParentIdsForPeople(currentUp))
+      .map((p) => p.id)
+      .filter((id) => !seenUp.has(id));
+    if (!next.length) break;
+    next.forEach((id) => seenUp.add(id));
+    ancestorLevels.push(next);
+    currentUp = next;
   }
 
-  const partnerFamilies = treeFamiliesForPerson(rootId);
-  const visibleFamilies = partnerFamilies.filter((f) => treeChildrenForFamily(f.id).length || f.partner_a_id === rootId || f.partner_b_id === rootId);
+  let currentDown = [rootId];
+  const seenDown = new Set([rootId]);
+  for (let distance = 1; distance <= MAX_GENERATIONS; distance += 1) {
+    const next = treeUniquePeople(treeChildIdsForPeople(currentDown))
+      .map((p) => p.id)
+      .filter((id) => !seenDown.has(id));
+    if (!next.length) break;
+    next.forEach((id) => seenDown.add(id));
+    descendantLevels.push(next);
+    currentDown = next;
+  }
 
-  if (!visibleFamilies.length) {
-    const rootArea = document.createElement("div");
-    rootArea.className = "tree-root-area";
-    rootArea.innerHTML = treePersonCard(root, rootId, "", stammlinie);
-    stage.appendChild(rootArea);
-    const empty = document.createElement("div");
-    empty.className = "tree-empty";
-    empty.textContent = "Keine Partnerschaft oder Kinder erfasst.";
-    stage.appendChild(empty);
-  } else {
-    const familyWrap = document.createElement("div");
-    familyWrap.className = "tree-generation tree-family-generation";
+  // Älteste Vorfahren zuerst, damit der Stammbaum von oben nach unten lesbar ist.
+  for (let i = ancestorLevels.length - 1; i >= 0; i -= 1) {
+    const distance = i + 1;
+    const section = treeGenerationRow(
+      ancestorLevels[i],
+      rootId,
+      stammlinie,
+      treeGenerationName(distance, "up"),
+      "tree-deep-generation--ancestor"
+    );
+    if (section) stage.appendChild(section);
+  }
 
-    for (const f of visibleFamilies) {
+  const rootSection = document.createElement("div");
+  rootSection.className = "tree-root-generation";
+  const rootLabel = document.createElement("div");
+  rootLabel.className = "tree-deep-generation__label tree-root-generation__label";
+  rootLabel.textContent = `${root.vorname || ""} ${root.nachname || ""}`.trim();
+  rootSection.appendChild(rootLabel);
+
+  const rootFamilies = treeFamiliesForPerson(rootId);
+  const visibleRootFamilies = rootFamilies.filter((f) => treeChildrenForFamily(f.id).length || f.partner_a_id === rootId || f.partner_b_id === rootId);
+  if (visibleRootFamilies.length) {
+    for (const f of visibleRootFamilies) {
       const block = document.createElement("div");
-      block.className = "tree-family-block";
+      block.className = "tree-family-block tree-root-family-block";
       const otherId = [f.partner_a_id, f.partner_b_id].find((id) => id && id !== rootId);
       const partner = treePerson(otherId);
-      const kids = treeChildrenForFamily(f.id);
       const isMarriage = String(f.familientyp || "").toLowerCase() === "ehe";
-
-      // Paare werden immer nebeneinander dargestellt. Die Art der Verbindung
-      // steht mittig zwischen den beiden Personen; bei einer Ehe zusätzlich mit Ringen.
       const partnerCard = partner
-        ? treePersonCard(partner)
+        ? treePersonCard(partner, null, "", stammlinie)
         : `<div class="tree-node"><span class="tree-node__placeholder">?</span><span class="tree-node__name">Unbekannter Partner</span></div>`;
       const relationType = f.familientyp || "Partnerschaft";
       block.innerHTML = `
@@ -3455,21 +3514,26 @@ function renderStammbaum(rootId) {
           </div>
           ${partnerCard}
         </div>`;
-
-      if (kids.length) {
-        const label = document.createElement("div");
-        label.className = "tree-label tree-family-label";
-        label.textContent = `${kids.length > 1 ? `${kids.length} Kinder` : "1 Kind"}`;
-        block.appendChild(label);
-        const children = document.createElement("div");
-        children.className = "tree-children";
-        children.innerHTML = kids.map((k) => treePersonCard(k.person, rootId, "tree-node--child", stammlinie)).join("");
-        children.querySelectorAll("[data-tree-person]").forEach((el) => el.dataset.treeChild = "true");
-        block.appendChild(children);
-      }
-      familyWrap.appendChild(block);
+      rootSection.appendChild(block);
     }
-    stage.appendChild(familyWrap);
+  } else {
+    const row = document.createElement("div");
+    row.className = "tree-generation tree-deep-generation__row";
+    row.innerHTML = treePersonCard(root, rootId, "", stammlinie);
+    rootSection.appendChild(row);
+  }
+  stage.appendChild(rootSection);
+
+  for (let i = 0; i < descendantLevels.length; i += 1) {
+    const distance = i + 1;
+    const section = treeGenerationRow(
+      descendantLevels[i],
+      rootId,
+      stammlinie,
+      treeGenerationName(distance, "down"),
+      "tree-deep-generation--descendant"
+    );
+    if (section) stage.appendChild(section);
   }
 
   let suppressNextTreeClick = false;
@@ -3506,8 +3570,7 @@ function renderStammbaum(rootId) {
       await openPersonDetail(id, { fromTree: true });
     });
 
-    // iPad/iPhone: Safari löst bei diesen Buttons nicht zuverlässig dblclick aus.
-    // Deshalb wird ein schneller zweiter Fingertipp als Doppelklick behandelt.
+    // iPad/iPhone: schneller zweiter Fingertipp = Doppelklick.
     el.addEventListener("pointerup", async (event) => {
       if (event.pointerType !== "touch") return;
       const id = el.dataset.treePerson;
