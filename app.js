@@ -973,7 +973,7 @@ async function synchronisierePartnerschaftsEndeBeiTod(personId, sterbedatum, ste
 
   const { data: familien, error } = await sb
     .from("familien")
-    .select("id, partner_a_id, partner_b_id, familientyp, ende")
+    .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren")
     .or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`);
 
   if (error) throw error;
@@ -984,7 +984,7 @@ async function synchronisierePartnerschaftsEndeBeiTod(personId, sterbedatum, ste
   };
 
   for (const familie of familien || []) {
-    if (!typErlaubt(familie.familientyp) || familie.ende) continue;
+    if (!typErlaubt(familie.familientyp) || familie.ende || familie.ende_automatik_ignorieren) continue;
 
     if (sterbedatum) {
       const { error: updateError } = await sb
@@ -1018,6 +1018,11 @@ function personAusLookup(lookup, id) {
 // automatisch in der Datenbank überschrieben; die Information wird nur für
 // Auswahl und Anzeige verwendet.
 function partnerschaftTodesende(familie, lookup = personenCache, bezugsPersonId = null) {
+  // Wenn der Benutzer die automatische Todesbeendigung ausdrücklich verworfen hat
+  // (z. B. weil die Ehe geschieden wurde, das Scheidungsdatum aber noch unbekannt ist),
+  // darf der Tod nicht erneut als Ende eingesetzt oder angezeigt werden.
+  if (familie?.ende_automatik_ignorieren) return null;
+
   // Der Tod eines der beiden Partner beendet die Ehe/Partnerschaft.
   // bezugsPersonId wird aus Kompatibilitätsgründen weiter akzeptiert, darf
   // aber den Tod des aktuell geöffneten Partners nicht ausblenden.
@@ -1041,7 +1046,9 @@ function partnerschaftTodesende(familie, lookup = personenCache, bezugsPersonId 
 }
 
 function partnerschaftIstBeendet(familie, lookup = personenCache) {
-  return !!familie?.ende || !!partnerschaftTodesende(familie, lookup);
+  // Auch eine ausdrücklich als beendet markierte Ehe ohne bekanntes Datum
+  // bleibt für eine neue Partnerschaft gesperrt.
+  return !!familie?.ende || !!familie?.ende_automatik_ignorieren || !!partnerschaftTodesende(familie, lookup);
 }
 
 function ehejahreAnzeige(familie, lookup = personenCache) {
@@ -1108,7 +1115,7 @@ async function loadPersonen() {
   personenCache = data || [];
   try {
     const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
-      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende"),
+      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
       sb.from("familien_kinder").select("familie_id, kind_id"),
       sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
     ]);
@@ -1871,6 +1878,10 @@ async function loadDetailFamilie(personId) {
     initDatumElemente(beginnTag, beginnMonat, beginnJahr);
     initDatumElemente(endeTag, endeMonat, endeJahr);
     const autoEndeEl = div.querySelector(".familie-auto-ende");
+    // Merkt, ob der Benutzer das automatisch vorgeschlagene Ende bewusst
+    // verändert hat. Dadurch kann ein gelöschtes Todesende als "Ende unbekannt"
+    // gespeichert werden, ohne beim nächsten Laden sofort wieder aufzutauchen.
+    let endeManuellGeaendert = false;
     typEdit.value = typ;
     setDatumElemente(beginnTag, beginnMonat, beginnJahr, f.beginn || null);
     if (f.ende) {
@@ -1898,17 +1909,31 @@ async function loadDetailFamilie(personId) {
       autoEndeEl.className = "familie-auto-ende capture-status";
     }
 
+    [endeTag, endeMonat, endeJahr].forEach((el) => el.addEventListener("change", () => {
+      endeManuellGeaendert = true;
+    }));
+
     div.querySelector(".familie-save-btn").addEventListener("click", async () => {
       let eingegebenesEnde = getDatum(endePrefix);
       // Ist kein manuelles Ende eingegeben und ist der Todestag des anderen
       // Partners bekannt, wird dieser beim Speichern als Partnerschaftsende
       // übernommen. Bei nur bekanntem Sterbejahr bleibt das Ende absichtlich
       // NULL; der Hinweis bleibt trotzdem erhalten.
-      if (!eingegebenesEnde && tod?.exakt) eingegebenesEnde = tod.datum;
+      // Nur wenn der Benutzer das Ende nicht verändert hat, darf der Tod
+      // weiterhin automatisch als Ende übernommen werden. Wird ein
+      // automatisch vorgeschlagenes Datum bewusst gelöscht, wird dies als
+      // "Ende unbekannt / bereits beendet" gespeichert.
+      let automatikIgnorieren = !!f.ende_automatik_ignorieren;
+      if (endeManuellGeaendert) {
+        automatikIgnorieren = !eingegebenesEnde;
+      } else if (!eingegebenesEnde && tod?.exakt && !automatikIgnorieren) {
+        eingegebenesEnde = tod.datum;
+      }
       const updates = {
         familientyp: typEdit.value || "Partnerschaft",
         beginn: getDatum(beginnPrefix),
         ende: eingegebenesEnde,
+        ende_automatik_ignorieren: automatikIgnorieren,
       };
       const msg = document.getElementById("d-familie-message");
       msg.textContent = "Partnerschaft wird gespeichert …";
@@ -3309,7 +3334,7 @@ async function loadStammbaumData() {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
     sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
-    sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende"),
+    sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
     sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
   ]);
   if (personenError) throw personenError;
