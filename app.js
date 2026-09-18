@@ -3135,11 +3135,50 @@ function escTree(value) {
   return String(value ?? "").replace(/[&<>\"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 }
 
-function treePersonCard(person, rootId = null, extraClass = "") {
+function treeNormalizeName(value) {
+  return String(value || "").trim().toLocaleLowerCase("de").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function treeMaleAncestorSurname(personId, seen = new Set()) {
+  if (!personId || seen.has(personId)) return "";
+  seen.add(personId);
+  const person = treePerson(personId);
+  if (!person) return "";
+  const geschlecht = treeNormalizeName(person.geschlecht);
+  if (geschlecht === "m" || geschlecht === "mann" || geschlecht === "maennlich" || geschlecht === "männlich") {
+    return String(person.nachname || "").trim();
+  }
+  const families = treeParentFamiliesForPerson(personId);
+  for (const family of families) {
+    const candidates = [family.partner_a_id, family.partner_b_id].filter(Boolean);
+    for (const candidateId of candidates) {
+      const candidate = treePerson(candidateId);
+      if (!candidate) continue;
+      const candidateGender = treeNormalizeName(candidate.geschlecht);
+      if (candidateGender === "m" || candidateGender === "mann" || candidateGender === "maennlich" || candidateGender === "männlich") {
+        const surname = treeMaleAncestorSurname(candidateId, seen);
+        if (surname) return surname;
+      }
+    }
+  }
+  return String(person.nachname || "").trim();
+}
+
+function treeLineColorClass(lineSurname) {
+  const value = treeNormalizeName(lineSurname);
+  if (!value) return "";
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  return `tree-line-color-${Math.abs(hash) % 6}`;
+}
+
+function treePersonCard(person, rootId = null, extraClass = "", lineSurname = "") {
   if (!person) return "";
   const jahre = [person.geburtsdatum, person.sterbedatum].filter(Boolean).map((d) => d.split("-")[0]).join(" – ");
   const foto = treeData.photos.get(person.id);
-  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${extraClass}" data-tree-person="${person.id}">
+  const isLinePerson = lineSurname && treeNormalizeName(person.nachname) === treeNormalizeName(lineSurname);
+  const lineClass = isLinePerson ? `tree-node--line ${treeLineColorClass(lineSurname)}` : "";
+  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
     <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
@@ -3218,6 +3257,14 @@ function renderStammbaum(rootId) {
     return;
   }
 
+  const stammlinie = treeMaleAncestorSurname(rootId) || String(root.nachname || "").trim();
+  const stammlinieFarbe = treeLineColorClass(stammlinie);
+
+  const legend = document.createElement("div");
+  legend.className = `tree-line-legend ${stammlinieFarbe}`;
+  legend.innerHTML = `<span class="tree-line-legend__dot" aria-hidden="true"></span><span>Stammlinie: <strong>${escTree(stammlinie || "unbekannt")}</strong></span>`;
+  stage.appendChild(legend);
+
   // Eltern des Mittelpunktes: Das Elternpaar wird als zusammengehörige
   // Familie dargestellt und mit einer eindeutigen Linie zum Mittelpunkt
   // verbunden. Dadurch ist sofort erkennbar, welches Paar die Eltern sind.
@@ -3237,8 +3284,8 @@ function renderStammbaum(rootId) {
       const parentA = treePerson(f.partner_a_id);
       const parentB = treePerson(f.partner_b_id);
       const cards = [];
-      if (parentA && parentA.id !== rootId) cards.push(treePersonCard(parentA));
-      if (parentB && parentB.id !== rootId) cards.push(treePersonCard(parentB));
+      if (parentA && parentA.id !== rootId) cards.push(treePersonCard(parentA, null, "", stammlinie));
+      if (parentB && parentB.id !== rootId) cards.push(treePersonCard(parentB, null, "", stammlinie));
 
       if (cards.length === 2) {
         parentPair.innerHTML = `${cards[0]}<div class="tree-parent-relation" aria-label="Eltern"><span>Eltern</span><i aria-hidden="true"></i></div>${cards[1]}`;
@@ -3261,7 +3308,7 @@ function renderStammbaum(rootId) {
   if (!visibleFamilies.length) {
     const rootArea = document.createElement("div");
     rootArea.className = "tree-root-area";
-    rootArea.innerHTML = treePersonCard(root, rootId);
+    rootArea.innerHTML = treePersonCard(root, rootId, "", stammlinie);
     stage.appendChild(rootArea);
     const empty = document.createElement("div");
     empty.className = "tree-empty";
@@ -3287,7 +3334,7 @@ function renderStammbaum(rootId) {
       const relationType = f.familientyp || "Partnerschaft";
       block.innerHTML = `
         <div class="tree-couple">
-          ${treePersonCard(root, rootId)}
+          ${treePersonCard(root, rootId, "", stammlinie)}
           <div class="tree-relationship ${isMarriage ? "tree-relationship--marriage" : ""}" aria-label="${escTree(relationType)}">
             <span class="tree-marriage__label">${escTree(relationType)}</span>
             ${isMarriage ? `<span class="tree-marriage__rings" aria-hidden="true">◯◯</span>` : `<span class="tree-partner-link" aria-hidden="true"></span>`}
@@ -3302,7 +3349,7 @@ function renderStammbaum(rootId) {
         block.appendChild(label);
         const children = document.createElement("div");
         children.className = "tree-children";
-        children.innerHTML = kids.map((k) => treePersonCard(k.person, rootId, "tree-node--child")).join("");
+        children.innerHTML = kids.map((k) => treePersonCard(k.person, rootId, "tree-node--child", stammlinie)).join("");
         children.querySelectorAll("[data-tree-person]").forEach((el) => el.dataset.treeChild = "true");
         block.appendChild(children);
       }

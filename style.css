@@ -244,3 +244,15 @@
 .familie-actions .del-btn {
   flex:0 0 auto;
 }
+
+
+/* v110: automatische Stammlinien-Darstellung – rein visuell, keine Datenbankfelder */
+.tree-line-legend{display:inline-flex;align-items:center;gap:.45rem;padding:.35rem .7rem;border:1px solid var(--line);border-radius:999px;background:var(--card);font-size:.78rem;color:var(--ink-soft);margin-bottom:-.9rem;align-self:center}
+.tree-line-legend__dot{width:.72rem;height:.72rem;border-radius:50%;display:inline-block;flex:0 0 .72rem}
+.tree-node--line{border-width:2px;box-shadow:0 2px 6px rgba(43,42,40,.1)}
+.tree-line-color-0 .tree-line-legend__dot{background:#5B7FA3}.tree-node.tree-line-color-0{border-color:#5B7FA3}
+.tree-line-color-1 .tree-line-legend__dot{background:#6C8F72}.tree-node.tree-line-color-1{border-color:#6C8F72}
+.tree-line-color-2 .tree-line-legend__dot{background:#A37B5B}.tree-node.tree-line-color-2{border-color:#A37B5B}
+.tree-line-color-3 .tree-line-legend__dot{background:#876B9C}.tree-node.tree-line-color-3{border-color:#876B9C}
+.tree-line-color-4 .tree-line-legend__dot{background:#A06A63}.tree-node.tree-line-color-4{border-color:#A06A63}
+.tree-line-color-5 .tree-line-legend__dot{background:#7B8060}.tree-node.tree-line-color-5{border-color:#7B8060}
