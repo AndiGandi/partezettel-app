@@ -117,8 +117,27 @@
   .tree-family-block > .tree-couple > .tree-node{flex-basis:125px !important}
 }
 
-/* Sterbejahr – Angabe ohne genaues Sterbedatum */
-#sterbejahr,#d-sterbejahr{box-sizing:border-box;width:100%}
+/* Nur-Jahr-Felder: kompakt und direkt neben dem vollständigen Datum. */
+.date-parts--with-year{display:flex;align-items:flex-end;gap:.35rem;width:100%;overflow-x:auto;overflow-y:hidden;padding-bottom:1px}
+.date-parts--with-year > select{flex:0 0 auto}
+.date-year-only-field{display:flex;align-items:center;gap:.3rem;flex:0 0 auto;min-width:max-content;margin-left:.15rem}
+.date-year-only-field span{display:block;margin:0;font-size:.68rem;line-height:1.15;white-space:nowrap;color:var(--ink-soft)}
+.date-year-only-field select{width:5rem !important;min-width:5rem;max-width:5rem}
+
+/* Matricula-Link und Zeile bleiben in derselben Zeile. */
+.source-links-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.6rem}
+.source-link-field{min-width:0}
+.source-link-inline{display:flex;align-items:center;gap:.3rem;min-width:0}
+.source-link-inline input[type=url]{flex:1 1 auto;min-width:0}
+.source-line-label{flex:0 0 auto;font-size:.75rem;color:var(--ink-soft)}
+.source-link-inline input[type=number]{flex:0 0 3.4rem;width:3.4rem;max-width:3.4rem;min-width:3.4rem;padding-left:.35rem;padding-right:.35rem}
+@media(max-width:700px){
+ .date-parts--with-year{gap:.25rem}
+ .date-year-only-field span{font-size:.62rem}
+ .date-year-only-field select{width:4.7rem !important;min-width:4.7rem;max-width:4.7rem}
+ .source-links-row{grid-template-columns:1fr;gap:.25rem}
+ .source-link-field{margin-bottom:.45rem}
+}
 
 .personen-sortierung{display:flex;gap:.6rem;align-items:end;margin:0 0 1rem}
 .personen-sortierung .field{flex:1;margin-bottom:0}
