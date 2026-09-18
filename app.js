@@ -1186,6 +1186,8 @@ document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
 // ==========================================================
 
 let currentDetailPersonId = null;
+let detailOpenedFromTree = false;
+let detailReturnTreePersonId = null;
 let autoPartnerSave = false;
 let detailAudioMediaRecorder = null;
 let detailAudioChunks = [];
@@ -1214,8 +1216,10 @@ function aktualisiereLinkButton(id, wert) {
   }
 }
 
-async function openPersonDetail(personId) {
+async function openPersonDetail(personId, options = {}) {
   currentDetailPersonId = personId;
+  detailOpenedFromTree = options.fromTree === true;
+  detailReturnTreePersonId = detailOpenedFromTree ? personId : null;
   await ensureSession();
 
   const { data: person, error } = await sb.from("personen").select("*").eq("id", personId).single();
@@ -1244,6 +1248,14 @@ async function openPersonDetail(personId) {
   // Personendaten sofort öffnen. Nachgelagerte Medien/Familien dürfen das
   // Öffnen der Detailansicht nicht blockieren.
   detailOverlay.hidden = false;
+  // Die Detailansicht immer am Anfang öffnen, damit der Name sofort sichtbar ist.
+  detailOverlay.scrollTop = 0;
+  const detailSheet = detailOverlay.querySelector(".detail-sheet");
+  if (detailSheet) detailSheet.scrollTop = 0;
+  requestAnimationFrame(() => {
+    detailOverlay.scrollTop = 0;
+    if (detailSheet) detailSheet.scrollTop = 0;
+  });
 
   try { await loadDetailFotos(personId); } catch (err) { debugLog(`⚠️ Fotos der Person konnten nicht geladen werden: ${err.message || err}`); }
   try { await loadDetailAudio(personId); } catch (err) { debugLog(`⚠️ Sprachnotizen der Person konnten nicht geladen werden: ${err.message || err}`); }
@@ -1252,9 +1264,19 @@ async function openPersonDetail(personId) {
   try { await loadDetailFamilie(personId); } catch (err) { debugLog(`⚠️ Familienangaben konnten nicht geladen werden: ${err.message || err}`); }
 }
 
-document.getElementById("detail-close-btn").addEventListener("click", () => {
+document.getElementById("detail-close-btn").addEventListener("click", async () => {
+  const fromTree = detailOpenedFromTree;
+  const returnTreePersonId = detailReturnTreePersonId;
   detailOverlay.hidden = true;
-  loadPersonen();
+  detailOpenedFromTree = false;
+  detailReturnTreePersonId = null;
+  if (fromTree) {
+    const select = document.getElementById("tree-person-select");
+    if (select && returnTreePersonId) select.value = returnTreePersonId;
+    try { await loadStammbaum(); } catch (err) { debugLog(`⚠️ Stammbaum nach Rückkehr: ${err.message || err}`); }
+  } else {
+    loadPersonen();
+  }
 });
 
 // Trauungsbuch-Link bei Ehepartnern synchronisieren.
@@ -3295,6 +3317,15 @@ function renderStammbaum(rootId) {
       renderStammbaum(id);
     };
     el.addEventListener("click", openTreePerson);
+    el.addEventListener("dblclick", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = el.dataset.treePerson;
+      if (!id) return;
+      const select = document.getElementById("tree-person-select");
+      if (select) select.value = id;
+      await openPersonDetail(id, { fromTree: true });
+    });
   });
   if (message) message.textContent = "";
 }
