@@ -574,6 +574,54 @@ function setDatumJahrElemente(t,m,y,jahr) {
 ["geburtsdatum","sterbedatum","d-geburtsdatum","d-sterbedatum","d-partner-beginn","d-partner-ende"].forEach(initDatum);
 ["geburtsjahr","sterbejahr","d-geburtsjahr","d-sterbejahr"].forEach(initJahrOnly);
 
+// Vollständiges Datum und "nur Jahr bekannt" schließen sich gegenseitig aus.
+// Bei einem vollständigen Datum wird das reine Jahresfeld gesperrt; bei einem
+// reinen Jahr werden Tag/Monat/Jahr des vollständigen Datums gesperrt.
+function synchronisiereNurJahrFeld(datumPrefix, jahrOnlyId) {
+  const tag = document.getElementById(`${datumPrefix}-tag`);
+  const monat = document.getElementById(`${datumPrefix}-monat`);
+  const jahr = document.getElementById(`${datumPrefix}-jahr`);
+  const nurJahr = document.getElementById(jahrOnlyId);
+  if (!tag || !monat || !jahr || !nurJahr) return;
+
+  const aktualisieren = () => {
+    const vollstaendig = !!(tag.value && monat.value && jahr.value);
+    const nurJahrGewaeht = !!nurJahr.value;
+
+    if (vollstaendig) {
+      nurJahr.value = "";
+      nurJahr.disabled = true;
+      tag.disabled = false;
+      monat.disabled = false;
+      jahr.disabled = false;
+    } else if (nurJahrGewaeht) {
+      tag.value = "";
+      monat.value = "";
+      jahr.value = "";
+      tag.disabled = true;
+      monat.disabled = true;
+      jahr.disabled = true;
+      nurJahr.disabled = false;
+    } else {
+      nurJahr.disabled = false;
+      tag.disabled = false;
+      monat.disabled = false;
+      jahr.disabled = false;
+    }
+  };
+
+  if (!nurJahr.dataset.syncInit) {
+    [tag, monat, jahr, nurJahr].forEach((el) => el.addEventListener("change", aktualisieren));
+    nurJahr.dataset.syncInit = "1";
+  }
+  aktualisieren();
+}
+
+synchronisiereNurJahrFeld("geburtsdatum", "geburtsjahr");
+synchronisiereNurJahrFeld("sterbedatum", "sterbejahr");
+synchronisiereNurJahrFeld("d-geburtsdatum", "d-geburtsjahr");
+synchronisiereNurJahrFeld("d-sterbedatum", "d-sterbejahr");
+
 // ---------- Formular absenden ----------
 const form = document.getElementById("person-form");
 const formMessage = document.getElementById("form-message");
@@ -1259,6 +1307,8 @@ async function openPersonDetail(personId, options = {}) {
   setDatum("d-sterbedatum", person.sterbedatum);
   document.getElementById("d-geburtsjahr").value = person.geburtsjahr ? String(person.geburtsjahr) : "";
   document.getElementById("d-sterbejahr").value = person.sterbejahr ? String(person.sterbejahr) : "";
+  synchronisiereNurJahrFeld("d-geburtsdatum", "d-geburtsjahr");
+  synchronisiereNurJahrFeld("d-sterbedatum", "d-sterbejahr");
   document.getElementById("d-taufbuch-link").value = person.taufbuch_link || "";
   document.getElementById("d-trauungsbuch-link").value = person.trauungsbuch_link || "";
   document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
