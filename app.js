@@ -56,6 +56,7 @@ let personenCache = []; // {id, vorname, nachname, ...}
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
+let personenVerwandtschaftCache = new Map();
 let partnerIdsAuswahlCache = new Set();
 
 // ---------- Anmeldung ----------
@@ -1060,6 +1061,37 @@ async function loadPersonen() {
     const kinderByFamilie = new Map();
     for (const k of familienKinder || []) { if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []); kinderByFamilie.get(k.familie_id).push(k.kind_id); }
     for (const f of familien || []) f._kinder=kinderByFamilie.get(f.id)||[];
+
+    // Kleine Verwandtschaftszusammenfassung für die Personenliste.
+    // Die Werte werden ausschließlich aus den bestehenden Familien- und
+    // Kinderverknüpfungen berechnet; es werden keine neuen Daten gespeichert.
+    personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+      eltern: new Set(),
+      ehePartnerschaften: new Set(),
+      kinder: new Set(),
+    }]));
+    for (const fk of familienKinder || []) {
+      const familie = (familien || []).find((f) => f.id === fk.familie_id);
+      if (!familie || !fk.kind_id) continue;
+      const info = personenVerwandtschaftCache.get(fk.kind_id);
+      if (!info) continue;
+      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+        if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+      }
+    }
+    for (const familie of familien || []) {
+      const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
+      const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
+      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+        if (!partnerId || !istEheOderPartnerschaft) continue;
+        const info = personenVerwandtschaftCache.get(partnerId);
+        if (!info) continue;
+        info.ehePartnerschaften.add(familie.id);
+        for (const kindId of familie._kinder || []) {
+          if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+        }
+      }
+    }
     berechneFamilienSortKeys(personenCache,familien||[]);
   } catch (familyErr) { debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`); }
   if (banner) banner.hidden = true;
@@ -1097,11 +1129,16 @@ async function renderPersonenList(personen) {
       .join(" – ");
     const alterAnzeige = lebensalterAnzeige(p);
     const fotoUrl = schluesselfotoCache.get(p.id);
+    const verwandtschaft = personenVerwandtschaftCache.get(p.id);
+    const elternAnzahl = verwandtschaft?.eltern?.size || 0;
+    const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
+    const kinderAnzahl = verwandtschaft?.kinder?.size || 0;
     li.innerHTML = `
       ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
       <div class="person-card__content">
         <div class="person-card__name">${p.vorname} ${p.nachname}</div>
         ${jahre || alterAnzeige ? `<div class="person-card__years">${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}</div>` : ""}
+        <div class="person-card__relations" aria-label="Verwandtschaft: Eltern ${elternAnzahl}, Ehe oder Partnerschaften ${ehePartnerschaftenAnzahl}, Kinder ${kinderAnzahl}">👥 Eltern: ${elternAnzahl} · 💍 Ehe/Partn.: ${ehePartnerschaftenAnzahl} · 👶 Kinder: ${kinderAnzahl}</div>
         ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
       </div>
     `;
