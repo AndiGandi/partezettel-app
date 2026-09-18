@@ -158,6 +158,10 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.classList.add("is-active");
     btn.setAttribute("aria-selected", "true");
     document.getElementById("tab-" + btn.dataset.tab).classList.add("is-active");
+    // Beim Wechsel des Hauptbereichs immer an den Anfang der Ansicht springen.
+    // So startet jede Ansicht oben und nicht an der zuletzt gespeicherten
+    // Scrollposition der vorherigen Ansicht.
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (btn.dataset.tab === "liste") loadPersonen();
     if (btn.dataset.tab === "stammbaum") loadStammbaum();
   });
@@ -3307,8 +3311,19 @@ function renderStammbaum(rootId) {
     stage.appendChild(familyWrap);
   }
 
+  let suppressNextTreeClick = false;
+  let lastTreeTouch = { id: null, time: 0 };
+
   stage.querySelectorAll("[data-tree-person]").forEach((el) => {
     const openTreePerson = async (event) => {
+      if (suppressNextTreeClick) {
+        suppressNextTreeClick = false;
+        if (event) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        return;
+      }
       if (event) event.preventDefault();
       const id = el.dataset.treePerson;
       if (!id) return;
@@ -3316,7 +3331,10 @@ function renderStammbaum(rootId) {
       if (select) select.value = id;
       renderStammbaum(id);
     };
+
     el.addEventListener("click", openTreePerson);
+
+    // Desktop: Doppelklick.
     el.addEventListener("dblclick", async (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -3325,6 +3343,27 @@ function renderStammbaum(rootId) {
       const select = document.getElementById("tree-person-select");
       if (select) select.value = id;
       await openPersonDetail(id, { fromTree: true });
+    });
+
+    // iPad/iPhone: Safari löst bei diesen Buttons nicht zuverlässig dblclick aus.
+    // Deshalb wird ein schneller zweiter Fingertipp als Doppelklick behandelt.
+    el.addEventListener("pointerup", async (event) => {
+      if (event.pointerType !== "touch") return;
+      const id = el.dataset.treePerson;
+      if (!id) return;
+      const now = Date.now();
+      const isDoubleTap = lastTreeTouch.id === id && (now - lastTreeTouch.time) <= 450;
+      if (isDoubleTap) {
+        lastTreeTouch = { id: null, time: 0 };
+        suppressNextTreeClick = true;
+        event.preventDefault();
+        event.stopPropagation();
+        const select = document.getElementById("tree-person-select");
+        if (select) select.value = id;
+        await openPersonDetail(id, { fromTree: true });
+      } else {
+        lastTreeTouch = { id, time: now };
+      }
     });
   });
   if (message) message.textContent = "";
