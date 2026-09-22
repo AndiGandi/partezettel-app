@@ -3593,6 +3593,184 @@ function renderStammbaum(rootId) {
   if (message) message.textContent = "";
 }
 
+
+function treePersonGender(person) {
+  const g = String(person?.geschlecht || "").toLowerCase();
+  if (g.includes("weib")) return "w";
+  if (g.includes("männ") || g.includes("maenn") || g === "m") return "m";
+  return "u";
+}
+
+function treePersonLabel(id) {
+  const p = treePerson(id);
+  return p ? `${p.vorname || ""} ${p.nachname || ""}`.trim() : "Unbekannt";
+}
+
+function treeRelationshipGraph() {
+  const graph = new Map();
+  const add = (a, b, type) => {
+    if (!a || !b || a === b) return;
+    if (!graph.has(a)) graph.set(a, []);
+    graph.get(a).push({ id: b, type });
+  };
+  for (const f of treeData.familien || []) {
+    const a = f.partner_a_id, b = f.partner_b_id;
+    if (a && b) {
+      add(a, b, "spouse");
+      add(b, a, "spouse");
+    }
+    for (const k of treeChildrenForFamily(f.id)) {
+      const child = k.person?.id || k.kind_id;
+      if (!child) continue;
+      if (a) { add(child, a, "parent"); add(a, child, "child"); }
+      if (b) { add(child, b, "parent"); add(b, child, "child"); }
+    }
+  }
+  return graph;
+}
+
+function treeFindRelationshipPath(startId, targetId) {
+  if (!startId || !targetId) return null;
+  if (startId === targetId) return [];
+  const graph = treeRelationshipGraph();
+  const queue = [startId];
+  const visited = new Set([startId]);
+  const prev = new Map();
+  while (queue.length) {
+    const id = queue.shift();
+    for (const edge of graph.get(id) || []) {
+      if (visited.has(edge.id)) continue;
+      visited.add(edge.id);
+      prev.set(edge.id, { from: id, type: edge.type });
+      if (edge.id === targetId) {
+        const path = [];
+        let cur = targetId;
+        while (cur !== startId) {
+          const step = prev.get(cur);
+          if (!step) return null;
+          path.unshift({ from: step.from, to: cur, type: step.type });
+          cur = step.from;
+        }
+        return path;
+      }
+      queue.push(edge.id);
+    }
+  }
+  return null;
+}
+
+function treeGenderWord(id, male, female, neutral = "Person") {
+  const g = treePersonGender(treePerson(id));
+  return g === "m" ? male : g === "w" ? female : neutral;
+}
+
+function treeBloodRelation(path) {
+  const up = path.filter((e) => e.type === "parent").length;
+  const down = path.filter((e) => e.type === "child").length;
+  if (path.every((e) => e.type === "parent") && up > 0) {
+    if (up === 1) return treeGenderWord(path[path.length - 1].to, "Vater", "Mutter");
+    if (up === 2) return treeGenderWord(path[path.length - 1].to, "Großvater", "Großmutter");
+    return treeGenderWord(path[path.length - 1].to, "Ur".repeat(up - 2) + "großvater", "Ur".repeat(up - 2) + "großmutter");
+  }
+  if (path.every((e) => e.type === "child") && down > 0) {
+    if (down === 1) return treeGenderWord(path[path.length - 1].to, "Sohn", "Tochter");
+    if (down === 2) return treeGenderWord(path[path.length - 1].to, "Enkel", "Enkelin");
+    return treeGenderWord(path[path.length - 1].to, "Ur".repeat(down - 2) + "enkel", "Ur".repeat(down - 2) + "enkelin");
+  }
+  if (up === 1 && down === 1) return treeGenderWord(path[path.length - 1].to, "Bruder", "Schwester");
+  if (up >= 2 && down >= 1) {
+    if (down === 1) {
+      if (up === 2) return treeGenderWord(path[path.length - 1].to, "Onkel", "Tante");
+      if (up === 3) return treeGenderWord(path[path.length - 1].to, "Großonkel", "Großtante");
+      return `${"Ur".repeat(up - 3)}groß${treeGenderWord(path[path.length - 1].to, "onkel", "tante")}`;
+    }
+    const degree = Math.min(up, down) - 1;
+    const removed = Math.abs(up - down);
+    const base = degree === 1 ? "Cousin/Cousine 1. Grades" : `Cousin/Cousine ${degree}. Grades`;
+    return removed ? `${base}, ${removed} Generation${removed === 1 ? "" : "en"} entfernt` : base;
+  }
+  if (down >= 2 && up === 1) {
+    if (down === 2) return treeGenderWord(path[path.length - 1].to, "Neffe", "Nichte");
+    if (down === 3) return treeGenderWord(path[path.length - 1].to, "Großneffe", "Großnichte");
+    return `${"Ur".repeat(down - 3)}groß${treeGenderWord(path[path.length - 1].to, "neffe", "nichte")}`;
+  }
+  return null;
+}
+
+function treeInLawRelation(path) {
+  const spouseIndexes = path.map((e, i) => e.type === "spouse" ? i : -1).filter(i => i >= 0);
+  if (!spouseIndexes.length) return null;
+  if (path.length === 1) return treeGenderWord(path[0].to, "Ehemann", "Ehefrau");
+  if (path.length === 2) {
+    const spouseEdge = path.find(e => e.type === "spouse");
+    const other = path.find(e => e !== spouseEdge);
+    if (other?.type === "parent") return treeGenderWord(path[path.length - 1].to, "Schwiegersohn", "Schwiegertochter");
+    if (other?.type === "child") return treeGenderWord(path[path.length - 1].to, "Schwiegervater", "Schwiegermutter");
+  }
+  // Geschwister des Ehepartners bzw. Ehepartner eines Geschwisters.
+  const bloodOnly = path.filter(e => e.type !== "spouse");
+  if (bloodOnly.length === 2 && bloodOnly.some(e => e.type === "parent") && bloodOnly.some(e => e.type === "child")) {
+    return treeGenderWord(path[path.length - 1].to, "Schwager", "Schwägerin");
+  }
+  if (bloodOnly.length === 1) {
+    const e = bloodOnly[0];
+    if (e.type === "parent") return treeGenderWord(path[path.length - 1].to, "Schwiegervater", "Schwiegermutter");
+    if (e.type === "child") return treeGenderWord(path[path.length - 1].to, "Schwiegersohn", "Schwiegertochter");
+  }
+  return "angeheiratet verwandt";
+}
+
+function treeRelationshipResult(aId, bId) {
+  if (!aId || !bId) return null;
+  if (aId === bId) return { relation: "dieselbe Person", path: [] };
+  const path = treeFindRelationshipPath(aId, bId);
+  if (!path) return { relation: "Keine gespeicherte Verwandtschaft gefunden", path: null };
+  const relation = treeInLawRelation(path) || treeBloodRelation(path) || "verwandt (genauer Verwandtschaftsgrad nicht eindeutig bestimmbar)";
+  const labels = [treePersonLabel(aId)];
+  for (const e of path) labels.push(`${e.type === "spouse" ? "Ehe/Partnerschaft mit" : e.type === "parent" ? "Elternteil von" : "Kind von"} ${treePersonLabel(e.to)}`);
+  return { relation, path, pathText: labels.join(" → ") };
+}
+
+function fillTreeRelationshipSelects() {
+  const selects = [document.getElementById("tree-relation-person-a"), document.getElementById("tree-relation-person-b")].filter(Boolean);
+  const current = selects.map(s => s.value);
+  for (const select of selects) {
+    select.innerHTML = '<option value="">— Person auswählen —</option>';
+    for (const p of treeData.personen || []) {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      opt.textContent = `${p.nachname}, ${p.vorname}`;
+      select.appendChild(opt);
+    }
+  }
+  selects.forEach((s, i) => { if (current[i] && treePerson(current[i])) s.value = current[i]; });
+}
+
+function initTreeRelationshipUI() {
+  const open = document.getElementById("tree-relationship-open");
+  const close = document.getElementById("tree-relationship-close");
+  const panel = document.getElementById("tree-relationship-panel");
+  const calc = document.getElementById("tree-relationship-calc");
+  const reset = document.getElementById("tree-relationship-reset");
+  const a = document.getElementById("tree-relation-person-a");
+  const b = document.getElementById("tree-relation-person-b");
+  const result = document.getElementById("tree-relationship-result");
+  if (!open || !panel || !calc || !reset || !a || !b || !result) return;
+  open.addEventListener("click", () => {
+    panel.hidden = false;
+    fillTreeRelationshipSelects();
+    if (!a.value && treeSelect?.value) a.value = treeSelect.value;
+  });
+  close?.addEventListener("click", () => { panel.hidden = true; });
+  reset.addEventListener("click", () => { a.value = ""; b.value = ""; result.innerHTML = ""; });
+  calc.addEventListener("click", () => {
+    const found = treeRelationshipResult(a.value, b.value);
+    if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
+    if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
+    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.pathText ? `<div class="tree-relationship-path">${escTree(found.pathText)}</div>` : ""}`;
+  });
+}
+
 async function loadStammbaum() {
   const message = document.getElementById("tree-message");
   const select = document.getElementById("tree-person-select");
@@ -3615,6 +3793,7 @@ async function loadStammbaum() {
     });
     select.value = current;
     renderStammbaum(current);
+    fillTreeRelationshipSelects();
     message.textContent = "";
   } catch (err) {
     message.textContent = `Fehler beim Laden des Stammbaums: ${err.message || err}`;
@@ -3638,3 +3817,4 @@ if (treeZoomIn) treeZoomIn.addEventListener("click", () => { treeZoom = Math.min
 if (treeZoomOut) treeZoomOut.addEventListener("click", () => { treeZoom = Math.max(0.6, +(treeZoom - 0.1).toFixed(2)); updateTreeZoom(); });
 if (treeReset) treeReset.addEventListener("click", () => { treeZoom = 1; updateTreeZoom(); });
 updateTreeZoom();
+initTreeRelationshipUI();

@@ -333,3 +333,22 @@
 .source-line-field input {
   max-width: 120px;
 }
+
+/* Verwandtschaftsermittlung */
+.tree-relationship-open{white-space:nowrap;min-height:42px}
+.tree-relationship-panel{margin:.65rem 0 1rem;padding:.8rem;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+.tree-relationship-panel[hidden]{display:none !important}
+.tree-relationship-panel__header{display:flex;align-items:center;justify-content:space-between;gap:.5rem;margin-bottom:.65rem}
+.tree-relationship-panel__header strong{font-family:Georgia,serif;font-weight:400}
+.tree-relationship-fields{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+.tree-relationship-fields .field{margin:0}
+.tree-relationship-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.65rem}
+.tree-relationship-result{margin-top:.75rem;padding:.7rem;border-radius:8px;background:var(--accent-soft);min-height:2.2rem;font-size:.9rem}
+.tree-relationship-result:empty{display:none}
+.tree-relationship-result strong{font-family:Georgia,serif;font-weight:600}
+.tree-relationship-path{margin-top:.35rem;color:var(--ink-soft);font-size:.82rem;line-height:1.45}
+@media(max-width:700px){
+ .tree-relationship-open{width:100%;margin-top:.45rem}
+ .tree-relationship-fields{grid-template-columns:1fr}
+ .tree-relationship-actions .btn{flex:1;min-width:140px}
+}

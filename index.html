@@ -201,6 +201,7 @@
       <label class="field tree-person-select"><span>Mittelpunkt</span>
         <select id="tree-person-select"><option value="">— Person auswählen —</option></select>
       </label>
+      <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft</button>
       <div class="tree-zoom-controls" aria-label="Stammbaum Zoom">
         <button type="button" id="tree-zoom-out" class="btn btn--ghost" aria-label="Verkleinern">−</button>
         <span id="tree-zoom-value">100 %</span>
@@ -209,6 +210,21 @@
       </div>
     </div>
     <p id="tree-message" class="form-message"></p>
+    <div id="tree-relationship-panel" class="tree-relationship-panel" hidden>
+      <div class="tree-relationship-panel__header">
+        <strong>Wie sind zwei Personen miteinander verwandt?</strong>
+        <button type="button" id="tree-relationship-close" class="btn btn--ghost">✕</button>
+      </div>
+      <div class="tree-relationship-fields">
+        <label class="field"><span>Person 1</span><select id="tree-relation-person-a"><option value="">— Person auswählen —</option></select></label>
+        <label class="field"><span>Person 2</span><select id="tree-relation-person-b"><option value="">— Person auswählen —</option></select></label>
+      </div>
+      <div class="tree-relationship-actions">
+        <button type="button" id="tree-relationship-calc" class="btn btn--primary">Verwandtschaft ermitteln</button>
+        <button type="button" id="tree-relationship-reset" class="btn btn--ghost">Zurücksetzen</button>
+      </div>
+      <div id="tree-relationship-result" class="tree-relationship-result" aria-live="polite"></div>
+    </div>
     <div id="tree-viewport" class="tree-viewport">
       <div id="tree-stage" class="tree-stage"></div>
     </div>
