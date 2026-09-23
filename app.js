@@ -1583,10 +1583,6 @@ async function loadDetailFotos(personId) {
       await loadDetailFotos(personId);
       await loadPersonen();
     });
-    div.querySelector(".foto-personen-open-btn").addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await openFotoPersonenModal(foto);
-    });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Foto bzw. Verknüpfung wirklich entfernen?")) return;
       const { data: links } = await sb.from("foto_personen").select("id, personen_id").eq("foto_id", foto.id);
@@ -1934,10 +1930,6 @@ async function loadDetailAudio(personId) {
     const div = document.createElement("div");
     div.className = "detail-media-item";
     div.innerHTML = `<audio controls src="${signed ? signed.signedUrl : ""}"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
-    div.querySelector(".foto-personen-open-btn").addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await openFotoPersonenModal(foto);
-    });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
       await sb.from("sprachnotizen").delete().eq("id", note.id);
@@ -2246,10 +2238,6 @@ async function loadDetailFamilie(personId) {
       }
     });
 
-    div.querySelector(".foto-personen-open-btn").addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await openFotoPersonenModal(foto);
-    });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
       const { error } = await sb.from("familien").delete().eq("id", f.id);
@@ -2312,11 +2300,7 @@ async function loadDetailFamilie(personId) {
       const div = document.createElement("div");
       div.className = "detail-media-item familie-item";
       div.innerHTML = `<span class="beziehung-text">${personenAuswahlText(detailPerson(otherId))} — ${b.beziehungstyp}</span><button class="del-btn" title="Partnerschaft löschen">🗑️</button>`;
-      div.querySelector(".foto-personen-open-btn").addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await openFotoPersonenModal(foto);
-    });
-    div.querySelector(".del-btn").addEventListener("click", async () => {
+      div.querySelector(".del-btn").addEventListener("click", async () => {
         if (!confirm("Diese Partnerschaft löschen?")) return;
         const { error } = await sb.from("beziehung").delete().eq("id", b.id);
         if (error) setDetailFamilieMessage(`Fehler: ${error.message}`);
