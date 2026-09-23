@@ -1999,8 +1999,18 @@ function openGruppenfotoViewer(url, markierungen = []) {
     const badge = document.createElement("span");
     badge.className = "detail-photo-viewer__legend-num";
     badge.textContent = row.nummer;
-    const name = document.createElement("span");
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "detail-photo-viewer__legend-name";
     name.textContent = fotoPersonName(row.personen_id);
+    name.disabled = !row.personen_id;
+    if (row.personen_id) {
+      name.addEventListener("click", async (event) => {
+        event.stopPropagation();
+        closeDetailPhotoViewer();
+        await openPersonDetail(row.personen_id);
+      });
+    }
     legend.append(badge, name);
     detailPhotoViewerLegend?.appendChild(legend);
   });
