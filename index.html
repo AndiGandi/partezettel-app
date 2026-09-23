@@ -439,6 +439,30 @@
   <img id="detail-photo-viewer-img" alt="Foto vergrößert">
 </div>
 
+
+<div id="foto-personen-modal" class="foto-personen-modal" hidden>
+  <div class="foto-personen-sheet">
+    <div class="detail-header">
+      <h2>Personen auf dem Foto</h2>
+      <button type="button" id="foto-personen-close" class="btn btn--ghost">✕</button>
+    </div>
+    <div class="foto-personen-body">
+      <div id="foto-markierflaeche" class="foto-markierflaeche">
+        <img id="foto-markierbild" alt="Gruppenfoto">
+        <div id="foto-markierungen"></div>
+      </div>
+      <div class="foto-personen-controls">
+        <label class="field"><span>Person hinzufügen</span><select id="foto-person-auswahl"><option value="">— Person auswählen —</option></select></label>
+        <button type="button" id="foto-person-hinzufuegen" class="btn btn--secondary">＋ Person hinzufügen</button>
+        <button type="button" id="foto-unbekannt-hinzufuegen" class="btn btn--ghost">＋ Unbekannte Person</button>
+        <p class="capture-status">Nummern und Positionen können jederzeit geändert werden.</p>
+        <div id="foto-personen-liste" class="foto-personen-liste"></div>
+        <p id="foto-personen-message" class="form-message"></p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="photo-editor" class="photo-editor" hidden>
   <div class="photo-editor__sheet">
     <h2>Foto anpassen</h2>
@@ -465,6 +489,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=117"></script>
+<script src="app.js?v=119"></script>
 </body>
 </html>

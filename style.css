@@ -352,3 +352,18 @@
  .tree-relationship-fields{grid-template-columns:1fr}
  .tree-relationship-actions .btn{flex:1;min-width:140px}
 }
+
+/* v119 Gruppenfotos */
+.foto-personen-modal{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.48);display:flex;align-items:center;justify-content:center;padding:.75rem}
+.foto-personen-modal[hidden]{display:none!important}
+.foto-personen-sheet{background:var(--paper);width:min(980px,100%);max-height:94dvh;overflow:auto;border-radius:14px;box-shadow:0 12px 45px rgba(0,0,0,.25)}
+.foto-personen-body{padding:1rem;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,.75fr);gap:1rem}
+.foto-markierflaeche{position:relative;width:100%;background:#222;border-radius:10px;overflow:hidden;touch-action:none;min-height:220px}
+.foto-markierflaeche img{display:block;width:100%;height:auto;max-height:65dvh;object-fit:contain;user-select:none;-webkit-user-drag:none}
+.foto-markierung{position:absolute;transform:translate(-50%,-50%);width:36px;height:36px;border-radius:50%;background:var(--ink);color:#fff;border:2px solid #fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1rem;box-shadow:0 2px 7px rgba(0,0,0,.45);cursor:pointer;touch-action:none}
+.foto-markierung.is-active{outline:3px solid var(--accent);outline-offset:2px}
+.foto-personen-controls{min-width:0}.foto-personen-liste{display:flex;flex-direction:column;gap:.45rem;margin-top:.65rem}
+.foto-person-zeile{display:flex;align-items:center;gap:.45rem;padding:.45rem .5rem;background:#fff;border:1px solid var(--line);border-radius:8px}
+.foto-person-zeile__num{font-weight:700;min-width:2rem}.foto-person-zeile__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foto-person-zeile button{padding:.4rem .5rem}.foto-personen-controls>.btn{margin:.2rem .25rem .2rem 0}
+@media(max-width:760px){.foto-personen-body{grid-template-columns:1fr;padding:.7rem}.foto-personen-sheet{max-height:96dvh}.foto-markierflaeche{min-height:180px}.foto-markierung{width:38px;height:38px;font-size:1.05rem}}
