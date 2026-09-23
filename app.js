@@ -1554,24 +1554,66 @@ async function loadDetailFotos(personId) {
   const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
   for (const foto of fotos) {
     const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    const { data: markierungen } = await sb.from("foto_personen")
+      .select("id, personen_id, nummer, position_x, position_y")
+      .eq("foto_id", foto.id)
+      .order("nummer", { ascending: true });
+    const istGruppenfoto = !!foto.gruppenfoto || (markierungen || []).length > 0;
     const div = document.createElement("div");
-    div.className = "detail-media-item";
-    div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="foto-personen-open-btn btn btn--secondary" type="button" title="Personen auf diesem Foto">👥 Personen</button><button class="del-btn" title="Löschen">🗑️</button>`;
-    const fotoImg = div.querySelector("img");
-    const openFoto = (event) => {
-      if (event) event.stopPropagation();
-      const viewer = document.getElementById("detail-photo-viewer");
-      const viewerImg = document.getElementById("detail-photo-viewer-img");
-      if (!viewer || !viewerImg || !fotoImg.src) return;
-      viewerImg.src = fotoImg.src;
-      viewer.hidden = false;
-    };
-    fotoImg.addEventListener("click", openFoto);
-    fotoImg.addEventListener("pointerup", openFoto);
-    div.addEventListener("click", (event) => {
-      if (event.target.closest(".del-btn")) return;
-      openFoto(event);
-    });
+    div.className = `detail-media-item${istGruppenfoto ? " detail-group-photo-item" : ""}`;
+
+    if (istGruppenfoto) {
+      div.innerHTML = `
+        <div class="detail-group-photo-wrap">
+          <img src="${signed ? signed.signedUrl : ""}" alt="Gruppenfoto">
+          <div class="detail-group-photo-markers"></div>
+        </div>
+        <div class="detail-group-photo-info">
+          <span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto · Gruppenfoto" : "Gruppenfoto"}</span>
+          <div class="detail-group-photo-legend"></div>
+          <div class="detail-group-photo-actions">
+            <button class="foto-personen-open-btn btn btn--secondary" type="button">👥 Personen</button>
+            <button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button>
+            <button class="del-btn" title="Verknüpfung entfernen">🗑️</button>
+          </div>
+        </div>`;
+      const wrap = div.querySelector(".detail-group-photo-wrap");
+      const markerEl = div.querySelector(".detail-group-photo-markers");
+      const legendEl = div.querySelector(".detail-group-photo-legend");
+      (markierungen || []).forEach(row => {
+        const marker = document.createElement("span");
+        marker.className = "detail-group-photo-marker";
+        marker.textContent = row.nummer;
+        marker.style.left = `${Number(row.position_x ?? 50)}%`;
+        marker.style.top = `${Number(row.position_y ?? 50)}%`;
+        marker.title = `${row.nummer}: ${fotoPersonName(row.personen_id)}`;
+        markerEl.appendChild(marker);
+        const entry = document.createElement("span");
+        entry.className = "detail-group-photo-legend-item";
+        entry.textContent = `#${row.nummer} ${fotoPersonName(row.personen_id)}`;
+        legendEl.appendChild(entry);
+      });
+      wrap.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const viewer = document.getElementById("detail-photo-viewer");
+        const viewerImg = document.getElementById("detail-photo-viewer-img");
+        if (viewer && viewerImg && signed?.signedUrl) { viewerImg.src = signed.signedUrl; viewer.hidden = false; }
+      });
+    } else {
+      div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
+      const fotoImg = div.querySelector("img");
+      const openFoto = (event) => {
+        if (event) event.stopPropagation();
+        const viewer = document.getElementById("detail-photo-viewer");
+        const viewerImg = document.getElementById("detail-photo-viewer-img");
+        if (!viewer || !viewerImg || !fotoImg.src) return;
+        viewerImg.src = fotoImg.src;
+        viewer.hidden = false;
+      };
+      fotoImg.addEventListener("click", openFoto);
+      fotoImg.addEventListener("pointerup", openFoto);
+    }
+    div.querySelector(".foto-personen-open-btn")?.addEventListener("click", (event) => { event.stopPropagation(); openFotoPersonenModal(foto); });
     div.querySelector(".key-photo-btn").addEventListener("click", async () => {
       const msg = document.getElementById("d-foto-message");
       msg.textContent = "Schlüsselfoto wird gesetzt …";
@@ -1584,7 +1626,7 @@ async function loadDetailFotos(personId) {
       await loadPersonen();
     });
     div.querySelector(".del-btn").addEventListener("click", async () => {
-      if (!confirm("Foto bzw. Verknüpfung wirklich entfernen?")) return;
+      if (!confirm(istGruppenfoto ? "Diese Person vom Gruppenfoto entfernen?" : "Foto bzw. Verknüpfung wirklich entfernen?")) return;
       const { data: links } = await sb.from("foto_personen").select("id, personen_id").eq("foto_id", foto.id);
       if ((links || []).length) {
         await sb.from("foto_personen").delete().eq("foto_id", foto.id).eq("personen_id", personId);
@@ -1604,6 +1646,7 @@ async function loadDetailFotos(personId) {
     container.appendChild(div);
   }
 }
+
 
 async function uploadDetailFoto(file) {
   const msg = document.getElementById("d-foto-message");
@@ -1793,11 +1836,6 @@ async function openFotoPersonenModal(foto) {
   const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y").eq("foto_id", foto.id).order("nummer", { ascending: true });
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen = rows || [];
-  if (currentDetailPersonId && !fotoMarkierungen.some(r => r.personen_id === currentDetailPersonId)) {
-    const maxNr = Math.max(0, ...fotoMarkierungen.map(r => Number(r.nummer) || 0));
-    const { data: created, error: createError } = await sb.from("foto_personen").insert({ foto_id: foto.id, personen_id: currentDetailPersonId, nummer: maxNr + 1, position_x: 50, position_y: 50 }).select().single();
-    if (!createError && created) fotoMarkierungen.push(created);
-  }
   const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
   fotoMarkierbild.src = signed?.signedUrl || "";
   const verfuegbarePersonen = (personenCache || [])
@@ -1830,7 +1868,52 @@ function renderFotoMarkierungen() {
 
     const line = document.createElement("div");
     line.className = "foto-person-zeile";
-    line.innerHTML = `<span class="foto-person-zeile__num">#${row.nummer}</span><span class="foto-person-zeile__name">${escapeHtml(fotoPersonName(row.personen_id))}</span><button type="button" class="btn btn--ghost foto-position-btn">Position</button><button type="button" class="btn btn--ghost foto-nummer-btn">Nr.</button><button type="button" class="btn btn--ghost foto-person-loeschen-btn">✕</button>`;
+    line.innerHTML = `
+      <span class="foto-person-zeile__num">#${row.nummer}</span>
+      <span class="foto-person-zeile__name">${escapeHtml(fotoPersonName(row.personen_id))}</span>
+      <button type="button" class="btn btn--ghost foto-person-aendern-btn">Ändern</button>
+      <button type="button" class="btn btn--ghost foto-position-btn">Position</button>
+      <button type="button" class="btn btn--ghost foto-nummer-btn">Nr.</button>
+      <button type="button" class="btn btn--ghost foto-person-loeschen-btn">✕</button>`;
+
+    line.querySelector(".foto-person-aendern-btn").addEventListener("click", () => {
+      const nameEl = line.querySelector(".foto-person-zeile__name");
+      const changeBtn = line.querySelector(".foto-person-aendern-btn");
+      if (line.querySelector(".foto-person-change-wrap")) return;
+      const verfuegbar = (personenCache || [])
+        .filter(p => p.id === row.personen_id || !fotoMarkierungen.some(x => x.id !== row.id && x.personen_id === p.id))
+        .slice()
+        .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
+      const wrap = document.createElement("span");
+      wrap.className = "foto-person-change-wrap";
+      const select = document.createElement("select");
+      select.className = "foto-person-change-select";
+      select.innerHTML = `<option value="">— unbekannt —</option>` + verfuegbar.map(p => {
+        const anzeige = fotoPersonAnzeige(p);
+        return `<option value="${p.id}" ${p.id === row.personen_id ? "selected" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
+      }).join("");
+      const save = document.createElement("button");
+      save.type = "button"; save.className = "btn btn--secondary"; save.textContent = "Speichern";
+      const cancel = document.createElement("button");
+      cancel.type = "button"; cancel.className = "btn btn--ghost"; cancel.textContent = "Abbrechen";
+      wrap.append(select, save, cancel);
+      nameEl.replaceWith(wrap);
+      changeBtn.hidden = true;
+      save.addEventListener("click", async () => {
+        const neueId = select.value || null;
+        if (neueId && fotoMarkierungen.some(x => x.id !== row.id && x.personen_id === neueId)) {
+          fotoPersonenMessage.textContent = "Diese Person ist bereits auf dem Foto zugeordnet.";
+          return;
+        }
+        const { error } = await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", row.id);
+        if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
+        row.personen_id = neueId;
+        fotoPersonenMessage.textContent = "Personenzuordnung gespeichert ✓";
+        renderFotoMarkierungen();
+      });
+      cancel.addEventListener("click", () => renderFotoMarkierungen());
+    });
+
     line.querySelector(".foto-position-btn").addEventListener("click", () => { fotoAktiveMarkierungId = row.id; fotoPersonenMessage.textContent = `Tippe jetzt auf die Position von Nr. ${row.nummer}.`; renderFotoMarkierungen(); });
     line.querySelector(".foto-nummer-btn").addEventListener("click", async () => {
       const wert = Number(prompt(`Neue Nummer für ${fotoPersonName(row.personen_id)}:`, row.nummer));
@@ -1849,6 +1932,7 @@ function renderFotoMarkierungen() {
     fotoPersonenListe.appendChild(line);
   }
 }
+
 
 fotoMarkierflaeche?.addEventListener("click", async (event) => {
   if (!fotoAktiveMarkierungId || !fotoMarkierbild.naturalWidth) return;
