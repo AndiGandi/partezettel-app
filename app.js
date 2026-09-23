@@ -1706,7 +1706,7 @@ gruppenfotoPersonenSuche?.addEventListener("input", fuelleGruppenfotoPersonen);
 
 async function ladeGruppenfotoListe() {
   if (!gruppenfotoListe) return;
-  const { data, error } = await sb.from("fotos").select("*").order("id", { ascending: false });
+  const { data, error } = await sb.from("fotos").select("*").eq("gruppenfoto", true).order("id", { ascending: false });
   if (error) { gruppenfotoMessage.textContent = `Fehler: ${error.message}`; return; }
   gruppenfotoListe.innerHTML = "";
   gruppenfotoLeer.hidden = !!(data && data.length);
@@ -1746,7 +1746,7 @@ gruppenfotoSpeichern?.addEventListener("click", async () => {
     gruppenfotoMessage.textContent = `Lade hoch … (${Math.round(optimiert.size / 1024)} KB)`;
     const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, optimiert, { contentType: "image/jpeg", upsert: false });
     if (uploadError) throw uploadError;
-    const { data: foto, error: insertError } = await sb.from("fotos").insert({ personen_id: ids[0], dateipfad: path, ist_schluesselfoto: false }).select().single();
+    const { data: foto, error: insertError } = await sb.from("fotos").insert({ personen_id: ids[0], dateipfad: path, ist_schluesselfoto: false, gruppenfoto: true }).select().single();
     if (insertError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); throw insertError; }
     const rows = ids.map((personen_id, index) => ({ foto_id: foto.id, personen_id, nummer: index + 1, position_x: 50, position_y: 50 }));
     const { error: linkError } = await sb.from("foto_personen").insert(rows);
