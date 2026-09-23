@@ -1595,7 +1595,7 @@ async function loadDetailFotos(personId) {
       });
       wrap.addEventListener("click", (event) => {
         event.stopPropagation();
-        openGruppenfotoViewer(signed?.signedUrl, markierungen || []);
+        openGruppenfotoViewer(signed?.signedUrl, markierungen || [], foto);
       });
     } else {
       div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
@@ -2025,8 +2025,15 @@ function closeDetailPhotoViewer() {
   if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
 }
 
-function openGruppenfotoViewer(url, markierungen = []) {
+let detailViewerFoto = null;
+let detailViewerMarkierungen = [];
+let detailViewerUrl = "";
+
+function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
   if (!detailPhotoViewer || !detailPhotoViewerImg || !url) return;
+  detailViewerFoto = foto || null;
+  detailViewerMarkierungen = markierungen || [];
+  detailViewerUrl = url;
   detailPhotoViewerImg.src = url;
   if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
   if (detailPhotoViewerLegend) detailPhotoViewerLegend.innerHTML = "";
@@ -2050,14 +2057,75 @@ function openGruppenfotoViewer(url, markierungen = []) {
     name.type = "button";
     name.className = "detail-photo-viewer__legend-name";
     name.textContent = fotoPersonName(row.personen_id);
-    name.disabled = !row.personen_id;
+    name.disabled = false;
     if (row.personen_id) {
       name.dataset.personId = row.personen_id;
+    } else {
+      name.classList.add("is-unknown");
+      name.title = "Tippen, um eine Person zuzuordnen";
     }
 
     // Auf dem iPad zuverlässig über Touch/Pointer reagieren.
     // Der gesamte Legenden-Eintrag ist anklickbar, nicht nur der Text.
-    if (row.personen_id) {
+    if (!row.personen_id) {
+      const openChooser = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (legend.querySelector(".detail-photo-viewer__assign")) return;
+        name.hidden = true;
+        const wrap = document.createElement("div");
+        wrap.className = "detail-photo-viewer__assign";
+        const search = document.createElement("input");
+        search.type = "search";
+        search.placeholder = "Name suchen …";
+        search.autocomplete = "off";
+        const select = document.createElement("select");
+        select.innerHTML = '<option value="">— Person auswählen —</option>';
+        const save = document.createElement("button");
+        save.type = "button"; save.className = "btn btn--secondary"; save.textContent = "Zuordnen";
+        const cancel = document.createElement("button");
+        cancel.type = "button"; cancel.className = "btn btn--ghost"; cancel.textContent = "Abbrechen";
+
+        const verfuegbar = (personenCache || [])
+          .filter(p => !detailViewerMarkierungen.some(x => x.id !== row.id && x.personen_id === p.id))
+          .slice()
+          .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
+        const fill = () => {
+          const q = search.value.trim().toLocaleLowerCase("de");
+          const list = q ? verfuegbar.filter(p => {
+            const a = fotoPersonAnzeige(p);
+            return `${a.name} ${a.daten||""}`.toLocaleLowerCase("de").includes(q);
+          }) : verfuegbar;
+          select.innerHTML = '<option value="">— Person auswählen —</option>' + list.map(p => {
+            const a = fotoPersonAnzeige(p);
+            return `<option value="${p.id}">${escapeHtml(a.name)}${a.daten ? ` — ${escapeHtml(a.daten)}` : ""}</option>`;
+          }).join("");
+        };
+        fill();
+        search.addEventListener("input", fill);
+        save.addEventListener("click", async () => {
+          const neueId = select.value;
+          if (!neueId) return;
+          if (detailViewerMarkierungen.some(x => x.id !== row.id && x.personen_id === neueId)) return;
+          const { error } = await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", row.id);
+          if (error) {
+            const msg = document.createElement("div");
+            msg.className = "form-message"; msg.textContent = `Fehler: ${error.message}`;
+            wrap.appendChild(msg);
+            return;
+          }
+          row.personen_id = neueId;
+          renderGruppenfotoViewer(detailViewerUrl, detailViewerMarkierungen, detailViewerFoto);
+        });
+        cancel.addEventListener("click", () => renderGruppenfotoViewer(detailViewerUrl, detailViewerMarkierungen, detailViewerFoto));
+        wrap.append(search, select, save, cancel);
+        legend.appendChild(wrap);
+        search.focus();
+      };
+      name.addEventListener("click", openChooser);
+      name.addEventListener("pointerup", (event) => { if (event.pointerType === "touch") openChooser(event); });
+      legend.style.cursor = "pointer";
+    } else {
       const openPerson = async (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -2087,6 +2155,10 @@ function openGruppenfotoViewer(url, markierungen = []) {
   });
   if (detailPhotoViewerLegend) detailPhotoViewerLegend.hidden = rows.length === 0;
   detailPhotoViewer.hidden = false;
+}
+
+function openGruppenfotoViewer(url, markierungen = [], foto = null) {
+  renderGruppenfotoViewer(url, markierungen, foto);
 }
 
 detailPhotoViewerClose?.addEventListener("click", closeDetailPhotoViewer);
