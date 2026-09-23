@@ -393,6 +393,7 @@
 .gruppenfoto-personen-auswahl__kopf{display:flex;align-items:center;justify-content:space-between;gap:.7rem;margin-bottom:.55rem}
 .gruppenfoto-personen-auswahl__kopf strong{font-size:.9rem;font-weight:600;white-space:nowrap}
 .gruppenfoto-personen-suche{width:100%;box-sizing:border-box;margin-bottom:.55rem}
+.gruppenfoto-person-option__text{display:flex;flex-direction:column;gap:.08rem;line-height:1.2}.gruppenfoto-person-option__text small{font-size:.86rem;opacity:.72}
 .gruppenfoto-personen-liste{display:flex;flex-direction:column;gap:.25rem;max-height:18rem;overflow:auto;-webkit-overflow-scrolling:touch}
 .gruppenfoto-person-option{display:flex;align-items:center;gap:.65rem;padding:.55rem .5rem;border:1px solid transparent;border-radius:7px;cursor:pointer;min-height:2.7rem}
 .gruppenfoto-person-option:hover{background:var(--paper)}

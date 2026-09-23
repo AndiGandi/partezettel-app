@@ -1646,6 +1646,30 @@ const gruppenfotoListe = document.getElementById("gruppenfoto-liste");
 const gruppenfotoLeer = document.getElementById("gruppenfoto-leer");
 let gruppenfotoDatei = null;
 
+function fotoPersonJahrDatumAnzeige(person) {
+  if (!person) return "";
+  const datum = (wert, jahr) => {
+    if (wert) {
+      const m = String(wert).match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+      return String(wert);
+    }
+    return jahr ? String(jahr) : "";
+  };
+  const geb = datum(person.geburtsdatum, person.geburtsjahr);
+  const gest = datum(person.sterbedatum, person.sterbejahr);
+  const teile = [];
+  if (geb) teile.push(`geb. ${geb}`);
+  if (gest) teile.push(`gest. ${gest}`);
+  return teile.join(" · ");
+}
+
+function fotoPersonAnzeige(person) {
+  if (!person) return { name: "Unbekannte Person", daten: "" };
+  const name = [person.vorname, person.nachname].filter(Boolean).join(" " ) || "Unbekannte Person";
+  return { name, daten: fotoPersonJahrDatumAnzeige(person) };
+}
+
 function gruppenfotoAusgewaehltePersonen() {
   return [...(gruppenfotoPersonenListe?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(el => el.value).filter(Boolean);
 }
@@ -1666,11 +1690,14 @@ function fuelleGruppenfotoPersonen() {
     if (!suchtext) return true;
     return `${p.vorname || ""} ${p.nachname || ""}`.toLocaleLowerCase("de").includes(suchtext);
   });
-  gruppenfotoPersonenListe.innerHTML = gefiltert.map(p => `
+  gruppenfotoPersonenListe.innerHTML = gefiltert.map(p => {
+    const anzeige = fotoPersonAnzeige(p);
+    return `
     <label class="gruppenfoto-person-option">
       <input type="checkbox" value="${p.id}" ${bisher.has(p.id) ? "checked" : ""}>
-      <span>${escapeHtml(p.nachname || "")}, ${escapeHtml(p.vorname || "")}</span>
-    </label>`).join("");
+      <span class="gruppenfoto-person-option__text"><strong>${escapeHtml(anzeige.name)}</strong>${anzeige.daten ? `<small>${escapeHtml(anzeige.daten)}</small>` : ""}</span>
+    </label>`;
+  }).join("");
   gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener("change", aktualisiereGruppenfotoPersonenAnzahl));
   aktualisiereGruppenfotoPersonenAnzahl();
 }
@@ -1781,7 +1808,10 @@ async function openFotoPersonenModal(foto) {
     .filter(p => !fotoMarkierungen.some(r => r.personen_id === p.id))
     .slice()
     .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
-  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + verfuegbarePersonen.map(p => `<option value="${p.id}">${escapeHtml(p.nachname || "")}, ${escapeHtml(p.vorname || "")}</option>`).join("");
+  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + verfuegbarePersonen.map(p => {
+    const anzeige = fotoPersonAnzeige(p);
+    return `<option value="${p.id}">${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
+  }).join("");
   fotoPersonAuswahl.disabled = verfuegbarePersonen.length === 0;
   fotoPersonenModal.hidden = false;
   renderFotoMarkierungen();
