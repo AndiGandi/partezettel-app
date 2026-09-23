@@ -416,3 +416,9 @@
 .detail-photo-viewer__legend-item:last-child{border-bottom:0}
 .detail-photo-viewer__legend-num{flex:0 0 2rem;width:2rem;height:2rem;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:2px solid var(--ink);font-weight:700}
 @media(max-width:760px){.detail-photo-viewer__content{flex-direction:column;align-items:center;width:100vw;max-height:96dvh;padding:.5rem;gap:.5rem;overflow:auto}.detail-photo-viewer__stage{max-width:96vw;max-height:68dvh}.detail-photo-viewer__stage img{max-height:68dvh}.detail-photo-viewer__legend{width:min(96vw,520px);max-height:22dvh;display:grid;grid-template-columns:1fr 1fr;gap:0 .5rem}.detail-photo-viewer__legend-item{font-size:.82rem}.detail-photo-viewer__marker{width:30px;height:30px;font-size:.9rem}}
+/* v132: Positionen beziehen sich exakt auf das sichtbare Bild, nicht auf die gesamte Markierfläche */
+.foto-markierflaeche{display:flex;justify-content:center;align-items:center;background:#222;overflow:hidden}
+.foto-markierbild-wrap{position:relative;display:inline-block;max-width:100%;max-height:62vh;line-height:0}
+.foto-markierbild-wrap img{display:block;max-width:100%;max-height:62vh;width:auto;height:auto;user-select:none;-webkit-user-select:none}
+.foto-markierbild-wrap #foto-markierungen{position:absolute;inset:0;pointer-events:none}
+@media(max-width:700px){.foto-markierbild-wrap,.foto-markierbild-wrap img{max-height:52vh}}

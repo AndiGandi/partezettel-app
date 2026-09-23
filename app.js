@@ -1555,7 +1555,7 @@ async function loadDetailFotos(personId) {
   for (const foto of fotos) {
     const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
     const { data: markierungen } = await sb.from("foto_personen")
-      .select("id, personen_id, nummer, position_x, position_y")
+      .select("id, personen_id, nummer, position_x, position_y, position_format")
       .eq("foto_id", foto.id)
       .order("nummer", { ascending: true });
     const istGruppenfoto = !!foto.gruppenfoto || (markierungen || []).length > 0;
@@ -1807,6 +1807,7 @@ let fotoAktiveMarkierungId = null;
 
 const fotoPersonenModal = document.getElementById("foto-personen-modal");
 const fotoMarkierbild = document.getElementById("foto-markierbild");
+const fotoMarkierbildWrap = document.getElementById("foto-markierbild-wrap");
 const fotoMarkierflaeche = document.getElementById("foto-markierflaeche");
 const fotoMarkierungenEl = document.getElementById("foto-markierungen");
 const fotoPersonenListe = document.getElementById("foto-personen-liste");
@@ -1831,7 +1832,7 @@ async function openFotoPersonenModal(foto) {
   fotoPersonenAktuell = foto;
   fotoAktiveMarkierungId = null;
   fotoPersonenMessage.textContent = "Lade …";
-  const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y").eq("foto_id", foto.id).order("nummer", { ascending: true });
+  const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", foto.id).order("nummer", { ascending: true });
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen = rows || [];
   const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
@@ -1846,8 +1847,32 @@ async function openFotoPersonenModal(foto) {
   }).join("");
   fotoPersonAuswahl.disabled = verfuegbarePersonen.length === 0;
   fotoPersonenModal.hidden = false;
-  renderFotoMarkierungen();
-  fotoPersonenMessage.textContent = "";
+  const renderAfterLoad = async () => {
+    await migriereAlteFotoPositionen();
+    renderFotoMarkierungen();
+    fotoPersonenMessage.textContent = "";
+  };
+  if (fotoMarkierbild.complete && fotoMarkierbild.naturalWidth) renderAfterLoad();
+  else fotoMarkierbild.addEventListener("load", renderAfterLoad, { once: true });
+}
+
+async function migriereAlteFotoPositionen() {
+  if (!fotoMarkierbildWrap || !fotoMarkierbild.naturalWidth) return;
+  const legacy = fotoMarkierungen.filter(r => (r.position_format || "flaeche") !== "bild");
+  if (!legacy.length) return;
+
+  const bildRect = fotoMarkierbild.getBoundingClientRect();
+  const flaechenRect = fotoMarkierflaeche.getBoundingClientRect();
+  if (!bildRect.width || !bildRect.height || !flaechenRect.width || !flaechenRect.height) return;
+
+  for (const row of legacy) {
+    const oldXpx = flaechenRect.left + (Number(row.position_x ?? 50) / 100) * flaechenRect.width;
+    const oldYpx = flaechenRect.top + (Number(row.position_y ?? 50) / 100) * flaechenRect.height;
+    const x = Math.max(0, Math.min(100, ((oldXpx - bildRect.left) / bildRect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((oldYpx - bildRect.top) / bildRect.height) * 100));
+    const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y, position_format: "bild" }).eq("id", row.id);
+    if (!error) { row.position_x = x; row.position_y = y; row.position_format = "bild"; }
+  }
 }
 
 function renderFotoMarkierungen() {
@@ -1932,31 +1957,21 @@ function renderFotoMarkierungen() {
 }
 
 
-fotoMarkierflaeche?.addEventListener("click", async (event) => {
+fotoMarkierbildWrap?.addEventListener("click", async (event) => {
   if (!fotoAktiveMarkierungId || !fotoMarkierbild.naturalWidth) return;
 
-  // Der Punkt wird exakt relativ zum tatsächlich dargestellten Bild ermittelt.
-  // Gespeichert wird weiterhin relativ zur gesamten Markierfläche, damit bereits
-  // vorhandene Positionen kompatibel bleiben.
   const bildRect = fotoMarkierbild.getBoundingClientRect();
-  const flaechenRect = fotoMarkierflaeche.getBoundingClientRect();
-  if (!bildRect.width || !bildRect.height || !flaechenRect.width || !flaechenRect.height) return;
+  if (!bildRect.width || !bildRect.height) return;
 
-  const bildX = Math.max(0, Math.min(100, ((event.clientX - bildRect.left) / bildRect.width) * 100));
-  const bildY = Math.max(0, Math.min(100, ((event.clientY - bildRect.top) / bildRect.height) * 100));
-
-  // Bildpunkt zurück in Prozent der Markierfläche umrechnen. Dadurch sitzt
-  // die gespeicherte Nummer genau auf dem angetippten Punkt – auch bei
-  // schwarzen Randflächen durch object-fit/Seitenverhältnis.
-  const punktX = bildRect.left + (bildX / 100) * bildRect.width;
-  const punktY = bildRect.top + (bildY / 100) * bildRect.height;
-  const x = Math.max(0, Math.min(100, ((punktX - flaechenRect.left) / flaechenRect.width) * 100));
-  const y = Math.max(0, Math.min(100, ((punktY - flaechenRect.top) / flaechenRect.height) * 100));
+  // Position wird ausschließlich relativ zum tatsächlich dargestellten Bild
+  // gespeichert. Dadurch bleibt sie bei jeder späteren Darstellung exakt gleich.
+  const x = Math.max(0, Math.min(100, ((event.clientX - bildRect.left) / bildRect.width) * 100));
+  const y = Math.max(0, Math.min(100, ((event.clientY - bildRect.top) / bildRect.height) * 100));
 
   const row = fotoMarkierungen.find(r => r.id === fotoAktiveMarkierungId);
   if (!row) return;
-  const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y }).eq("id", row.id);
-  if (!error) { row.position_x = x; row.position_y = y; fotoAktiveMarkierungId = null; fotoPersonenMessage.textContent = "Position gespeichert ✓"; renderFotoMarkierungen(); }
+  const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y, position_format: "bild" }).eq("id", row.id);
+  if (!error) { row.position_x = x; row.position_y = y; row.position_format = "bild"; fotoAktiveMarkierungId = null; fotoPersonenMessage.textContent = "Position gespeichert ✓"; renderFotoMarkierungen(); }
   else fotoPersonenMessage.textContent = `Fehler: ${error.message}`;
 });
 
@@ -1964,7 +1979,7 @@ document.getElementById("foto-person-hinzufuegen")?.addEventListener("click", as
   const personenId = fotoPersonAuswahl.value;
   if (!personenId || !fotoPersonenAktuell) return;
   const maxNr = Math.max(0, ...fotoMarkierungen.map(r => Number(r.nummer) || 0));
-  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: personenId, nummer: maxNr + 1, position_x: 50, position_y: 50 }).select().single();
+  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: personenId, nummer: maxNr + 1, position_x: 50, position_y: 50, position_format: "bild" }).select().single();
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen.push(data); fotoPersonAuswahl.value = ""; renderFotoMarkierungen();
 });
@@ -1972,7 +1987,7 @@ document.getElementById("foto-person-hinzufuegen")?.addEventListener("click", as
 document.getElementById("foto-unbekannt-hinzufuegen")?.addEventListener("click", async () => {
   if (!fotoPersonenAktuell) return;
   const maxNr = Math.max(0, ...fotoMarkierungen.map(r => Number(r.nummer) || 0));
-  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: null, nummer: maxNr + 1, position_x: 50, position_y: 50 }).select().single();
+  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: null, nummer: maxNr + 1, position_x: 50, position_y: 50, position_format: "bild" }).select().single();
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen.push(data); renderFotoMarkierungen();
 });
