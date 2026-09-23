@@ -1934,9 +1934,25 @@ function renderFotoMarkierungen() {
 
 fotoMarkierflaeche?.addEventListener("click", async (event) => {
   if (!fotoAktiveMarkierungId || !fotoMarkierbild.naturalWidth) return;
-  const rect = fotoMarkierbild.getBoundingClientRect();
-  const x = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
-  const y = Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100));
+
+  // Der Punkt wird exakt relativ zum tatsächlich dargestellten Bild ermittelt.
+  // Gespeichert wird weiterhin relativ zur gesamten Markierfläche, damit bereits
+  // vorhandene Positionen kompatibel bleiben.
+  const bildRect = fotoMarkierbild.getBoundingClientRect();
+  const flaechenRect = fotoMarkierflaeche.getBoundingClientRect();
+  if (!bildRect.width || !bildRect.height || !flaechenRect.width || !flaechenRect.height) return;
+
+  const bildX = Math.max(0, Math.min(100, ((event.clientX - bildRect.left) / bildRect.width) * 100));
+  const bildY = Math.max(0, Math.min(100, ((event.clientY - bildRect.top) / bildRect.height) * 100));
+
+  // Bildpunkt zurück in Prozent der Markierfläche umrechnen. Dadurch sitzt
+  // die gespeicherte Nummer genau auf dem angetippten Punkt – auch bei
+  // schwarzen Randflächen durch object-fit/Seitenverhältnis.
+  const punktX = bildRect.left + (bildX / 100) * bildRect.width;
+  const punktY = bildRect.top + (bildY / 100) * bildRect.height;
+  const x = Math.max(0, Math.min(100, ((punktX - flaechenRect.left) / flaechenRect.width) * 100));
+  const y = Math.max(0, Math.min(100, ((punktY - flaechenRect.top) / flaechenRect.height) * 100));
+
   const row = fotoMarkierungen.find(r => r.id === fotoAktiveMarkierungId);
   if (!row) return;
   const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y }).eq("id", row.id);
