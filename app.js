@@ -2005,11 +2005,35 @@ function openGruppenfotoViewer(url, markierungen = []) {
     name.textContent = fotoPersonName(row.personen_id);
     name.disabled = !row.personen_id;
     if (row.personen_id) {
-      name.addEventListener("click", async (event) => {
+      name.dataset.personId = row.personen_id;
+    }
+
+    // Auf dem iPad zuverlässig über Touch/Pointer reagieren.
+    // Der gesamte Legenden-Eintrag ist anklickbar, nicht nur der Text.
+    if (row.personen_id) {
+      const openPerson = async (event) => {
+        event.preventDefault();
         event.stopPropagation();
+        const personId = row.personen_id;
         closeDetailPhotoViewer();
-        await openPersonDetail(row.personen_id);
+        // Personen-Tab aktivieren, damit die darunterliegende Ansicht
+        // ebenfalls auf dem richtigen Bereich steht.
+        document.querySelector('.tab-btn[data-tab="liste"]')?.click();
+        try {
+          await openPersonDetail(personId);
+        } catch (err) {
+          debugLog(`❌ Person aus Gruppenfoto öffnen: ${err.message || err}`);
+        }
+      };
+      name.addEventListener("click", openPerson);
+      name.addEventListener("pointerup", (event) => {
+        if (event.pointerType === "touch") openPerson(event);
       });
+      legend.addEventListener("click", (event) => {
+        if (event.target === name) return;
+        openPerson(event);
+      });
+      legend.style.cursor = "pointer";
     }
     legend.append(badge, name);
     detailPhotoViewerLegend?.appendChild(legend);
