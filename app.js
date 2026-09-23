@@ -163,6 +163,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     // Scrollposition der vorherigen Ansicht.
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (btn.dataset.tab === "liste") loadPersonen();
+    if (btn.dataset.tab === "fotos") { fuelleGruppenfotoPersonen(); ladeGruppenfotoListe(); }
     if (btn.dataset.tab === "stammbaum") loadStammbaum();
   });
 });
@@ -1622,6 +1623,81 @@ function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'\"':"&quot;","\'":"&#39;"}[ch]));
 }
 
+// ---- Zentrale Fotoübersicht ----
+const gruppenfotoInput = document.getElementById("gruppenfoto-input");
+const gruppenfotoPreview = document.getElementById("gruppenfoto-preview");
+const gruppenfotoStatus = document.getElementById("gruppenfoto-status");
+const gruppenfotoPersonen = document.getElementById("gruppenfoto-personen");
+const gruppenfotoSpeichern = document.getElementById("gruppenfoto-speichern");
+const gruppenfotoMessage = document.getElementById("gruppenfoto-message");
+const gruppenfotoListe = document.getElementById("gruppenfoto-liste");
+const gruppenfotoLeer = document.getElementById("gruppenfoto-leer");
+let gruppenfotoDatei = null;
+
+function fuelleGruppenfotoPersonen() {
+  if (!gruppenfotoPersonen) return;
+  const selected = new Set([...gruppenfotoPersonen.selectedOptions].map(o => o.value));
+  gruppenfotoPersonen.innerHTML = (personenCache || []).slice().sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"))
+    .map(p => `<option value="${p.id}" ${selected.has(p.id) ? "selected" : ""}>${escapeHtml(p.nachname || "")}, ${escapeHtml(p.vorname || "")}</option>`).join("");
+}
+
+async function ladeGruppenfotoListe() {
+  if (!gruppenfotoListe) return;
+  const { data, error } = await sb.from("fotos").select("*").order("id", { ascending: false });
+  if (error) { gruppenfotoMessage.textContent = `Fehler: ${error.message}`; return; }
+  gruppenfotoListe.innerHTML = "";
+  gruppenfotoLeer.hidden = !!(data && data.length);
+  for (const foto of (data || [])) {
+    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    const div = document.createElement("div");
+    div.className = "detail-media-item";
+    div.innerHTML = `<img src="${signed?.signedUrl || ""}" alt="Foto"><span class="beziehung-text">Foto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">👥 Personen</button>`;
+    div.querySelector("img")?.addEventListener("click", () => openFotoPersonenModal(foto));
+    div.querySelector(".gruppenfoto-personen-btn").addEventListener("click", () => openFotoPersonenModal(foto));
+    gruppenfotoListe.appendChild(div);
+  }
+}
+
+gruppenfotoInput?.addEventListener("change", () => {
+  const file = gruppenfotoInput.files?.[0];
+  gruppenfotoDatei = file || null;
+  if (!file) { gruppenfotoPreview.hidden = true; gruppenfotoStatus.textContent = "Kein Foto ausgewählt"; return; }
+  gruppenfotoPreview.src = URL.createObjectURL(file);
+  gruppenfotoPreview.hidden = false;
+  gruppenfotoStatus.textContent = `${file.name} ausgewählt ✓`;
+});
+
+gruppenfotoSpeichern?.addEventListener("click", async () => {
+  gruppenfotoMessage.textContent = "";
+  if (!gruppenfotoDatei) { gruppenfotoMessage.textContent = "Bitte zuerst ein Foto auswählen."; return; }
+  const ids = [...gruppenfotoPersonen.selectedOptions].map(o => o.value).filter(Boolean);
+  if (!ids.length) { gruppenfotoMessage.textContent = "Bitte mindestens eine Person auswählen."; return; }
+  gruppenfotoSpeichern.disabled = true;
+  try {
+    gruppenfotoMessage.textContent = "Foto anpassen …";
+    const edited = await openPhotoEditor(gruppenfotoDatei);
+    if (!edited) { gruppenfotoMessage.textContent = "Foto nicht übernommen."; return; }
+    const optimiert = await blobZuJPEGUnter200KB(edited);
+    if (!optimiert) throw new Error("Foto konnte nicht optimiert werden.");
+    const path = `gruppenfotos/${Date.now()}-${Math.random().toString(36).slice(2,8)}.jpg`;
+    gruppenfotoMessage.textContent = `Lade hoch … (${Math.round(optimiert.size / 1024)} KB)`;
+    const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, optimiert, { contentType: "image/jpeg", upsert: false });
+    if (uploadError) throw uploadError;
+    const { data: foto, error: insertError } = await sb.from("fotos").insert({ personen_id: ids[0], dateipfad: path, ist_schluesselfoto: false }).select().single();
+    if (insertError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); throw insertError; }
+    const rows = ids.map((personen_id, index) => ({ foto_id: foto.id, personen_id, nummer: index + 1, position_x: 50, position_y: 50 }));
+    const { error: linkError } = await sb.from("foto_personen").insert(rows);
+    if (linkError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); await sb.from("fotos").delete().eq("id", foto.id); throw linkError; }
+    gruppenfotoMessage.textContent = "Foto gespeichert ✓";
+    gruppenfotoDatei = null; gruppenfotoInput.value = ""; gruppenfotoPreview.hidden = true; gruppenfotoStatus.textContent = "Kein Foto ausgewählt";
+    [...gruppenfotoPersonen.options].forEach(o => o.selected = false);
+    await ladeGruppenfotoListe();
+    await openFotoPersonenModal(foto);
+  } catch (err) {
+    gruppenfotoMessage.textContent = `Fehler: ${err.message || err}`;
+  } finally { gruppenfotoSpeichern.disabled = false; }
+});
+
 // ---- Gruppenfoto: mehrere Personen + manuelle Nummern/Positionen ----
 let fotoPersonenAktuell = null;
 let fotoMarkierungen = [];
@@ -1649,7 +1725,7 @@ async function openFotoPersonenModal(foto) {
   const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y").eq("foto_id", foto.id).order("nummer", { ascending: true });
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen = rows || [];
-  if (!fotoMarkierungen.some(r => r.personen_id === currentDetailPersonId)) {
+  if (currentDetailPersonId && !fotoMarkierungen.some(r => r.personen_id === currentDetailPersonId)) {
     const maxNr = Math.max(0, ...fotoMarkierungen.map(r => Number(r.nummer) || 0));
     const { data: created, error: createError } = await sb.from("foto_personen").insert({ foto_id: foto.id, personen_id: currentDetailPersonId, nummer: maxNr + 1, position_x: 50, position_y: 50 }).select().single();
     if (!createError && created) fotoMarkierungen.push(created);

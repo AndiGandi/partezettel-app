@@ -367,3 +367,23 @@
 .foto-person-zeile__num{font-weight:700;min-width:2rem}.foto-person-zeile__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .foto-person-zeile button{padding:.4rem .5rem}.foto-personen-controls>.btn{margin:.2rem .25rem .2rem 0}
 @media(max-width:760px){.foto-personen-body{grid-template-columns:1fr;padding:.7rem}.foto-personen-sheet{max-height:96dvh}.foto-markierflaeche{min-height:180px}.foto-markierung{width:38px;height:38px;font-size:1.05rem}}
+
+/* Zentrale Gruppenfoto-Ansicht */
+#gruppenfoto-personen{min-height:9rem;background:#fff}
+#gruppenfoto-personen option{padding:.28rem .2rem}
+#gruppenfoto-liste .detail-media-item{min-height:58px}
+.foto-markierflaeche{position:relative;display:flex;justify-content:center;align-items:center;background:#222;border-radius:8px;overflow:hidden;touch-action:none}
+.foto-markierflaeche img{display:block;max-width:100%;max-height:62vh;width:auto;height:auto;user-select:none;-webkit-user-select:none}
+.foto-markierungen{position:absolute;inset:0;pointer-events:none}
+.foto-markierung{position:absolute;transform:translate(-50%,-50%);width:2rem;height:2rem;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;color:#111;border:2px solid #111;font-weight:700;font-size:1rem;box-shadow:0 1px 5px rgba(0,0,0,.45);pointer-events:auto;cursor:pointer}
+.foto-markierung.is-active{outline:3px solid var(--accent)}
+.foto-personen-modal{position:fixed;inset:0;z-index:10020;background:rgba(0,0,0,.65);display:flex;align-items:flex-start;justify-content:center;padding:.5rem}
+.foto-personen-modal[hidden]{display:none}
+.foto-personen-sheet{background:var(--paper);width:min(980px,100%);max-height:98dvh;overflow:auto;border-radius:12px;padding:.7rem}
+.foto-personen-body{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(260px,.8fr);gap:.8rem}
+.foto-personen-controls{min-width:0}
+.foto-personen-liste{display:flex;flex-direction:column;gap:.35rem;margin-top:.6rem}
+.foto-person-zeile{display:flex;align-items:center;gap:.35rem;padding:.35rem .4rem;border:1px solid var(--line);border-radius:7px;background:#fff}
+.foto-person-zeile__num{font-weight:700;min-width:2rem}
+.foto-person-zeile__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:700px){.foto-personen-body{grid-template-columns:1fr}.foto-markierflaeche img{max-height:52vh}.foto-person-zeile{flex-wrap:wrap}.foto-person-zeile__name{min-width:8rem}}
