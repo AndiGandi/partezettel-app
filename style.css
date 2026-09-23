@@ -387,3 +387,15 @@
 .foto-person-zeile__num{font-weight:700;min-width:2rem}
 .foto-person-zeile__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 @media(max-width:700px){.foto-personen-body{grid-template-columns:1fr}.foto-markierflaeche img{max-height:52vh}.foto-person-zeile{flex-wrap:wrap}.foto-person-zeile__name{min-width:8rem}}
+
+/* v123: übersichtliche Mehrfachauswahl beim ersten Gruppenfoto */
+.gruppenfoto-personen-auswahl{border:1px solid var(--line);border-radius:10px;background:#fff;padding:.65rem}
+.gruppenfoto-personen-auswahl__kopf{display:flex;align-items:center;justify-content:space-between;gap:.7rem;margin-bottom:.55rem}
+.gruppenfoto-personen-auswahl__kopf strong{font-size:.9rem;font-weight:600;white-space:nowrap}
+.gruppenfoto-personen-suche{width:100%;box-sizing:border-box;margin-bottom:.55rem}
+.gruppenfoto-personen-liste{display:flex;flex-direction:column;gap:.25rem;max-height:18rem;overflow:auto;-webkit-overflow-scrolling:touch}
+.gruppenfoto-person-option{display:flex;align-items:center;gap:.65rem;padding:.55rem .5rem;border:1px solid transparent;border-radius:7px;cursor:pointer;min-height:2.7rem}
+.gruppenfoto-person-option:hover{background:var(--paper)}
+.gruppenfoto-person-option input{width:1.15rem;height:1.15rem;flex:0 0 auto}
+.gruppenfoto-person-option span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:700px){.gruppenfoto-personen-liste{max-height:15rem}.gruppenfoto-person-option{min-height:2.9rem}}

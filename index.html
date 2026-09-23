@@ -242,11 +242,15 @@
       </label>
       <img id="gruppenfoto-preview" class="preview-img" hidden>
       <div id="gruppenfoto-status" class="capture-status" style="margin-top:.5rem;">Kein Foto ausgewählt</div>
-      <label class="field" style="margin-top:.8rem;">
-        <span>Personen auf dem Foto *</span>
-        <select id="gruppenfoto-personen" multiple size="7"></select>
-      </label>
-      <p class="capture-status">Mindestens eine Person auswählen. Unbekannte Personen können danach im Foto markiert werden.</p>
+      <div class="gruppenfoto-personen-auswahl" style="margin-top:.8rem;">
+        <div class="gruppenfoto-personen-auswahl__kopf">
+          <span>Personen auf dem Foto *</span>
+          <strong id="gruppenfoto-personen-anzahl">0 ausgewählt</strong>
+        </div>
+        <input type="search" id="gruppenfoto-personen-suche" class="gruppenfoto-personen-suche" placeholder="Person suchen …" autocomplete="off">
+        <div id="gruppenfoto-personen-liste" class="gruppenfoto-personen-liste" aria-label="Personen auswählen"></div>
+      </div>
+      <p class="capture-status">Mehrere Personen können bereits beim ersten Anlegen ausgewählt werden. Unbekannte Personen können anschließend direkt am Foto ergänzt werden.</p>
       <button type="button" id="gruppenfoto-speichern" class="btn btn--primary btn--full">Foto speichern</button>
       <p id="gruppenfoto-message" class="form-message"></p>
     </fieldset>

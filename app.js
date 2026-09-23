@@ -1637,19 +1637,45 @@ function escapeHtml(value) {
 const gruppenfotoInput = document.getElementById("gruppenfoto-input");
 const gruppenfotoPreview = document.getElementById("gruppenfoto-preview");
 const gruppenfotoStatus = document.getElementById("gruppenfoto-status");
-const gruppenfotoPersonen = document.getElementById("gruppenfoto-personen");
+const gruppenfotoPersonenListe = document.getElementById("gruppenfoto-personen-liste");
+const gruppenfotoPersonenSuche = document.getElementById("gruppenfoto-personen-suche");
+const gruppenfotoPersonenAnzahl = document.getElementById("gruppenfoto-personen-anzahl");
 const gruppenfotoSpeichern = document.getElementById("gruppenfoto-speichern");
 const gruppenfotoMessage = document.getElementById("gruppenfoto-message");
 const gruppenfotoListe = document.getElementById("gruppenfoto-liste");
 const gruppenfotoLeer = document.getElementById("gruppenfoto-leer");
 let gruppenfotoDatei = null;
 
-function fuelleGruppenfotoPersonen() {
-  if (!gruppenfotoPersonen) return;
-  const selected = new Set([...gruppenfotoPersonen.selectedOptions].map(o => o.value));
-  gruppenfotoPersonen.innerHTML = (personenCache || []).slice().sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"))
-    .map(p => `<option value="${p.id}" ${selected.has(p.id) ? "selected" : ""}>${escapeHtml(p.nachname || "")}, ${escapeHtml(p.vorname || "")}</option>`).join("");
+function gruppenfotoAusgewaehltePersonen() {
+  return [...(gruppenfotoPersonenListe?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(el => el.value).filter(Boolean);
 }
+
+function aktualisiereGruppenfotoPersonenAnzahl() {
+  if (gruppenfotoPersonenAnzahl) {
+    const n = gruppenfotoAusgewaehltePersonen().length;
+    gruppenfotoPersonenAnzahl.textContent = `${n} ${n === 1 ? "Person ausgewählt" : "Personen ausgewählt"}`;
+  }
+}
+
+function fuelleGruppenfotoPersonen() {
+  if (!gruppenfotoPersonenListe) return;
+  const bisher = new Set(gruppenfotoAusgewaehltePersonen());
+  const suchtext = (gruppenfotoPersonenSuche?.value || "").trim().toLocaleLowerCase("de");
+  const personen = (personenCache || []).slice().sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
+  const gefiltert = personen.filter(p => {
+    if (!suchtext) return true;
+    return `${p.vorname || ""} ${p.nachname || ""}`.toLocaleLowerCase("de").includes(suchtext);
+  });
+  gruppenfotoPersonenListe.innerHTML = gefiltert.map(p => `
+    <label class="gruppenfoto-person-option">
+      <input type="checkbox" value="${p.id}" ${bisher.has(p.id) ? "checked" : ""}>
+      <span>${escapeHtml(p.nachname || "")}, ${escapeHtml(p.vorname || "")}</span>
+    </label>`).join("");
+  gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener("change", aktualisiereGruppenfotoPersonenAnzahl));
+  aktualisiereGruppenfotoPersonenAnzahl();
+}
+
+gruppenfotoPersonenSuche?.addEventListener("input", fuelleGruppenfotoPersonen);
 
 async function ladeGruppenfotoListe() {
   if (!gruppenfotoListe) return;
@@ -1680,7 +1706,7 @@ gruppenfotoInput?.addEventListener("change", () => {
 gruppenfotoSpeichern?.addEventListener("click", async () => {
   gruppenfotoMessage.textContent = "";
   if (!gruppenfotoDatei) { gruppenfotoMessage.textContent = "Bitte zuerst ein Foto auswählen."; return; }
-  const ids = [...gruppenfotoPersonen.selectedOptions].map(o => o.value).filter(Boolean);
+  const ids = gruppenfotoAusgewaehltePersonen();
   if (!ids.length) { gruppenfotoMessage.textContent = "Bitte mindestens eine Person auswählen."; return; }
   gruppenfotoSpeichern.disabled = true;
   try {
@@ -1700,7 +1726,9 @@ gruppenfotoSpeichern?.addEventListener("click", async () => {
     if (linkError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); await sb.from("fotos").delete().eq("id", foto.id); throw linkError; }
     gruppenfotoMessage.textContent = "Foto gespeichert ✓";
     gruppenfotoDatei = null; gruppenfotoInput.value = ""; gruppenfotoPreview.hidden = true; gruppenfotoStatus.textContent = "Kein Foto ausgewählt";
-    [...gruppenfotoPersonen.options].forEach(o => o.selected = false);
+    gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    if (gruppenfotoPersonenSuche) gruppenfotoPersonenSuche.value = "";
+    aktualisiereGruppenfotoPersonenAnzahl();
     await ladeGruppenfotoListe();
     await openFotoPersonenModal(foto);
   } catch (err) {
