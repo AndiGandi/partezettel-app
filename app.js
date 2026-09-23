@@ -1595,9 +1595,7 @@ async function loadDetailFotos(personId) {
       });
       wrap.addEventListener("click", (event) => {
         event.stopPropagation();
-        const viewer = document.getElementById("detail-photo-viewer");
-        const viewerImg = document.getElementById("detail-photo-viewer-img");
-        if (viewer && viewerImg && signed?.signedUrl) { viewerImg.src = signed.signedUrl; viewer.hidden = false; }
+        openGruppenfotoViewer(signed?.signedUrl, markierungen || []);
       });
     } else {
       div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
@@ -1969,16 +1967,50 @@ fotoPersonenModal?.addEventListener("click", e => { if (e.target === fotoPersone
 const detailPhotoViewer = document.getElementById("detail-photo-viewer");
 const detailPhotoViewerImg = document.getElementById("detail-photo-viewer-img");
 const detailPhotoViewerClose = document.getElementById("detail-photo-viewer-close");
+const detailPhotoViewerMarkers = document.getElementById("detail-photo-viewer-markers");
+const detailPhotoViewerLegend = document.getElementById("detail-photo-viewer-legend");
 
 function closeDetailPhotoViewer() {
   if (!detailPhotoViewer) return;
   detailPhotoViewer.hidden = true;
   if (detailPhotoViewerImg) detailPhotoViewerImg.src = "";
+  if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+  if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+}
+
+function openGruppenfotoViewer(url, markierungen = []) {
+  if (!detailPhotoViewer || !detailPhotoViewerImg || !url) return;
+  detailPhotoViewerImg.src = url;
+  if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+  if (detailPhotoViewerLegend) detailPhotoViewerLegend.innerHTML = "";
+
+  const rows = [...(markierungen || [])].sort((a,b) => Number(a.nummer) - Number(b.nummer));
+  rows.forEach(row => {
+    const marker = document.createElement("span");
+    marker.className = "detail-photo-viewer__marker";
+    marker.textContent = row.nummer;
+    marker.style.left = `${Number(row.position_x ?? 50)}%`;
+    marker.style.top = `${Number(row.position_y ?? 50)}%`;
+    marker.title = `${row.nummer}: ${fotoPersonName(row.personen_id)}`;
+    detailPhotoViewerMarkers?.appendChild(marker);
+
+    const legend = document.createElement("div");
+    legend.className = "detail-photo-viewer__legend-item";
+    const badge = document.createElement("span");
+    badge.className = "detail-photo-viewer__legend-num";
+    badge.textContent = row.nummer;
+    const name = document.createElement("span");
+    name.textContent = fotoPersonName(row.personen_id);
+    legend.append(badge, name);
+    detailPhotoViewerLegend?.appendChild(legend);
+  });
+  if (detailPhotoViewerLegend) detailPhotoViewerLegend.hidden = rows.length === 0;
+  detailPhotoViewer.hidden = false;
 }
 
 detailPhotoViewerClose?.addEventListener("click", closeDetailPhotoViewer);
 detailPhotoViewer?.addEventListener("click", (event) => {
-  if (event.target === detailPhotoViewer || event.target === detailPhotoViewerImg) closeDetailPhotoViewer();
+  if (event.target === detailPhotoViewer) closeDetailPhotoViewer();
 });
 
 // Auch das gerade ausgewählte Foto bei „Neu erfassen“ kann vergrößert werden.

@@ -467,7 +467,13 @@
 
 <div id="detail-photo-viewer" class="detail-photo-viewer" hidden aria-label="Foto vergrößert">
   <button type="button" id="detail-photo-viewer-close" class="detail-photo-viewer__close" aria-label="Foto schließen">✕</button>
-  <img id="detail-photo-viewer-img" alt="Foto vergrößert">
+  <div class="detail-photo-viewer__content">
+    <div id="detail-photo-viewer-stage" class="detail-photo-viewer__stage">
+      <img id="detail-photo-viewer-img" alt="Foto vergrößert">
+      <div id="detail-photo-viewer-markers" class="detail-photo-viewer__markers"></div>
+    </div>
+    <div id="detail-photo-viewer-legend" class="detail-photo-viewer__legend" hidden></div>
+  </div>
 </div>
 
 
@@ -520,6 +526,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=127"></script>
+<script src="app.js?v=128"></script>
 </body>
 </html>
