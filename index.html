@@ -491,7 +491,10 @@
         </div>
       </div>
       <div class="foto-personen-controls">
-        <label class="field"><span>Person hinzufügen</span><select id="foto-person-auswahl"><option value="">— Person auswählen —</option></select></label>
+        <label class="field"><span>Person hinzufügen</span>
+          <input type="search" id="foto-person-suche" class="foto-person-suche" placeholder="Name suchen …" autocomplete="off">
+          <select id="foto-person-auswahl"><option value="">— Person auswählen —</option></select>
+        </label>
         <button type="button" id="foto-person-hinzufuegen" class="btn btn--secondary">＋ Person hinzufügen</button>
         <button type="button" id="foto-unbekannt-hinzufuegen" class="btn btn--ghost">＋ Unbekannte Person</button>
         <p class="capture-status">Nummern und Positionen können jederzeit geändert werden.</p>
@@ -528,6 +531,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=132"></script>
+<script src="app.js?v=133"></script>
 </body>
 </html>

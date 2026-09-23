@@ -1812,6 +1812,7 @@ const fotoMarkierflaeche = document.getElementById("foto-markierflaeche");
 const fotoMarkierungenEl = document.getElementById("foto-markierungen");
 const fotoPersonenListe = document.getElementById("foto-personen-liste");
 const fotoPersonAuswahl = document.getElementById("foto-person-auswahl");
+const fotoPersonSuche = document.getElementById("foto-person-suche");
 const fotoPersonenMessage = document.getElementById("foto-personen-message");
 
 function fotoPersonName(id) {
@@ -1837,15 +1838,13 @@ async function openFotoPersonenModal(foto) {
   fotoMarkierungen = rows || [];
   const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
   fotoMarkierbild.src = signed?.signedUrl || "";
-  const verfuegbarePersonen = (personenCache || [])
+  fotoPersonAuswahl._alleVerfuegbarenPersonen = (personenCache || [])
     .filter(p => !fotoMarkierungen.some(r => r.personen_id === p.id))
     .slice()
     .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
-  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + verfuegbarePersonen.map(p => {
-    const anzeige = fotoPersonAnzeige(p);
-    return `<option value="${p.id}">${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
-  }).join("");
-  fotoPersonAuswahl.disabled = verfuegbarePersonen.length === 0;
+  if (fotoPersonSuche) fotoPersonSuche.value = "";
+  renderFotoPersonAuswahl();
+  fotoPersonAuswahl.disabled = fotoPersonAuswahl._alleVerfuegbarenPersonen.length === 0;
   fotoPersonenModal.hidden = false;
   const renderAfterLoad = async () => {
     await migriereAlteFotoPositionen();
@@ -1855,6 +1854,23 @@ async function openFotoPersonenModal(foto) {
   if (fotoMarkierbild.complete && fotoMarkierbild.naturalWidth) renderAfterLoad();
   else fotoMarkierbild.addEventListener("load", renderAfterLoad, { once: true });
 }
+
+
+function renderFotoPersonAuswahl() {
+  if (!fotoPersonAuswahl) return;
+  const alle = fotoPersonAuswahl._alleVerfuegbarenPersonen || [];
+  const suchtext = (fotoPersonSuche?.value || "").trim().toLocaleLowerCase("de");
+  const gefiltert = suchtext ? alle.filter(p => {
+    const a = fotoPersonAnzeige(p);
+    return `${a.name} ${a.daten || ""}`.toLocaleLowerCase("de").includes(suchtext);
+  }) : alle;
+  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + gefiltert.map(p => {
+    const anzeige = fotoPersonAnzeige(p);
+    return `<option value="${p.id}">${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
+  }).join("");
+}
+
+fotoPersonSuche?.addEventListener("input", renderFotoPersonAuswahl);
 
 async function migriereAlteFotoPositionen() {
   if (!fotoMarkierbildWrap || !fotoMarkierbild.naturalWidth) return;

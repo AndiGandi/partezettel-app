@@ -422,3 +422,8 @@
 .foto-markierbild-wrap img{display:block;max-width:100%;max-height:62vh;width:auto;height:auto;user-select:none;-webkit-user-select:none}
 .foto-markierbild-wrap #foto-markierungen{position:absolute;inset:0;pointer-events:none}
 @media(max-width:700px){.foto-markierbild-wrap,.foto-markierbild-wrap img{max-height:52vh}}
+
+/* Gruppenfoto: Personensuche in der Zuordnung */
+.foto-person-suche {
+  margin-bottom: .4rem;
+}
