@@ -1719,6 +1719,13 @@ function fotoPersonName(id) {
 
 async function openFotoPersonenModal(foto) {
   if (!fotoPersonenModal) return;
+  // Die Personenliste muss auch erreichbar sein, wenn der Nutzer direkt über
+  // den Fotos-Menüpunkt kommt und die Personenansicht noch nicht geladen wurde.
+  if (!Array.isArray(personenCache) || personenCache.length === 0) {
+    try { await loadPersonen(); } catch (err) {
+      fotoPersonenMessage.textContent = `Personen konnten nicht geladen werden: ${err.message || err}`;
+    }
+  }
   fotoPersonenAktuell = foto;
   fotoAktiveMarkierungId = null;
   fotoPersonenMessage.textContent = "Lade …";
@@ -1732,7 +1739,12 @@ async function openFotoPersonenModal(foto) {
   }
   const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
   fotoMarkierbild.src = signed?.signedUrl || "";
-  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + (personenCache || []).filter(p => !fotoMarkierungen.some(r => r.personen_id === p.id)).map(p => `<option value="${p.id}">${escapeHtml(p.vorname || "")} ${escapeHtml(p.nachname || "")}</option>`).join("");
+  const verfuegbarePersonen = (personenCache || [])
+    .filter(p => !fotoMarkierungen.some(r => r.personen_id === p.id))
+    .slice()
+    .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
+  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + verfuegbarePersonen.map(p => `<option value="${p.id}">${escapeHtml(p.nachname || "")}, ${escapeHtml(p.vorname || "")}</option>`).join("");
+  fotoPersonAuswahl.disabled = verfuegbarePersonen.length === 0;
   fotoPersonenModal.hidden = false;
   renderFotoMarkierungen();
   fotoPersonenMessage.textContent = "";
