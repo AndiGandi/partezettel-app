@@ -145,7 +145,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
+  btn.addEventListener("click", async () => {
     document.querySelectorAll(".tab-btn").forEach((b) => {
       b.classList.remove("is-active");
       b.setAttribute("aria-selected", "false");
@@ -162,9 +162,19 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     // So startet jede Ansicht oben und nicht an der zuletzt gespeicherten
     // Scrollposition der vorherigen Ansicht.
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    if (btn.dataset.tab === "liste") loadPersonen();
-    if (btn.dataset.tab === "fotos") { fuelleGruppenfotoPersonen(); ladeGruppenfotoListe(); }
-    if (btn.dataset.tab === "stammbaum") loadStammbaum();
+    if (btn.dataset.tab === "liste") await loadPersonen();
+    if (btn.dataset.tab === "fotos") {
+      // Beim direkten Wechsel auf „Fotos“ zuerst die Personen laden,
+      // damit die Auswahl nicht leer bleibt, wenn der Cache noch nicht gefüllt ist.
+      if (!Array.isArray(personenCache) || personenCache.length === 0) {
+        try { await loadPersonen(); } catch (err) {
+          debugLog(`⚠️ Personen für Gruppenfotos: ${err.message || err}`);
+        }
+      }
+      fuelleGruppenfotoPersonen();
+      await ladeGruppenfotoListe();
+    }
+    if (btn.dataset.tab === "stammbaum") await loadStammbaum();
   });
 });
 
