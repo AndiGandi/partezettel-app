@@ -349,6 +349,14 @@
 .tree-relationship-sentence{margin-top:.25rem;font-size:.95rem}
 .tree-relationship-path{margin-top:.55rem;color:var(--ink-soft);font-size:.88rem;line-height:1.55}
 .tree-relationship-path-title{display:block;font-weight:600;color:var(--ink);margin-bottom:.15rem}
+.tree-relationship-graphic{display:flex;flex-direction:column;align-items:center;margin-top:.9rem;padding:.75rem .4rem;border-top:1px solid var(--line);gap:.15rem}
+.tree-relationship-node{min-width:180px;max-width:100%;padding:.55rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--card);text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.tree-relationship-node strong{display:block;font-family:Georgia,serif;font-weight:600;font-size:.95rem}
+.tree-relationship-node small{display:block;margin-top:.15rem;color:var(--ink-soft);font-size:.75rem}
+.tree-relationship-arrow{display:flex;flex-direction:column;align-items:center;line-height:1.1;color:var(--ink-soft);font-size:.72rem;min-height:30px;justify-content:center}
+.tree-relationship-arrow span{font-weight:600;color:var(--ink);text-align:center}
+.tree-relationship-arrow b{font-size:1rem;font-weight:400}
+@media(max-width:700px){.tree-relationship-node{min-width:160px}.tree-relationship-graphic{padding-left:0;padding-right:0}}
 @media(max-width:700px){
  .tree-relationship-open{width:100%;margin-top:.45rem}
  .tree-relationship-fields{grid-template-columns:1fr}

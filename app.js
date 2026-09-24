@@ -4303,9 +4303,37 @@ function treeRelationshipStepWord(fromId, edgeType, toId) {
     return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
   }
   if (edgeType === "parent") {
-    return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+    // Die Ausgangsperson ist Elternteil der Zielperson.
+    return treeGenderWord(fromId, "Vater", "Mutter") + " von";
   }
-  return treeGenderWord(fromId, "Vater", "Mutter") + " von";
+  // Die Ausgangsperson ist Kind der Zielperson.
+  return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+}
+
+function treeRelationshipPathGraphic(aId, path) {
+  if (!path || !path.length) return "";
+  const items = [{ id: aId, label: treePersonLabel(aId) }];
+  let currentId = aId;
+  for (const edge of path) {
+    let relationLabel = "";
+    if (edge.type === "spouse") {
+      relationLabel = treeGenderWord(currentId, "Ehemann", "Ehefrau") + " von";
+    } else if (edge.type === "parent") {
+      relationLabel = treeGenderWord(currentId, "Vater", "Mutter") + " von";
+    } else {
+      relationLabel = treeGenderWord(currentId, "Sohn", "Tochter") + " von";
+    }
+    items.push({ id: edge.to, label: treePersonLabel(edge.to), relationLabel });
+    currentId = edge.to;
+  }
+
+  return `<div class="tree-relationship-graphic" aria-label="Grafischer Verwandtschaftspfad">${items.map((item, index) => {
+    const person = treePerson(item.id);
+    const dates = person ? [person.geburtsjahr, person.sterbejahr].filter(Boolean).join("–") : "";
+    const card = `<div class="tree-relationship-node" data-tree-relation-node="${escTree(item.id)}"><strong>${escTree(item.label)}</strong>${dates ? `<small>${escTree(String(dates))}</small>` : ""}</div>`;
+    if (index === 0) return card;
+    return `<div class="tree-relationship-arrow" aria-hidden="true"><span>${escTree(item.relationLabel)}</span><b>↓</b></div>${card}`;
+  }).join("")}</div>`;
 }
 
 function treeHumanRelationshipPath(aId, path) {
@@ -4395,7 +4423,7 @@ function initTreeRelationshipUI() {
     const found = treeRelationshipResult(a.value, b.value);
     if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
     if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
-    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}`;
+    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}${found.path?.length ? treeRelationshipPathGraphic(a.value, found.path) : ""}`;
   });
 }
 
