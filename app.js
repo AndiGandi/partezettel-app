@@ -1838,13 +1838,17 @@ async function openFotoPersonenModal(foto) {
   fotoMarkierungen = rows || [];
   const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
   fotoMarkierbild.src = signed?.signedUrl || "";
+  // Für die nachträgliche Zuordnung alle Personen anzeigen. Bereits zugeordnete
+  // Personen bleiben sichtbar und werden mit ihrer vorhandenen Nummer markiert.
+  // So ist auch bei einem großen Gruppenfoto sofort erkennbar, wer schon zugeordnet ist.
   fotoPersonAuswahl._alleVerfuegbarenPersonen = (personenCache || [])
-    .filter(p => !fotoMarkierungen.some(r => r.personen_id === p.id))
     .slice()
     .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
   if (fotoPersonSuche) fotoPersonSuche.value = "";
   renderFotoPersonAuswahl();
-  fotoPersonAuswahl.disabled = fotoPersonAuswahl._alleVerfuegbarenPersonen.length === 0;
+  fotoPersonAuswahl.disabled = !(fotoPersonAuswahl._alleVerfuegbarenPersonen || []).some(p =>
+    !fotoMarkierungen.some(r => r.personen_id === p.id)
+  );
   fotoPersonenModal.hidden = false;
   const renderAfterLoad = async () => {
     await migriereAlteFotoPositionen();
@@ -1864,9 +1868,15 @@ function renderFotoPersonAuswahl() {
     const a = fotoPersonAnzeige(p);
     return `${a.name} ${a.daten || ""}`.toLocaleLowerCase("de").includes(suchtext);
   }) : alle;
+  const belegteNummern = new Map(
+    fotoMarkierungen
+      .filter(r => r.personen_id)
+      .map(r => [r.personen_id, r.nummer])
+  );
   fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + gefiltert.map(p => {
     const anzeige = fotoPersonAnzeige(p);
-    return `<option value="${p.id}">${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
+    const nr = belegteNummern.get(p.id);
+    return `<option value="${p.id}" ${nr ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${nr ? ` — bereits Nr. ${nr}` : ""}</option>`;
   }).join("");
 }
 
@@ -1910,7 +1920,7 @@ function renderFotoMarkierungen() {
     line.innerHTML = `
       <span class="foto-person-zeile__num">#${row.nummer}</span>
       <span class="foto-person-zeile__name">${escapeHtml(fotoPersonName(row.personen_id))}</span>
-      <button type="button" class="btn btn--ghost foto-person-aendern-btn">Ändern</button>
+      <button type="button" class="btn btn--ghost foto-person-aendern-btn">${row.personen_id ? "Ändern" : "Person zuordnen"}</button>
       <button type="button" class="btn btn--ghost foto-position-btn">Position</button>
       <button type="button" class="btn btn--ghost foto-nummer-btn">Nr.</button>
       <button type="button" class="btn btn--ghost foto-person-loeschen-btn">✕</button>`;
@@ -1920,7 +1930,6 @@ function renderFotoMarkierungen() {
       const changeBtn = line.querySelector(".foto-person-aendern-btn");
       if (line.querySelector(".foto-person-change-wrap")) return;
       const verfuegbar = (personenCache || [])
-        .filter(p => p.id === row.personen_id || !fotoMarkierungen.some(x => x.id !== row.id && x.personen_id === p.id))
         .slice()
         .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
       const wrap = document.createElement("span");
@@ -1929,7 +1938,8 @@ function renderFotoMarkierungen() {
       select.className = "foto-person-change-select";
       select.innerHTML = `<option value="">— unbekannt —</option>` + verfuegbar.map(p => {
         const anzeige = fotoPersonAnzeige(p);
-        return `<option value="${p.id}" ${p.id === row.personen_id ? "selected" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
+        const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === p.id);
+        return `<option value="${p.id}" ${p.id === row.personen_id ? "selected" : ""} ${belegung ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${belegung ? ` — bereits Nr. ${belegung.nummer}` : ""}</option>`;
       }).join("");
       const save = document.createElement("button");
       save.type = "button"; save.className = "btn btn--secondary"; save.textContent = "Speichern";
