@@ -1905,6 +1905,7 @@ function renderFotoMarkierungen() {
   fotoMarkierungenEl.innerHTML = "";
   fotoPersonenListe.innerHTML = "";
   const sorted = [...fotoMarkierungen].sort((a,b) => Number(a.nummer)-Number(b.nummer));
+
   for (const row of sorted) {
     const m = document.createElement("div");
     m.className = "foto-markierung" + (row.id === fotoAktiveMarkierungId ? " is-active" : "");
@@ -1912,76 +1913,198 @@ function renderFotoMarkierungen() {
     m.style.left = `${Number(row.position_x ?? 50)}%`;
     m.style.top = `${Number(row.position_y ?? 50)}%`;
     m.title = `${row.nummer}: ${fotoPersonName(row.personen_id)}`;
-    m.addEventListener("click", (e) => { e.stopPropagation(); fotoAktiveMarkierungId = row.id; renderFotoMarkierungen(); });
+    m.addEventListener("click", (e) => {
+      e.stopPropagation();
+      fotoAktiveMarkierungId = row.id;
+      renderFotoMarkierungen();
+    });
     fotoMarkierungenEl.appendChild(m);
 
     const line = document.createElement("div");
     line.className = "foto-person-zeile";
-    line.innerHTML = `
-      <span class="foto-person-zeile__num">#${row.nummer}</span>
-      <span class="foto-person-zeile__name">${escapeHtml(fotoPersonName(row.personen_id))}</span>
-      <button type="button" class="btn btn--ghost foto-person-aendern-btn">${row.personen_id ? "Ändern" : "Person zuordnen"}</button>
-      <button type="button" class="btn btn--ghost foto-position-btn">Position</button>
-      <button type="button" class="btn btn--ghost foto-nummer-btn">Nr.</button>
-      <button type="button" class="btn btn--ghost foto-person-loeschen-btn">✕</button>`;
 
-    line.querySelector(".foto-person-aendern-btn").addEventListener("click", () => {
-      const nameEl = line.querySelector(".foto-person-zeile__name");
-      const changeBtn = line.querySelector(".foto-person-aendern-btn");
+    const name = document.createElement("span");
+    name.className = "foto-person-zeile__name";
+    name.textContent = fotoPersonName(row.personen_id);
+
+    const num = document.createElement("span");
+    num.className = "foto-person-zeile__num";
+    num.textContent = `#${row.nummer}`;
+
+    const assignBtn = document.createElement("button");
+    assignBtn.type = "button";
+    assignBtn.className = "btn btn--secondary foto-person-aendern-btn";
+    assignBtn.textContent = row.personen_id ? "Person ändern" : "Person zuordnen";
+
+    const positionBtn = document.createElement("button");
+    positionBtn.type = "button";
+    positionBtn.className = "btn btn--ghost foto-position-btn";
+    positionBtn.textContent = "Position";
+
+    const numberBtn = document.createElement("button");
+    numberBtn.type = "button";
+    numberBtn.className = "btn btn--ghost foto-nummer-btn";
+    numberBtn.textContent = "Nr.";
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn--ghost foto-person-loeschen-btn";
+    deleteBtn.textContent = "✕";
+    deleteBtn.setAttribute("aria-label", `Nr. ${row.nummer} entfernen`);
+
+    line.append(num, name, assignBtn, positionBtn, numberBtn, deleteBtn);
+
+    assignBtn.addEventListener("click", () => {
       if (line.querySelector(".foto-person-change-wrap")) return;
+
       const verfuegbar = (personenCache || [])
         .slice()
-        .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
-      const wrap = document.createElement("span");
+        .sort((a,b) =>
+          `${a.nachname || ""} ${a.vorname || ""}`.localeCompare(
+            `${b.nachname || ""} ${b.vorname || ""}`, "de"
+          )
+        );
+
+      const wrap = document.createElement("div");
       wrap.className = "foto-person-change-wrap";
+
+      const search = document.createElement("input");
+      search.type = "search";
+      search.className = "foto-person-change-search";
+      search.placeholder = "Name oder Geburtsjahr suchen …";
+      search.autocomplete = "off";
+      search.setAttribute("aria-label", "Person suchen");
+
       const select = document.createElement("select");
       select.className = "foto-person-change-select";
-      select.innerHTML = `<option value="">— unbekannt —</option>` + verfuegbar.map(p => {
-        const anzeige = fotoPersonAnzeige(p);
-        const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === p.id);
-        return `<option value="${p.id}" ${p.id === row.personen_id ? "selected" : ""} ${belegung ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${belegung ? ` — bereits Nr. ${belegung.nummer}` : ""}</option>`;
-      }).join("");
+      select.setAttribute("aria-label", "Person für diesen Marker auswählen");
+
       const save = document.createElement("button");
-      save.type = "button"; save.className = "btn btn--secondary"; save.textContent = "Speichern";
+      save.type = "button";
+      save.className = "btn btn--primary";
+      save.textContent = "Zuordnung speichern";
+
       const cancel = document.createElement("button");
-      cancel.type = "button"; cancel.className = "btn btn--ghost"; cancel.textContent = "Abbrechen";
-      wrap.append(select, save, cancel);
-      nameEl.replaceWith(wrap);
-      changeBtn.hidden = true;
+      cancel.type = "button";
+      cancel.className = "btn btn--ghost";
+      cancel.textContent = "Abbrechen";
+
+      function fillSelect() {
+        const q = treeNormalizeName(search.value);
+        const filtered = q
+          ? verfuegbar.filter(p => {
+              const a = fotoPersonAnzeige(p);
+              return treeNormalizeName(`${a.name} ${a.daten || ""}`).includes(q);
+            })
+          : verfuegbar;
+
+        select.innerHTML = '<option value="">— Person auswählen —</option>' +
+          filtered.map(p => {
+            const anzeige = fotoPersonAnzeige(p);
+            const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === p.id);
+            const istAktuell = p.id === row.personen_id;
+            const status = belegung && !istAktuell ? ` — bereits Nr. ${belegung.nummer}` : "";
+            return `<option value="${escapeHtml(p.id)}" ${istAktuell ? "selected" : ""} ${belegung && !istAktuell ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${status}</option>`;
+          }).join("");
+
+        save.disabled = !select.value;
+      }
+
+      search.addEventListener("input", fillSelect);
+      select.addEventListener("change", () => {
+        save.disabled = !select.value;
+      });
+
+      wrap.append(search, select, save, cancel);
+
+      // Die bestehende Zeile bleibt sichtbar; die Zuordnung wird darunter
+      // geöffnet, damit die Bedienelemente auf iPhone/iPad eindeutig sind.
+      line.classList.add("is-editing");
+      line.appendChild(wrap);
+      assignBtn.hidden = true;
+      positionBtn.hidden = true;
+      numberBtn.hidden = true;
+      deleteBtn.hidden = true;
+
+      fillSelect();
+      search.focus();
+
       save.addEventListener("click", async () => {
         const neueId = select.value || null;
-        if (neueId && fotoMarkierungen.some(x => x.id !== row.id && x.personen_id === neueId)) {
-          fotoPersonenMessage.textContent = "Diese Person ist bereits auf dem Foto zugeordnet.";
+        if (!neueId) {
+          fotoPersonenMessage.textContent = "Bitte zuerst eine Person auswählen.";
           return;
         }
-        const { error } = await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", row.id);
-        if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
+
+        const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === neueId);
+        if (belegung) {
+          fotoPersonenMessage.textContent = `Diese Person ist bereits Nr. ${belegung.nummer} zugeordnet.`;
+          return;
+        }
+
+        save.disabled = true;
+        save.textContent = "Speichere …";
+
+        const { error } = await sb.from("foto_personen")
+          .update({ personen_id: neueId })
+          .eq("id", row.id);
+
+        if (error) {
+          save.disabled = false;
+          save.textContent = "Zuordnung speichern";
+          fotoPersonenMessage.textContent = `Fehler beim Speichern: ${error.message}`;
+          return;
+        }
+
         row.personen_id = neueId;
-        fotoPersonenMessage.textContent = "Personenzuordnung gespeichert ✓";
+        fotoPersonenMessage.textContent = `Nr. ${row.nummer}: ${fotoPersonName(neueId)} gespeichert ✓`;
         renderFotoMarkierungen();
       });
-      cancel.addEventListener("click", () => renderFotoMarkierungen());
+
+      cancel.addEventListener("click", () => {
+        fotoPersonenMessage.textContent = "";
+        renderFotoMarkierungen();
+      });
     });
 
-    line.querySelector(".foto-position-btn").addEventListener("click", () => { fotoAktiveMarkierungId = row.id; fotoPersonenMessage.textContent = `Tippe jetzt auf die Position von Nr. ${row.nummer}.`; renderFotoMarkierungen(); });
-    line.querySelector(".foto-nummer-btn").addEventListener("click", async () => {
+    positionBtn.addEventListener("click", () => {
+      fotoAktiveMarkierungId = row.id;
+      fotoPersonenMessage.textContent = `Tippe jetzt auf die Position von Nr. ${row.nummer}.`;
+      renderFotoMarkierungen();
+    });
+
+    numberBtn.addEventListener("click", async () => {
       const wert = Number(prompt(`Neue Nummer für ${fotoPersonName(row.personen_id)}:`, row.nummer));
       if (!Number.isInteger(wert) || wert < 1) return;
-      if (fotoMarkierungen.some(x => x.id !== row.id && Number(x.nummer) === wert)) { fotoPersonenMessage.textContent = `Nr. ${wert} ist bereits vergeben.`; return; }
+      if (fotoMarkierungen.some(x => x.id !== row.id && Number(x.nummer) === wert)) {
+        fotoPersonenMessage.textContent = `Nr. ${wert} ist bereits vergeben.`;
+        return;
+      }
       const { error } = await sb.from("foto_personen").update({ nummer: wert }).eq("id", row.id);
-      if (!error) { row.nummer = wert; fotoAktiveMarkierungId = null; renderFotoMarkierungen(); }
-      else fotoPersonenMessage.textContent = `Fehler: ${error.message}`;
+      if (!error) {
+        row.nummer = wert;
+        fotoAktiveMarkierungId = null;
+        renderFotoMarkierungen();
+      } else {
+        fotoPersonenMessage.textContent = `Fehler beim Speichern der Nummer: ${error.message}`;
+      }
     });
-    line.querySelector(".foto-person-loeschen-btn").addEventListener("click", async () => {
+
+    deleteBtn.addEventListener("click", async () => {
       if (!confirm(`Nr. ${row.nummer} wirklich vom Foto entfernen?`)) return;
       const { error } = await sb.from("foto_personen").delete().eq("id", row.id);
-      if (!error) { fotoMarkierungen = fotoMarkierungen.filter(x => x.id !== row.id); fotoAktiveMarkierungId = null; renderFotoMarkierungen(); }
-      else fotoPersonenMessage.textContent = `Fehler: ${error.message}`;
+      if (!error) {
+        fotoMarkierungen = fotoMarkierungen.filter(x => x.id !== row.id);
+        fotoAktiveMarkierungId = null;
+        renderFotoMarkierungen();
+      } else {
+        fotoPersonenMessage.textContent = `Fehler beim Entfernen: ${error.message}`;
+      }
     });
+
     fotoPersonenListe.appendChild(line);
   }
 }
-
 
 fotoMarkierbildWrap?.addEventListener("click", async (event) => {
   if (!fotoAktiveMarkierungId || !fotoMarkierbild.naturalWidth) return;

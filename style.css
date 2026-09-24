@@ -445,3 +445,50 @@
 .detail-photo-viewer__assign select{min-width:14rem;flex:1 1 14rem}
 .detail-photo-viewer__assign button{flex:0 0 auto}
 @media(max-width:700px){.detail-photo-viewer__assign{margin-left:.2rem}.detail-photo-viewer__assign input,.detail-photo-viewer__assign select{min-width:100%;flex-basis:100%}}
+
+/* v142: eindeutige Nachbearbeitung der Personen-Zuordnung im Gruppenfoto */
+.foto-person-zeile{align-items:flex-start;flex-wrap:wrap}
+.foto-person-zeile__num{padding-top:.45rem}
+.foto-person-zeile__name{padding-top:.45rem}
+.foto-person-change-wrap{
+  flex:1 1 100%;
+  display:grid;
+  grid-template-columns:minmax(10rem,1fr) minmax(12rem,1.4fr) auto auto;
+  gap:.45rem;
+  margin-top:.35rem;
+  padding:.55rem;
+  background:var(--accent-soft);
+  border:1px solid var(--line);
+  border-radius:8px;
+}
+.foto-person-change-search,
+.foto-person-change-select{
+  min-width:0;
+  width:100%;
+  box-sizing:border-box;
+  padding:.6rem .65rem;
+  border:1px solid var(--line);
+  border-radius:7px;
+  background:#fff;
+  color:var(--ink);
+  font:inherit;
+}
+.foto-person-change-wrap .btn{
+  min-height:44px;
+  white-space:nowrap;
+}
+.foto-person-change-wrap .btn:disabled{opacity:.55;cursor:not-allowed}
+@media(max-width:760px){
+  .foto-person-change-wrap{
+    grid-template-columns:1fr;
+  }
+  .foto-person-zeile__name{
+    flex:1 1 calc(100% - 3rem);
+  }
+  .foto-person-zeile > .foto-person-aendern-btn,
+  .foto-person-zeile > .foto-position-btn,
+  .foto-person-zeile > .foto-nummer-btn,
+  .foto-person-zeile > .foto-person-loeschen-btn{
+    min-height:44px;
+  }
+}
