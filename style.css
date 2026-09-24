@@ -492,3 +492,21 @@
     min-height:44px;
   }
 }
+
+.familie-partner-link {
+  display:block;
+  width:100%;
+  margin:0 0 .55rem;
+  padding:.15rem 0;
+  border:0;
+  background:transparent;
+  color:var(--ink);
+  font:inherit;
+  font-weight:600;
+  text-align:left;
+  cursor:pointer;
+  text-decoration:underline;
+  text-decoration-color:var(--accent);
+  text-underline-offset:2px;
+}
+.familie-partner-link:active { opacity:.65; }

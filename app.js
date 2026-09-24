@@ -2516,7 +2516,7 @@ async function loadDetailFamilie(personId) {
     const tod = partnerschaftTodesende(f, detailPersonMap, personId);
     div.innerHTML = `
       <div class="beziehung-text familie-edit-block">
-        <strong>${personenAuswahlText(detailPerson(otherId))}</strong>
+        <button type="button" class="familie-partner-link" title="Person bearbeiten">${personenAuswahlText(detailPerson(otherId))}</button>
         <div class="familie-edit-fields">
           <label class="field"><span>Art</span>
             <select class="familie-typ-edit">
@@ -2606,6 +2606,12 @@ async function loadDetailFamilie(personId) {
     [endeTag, endeMonat, endeJahr].forEach((el) => el.addEventListener("change", () => {
       endeManuellGeaendert = true;
     }));
+
+    div.querySelector(".familie-partner-link").addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await openPersonDetail(otherId);
+    });
 
     div.querySelector(".familie-save-btn").addEventListener("click", async () => {
       let eingegebenesEnde = getDatum(endePrefix);
