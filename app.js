@@ -4264,9 +4264,13 @@ function treeBloodRelation(path) {
     return removed ? `${base}, ${removed} Generation${removed === 1 ? "" : "en"} entfernt` : base;
   }
   if (down >= 2 && up === 1) {
-    if (down === 2) return treeGenderWord(path[path.length - 1].to, "Neffe", "Nichte");
-    if (down === 3) return treeGenderWord(path[path.length - 1].to, "Großneffe", "Großnichte");
-    return `${"Ur".repeat(down - 3)}groß${treeGenderWord(path[path.length - 1].to, "neffe", "nichte")}`;
+    // Hier ist die Ausgangsperson Onkel/Tante der Zielperson.
+    // Deshalb muss das Geschlecht der Ausgangsperson und nicht das der
+    // Zielperson verwendet werden. Andernfalls würde z.B. Alois → Luise
+    // fälschlich als „Nichte“ statt als „Onkel“ erscheinen.
+    if (down === 2) return treeGenderWord(path[0].from, "Onkel", "Tante");
+    if (down === 3) return treeGenderWord(path[0].from, "Großonkel", "Großtante");
+    return `${"Ur".repeat(down - 3)}groß${treeGenderWord(path[0].from, "onkel", "tante")}`;
   }
   return null;
 }
