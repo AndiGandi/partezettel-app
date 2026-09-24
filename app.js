@@ -2837,12 +2837,11 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
       .in("id", familyIds);
     if (error) throw error;
-    // Eine vorhandene Familie kann gleichzeitig Partnerschaft/Ehe und Elternfamilie sein.
     families = data || [];
   }
 
   const oldParentLinks = (links || []).filter((l) =>
-    families.some((f) => f.id === l.familie_id)
+    families.some((f) => f.id === l.familie_id && f.familientyp === "Eltern")
   );
 
   // Ziel-Familie: A=Vater (oder einziger Elternteil), B=Mutter.
@@ -2859,27 +2858,39 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
     return;
   }
 
-  // Eine vorhandene Familie mit genau diesen Eltern wiederverwenden.
-  // Wichtig: Bei zwei Eltern muss auch die umgekehrte Reihenfolge gefunden werden,
-  // weil der Unique-Index die beiden Personen unabhängig von der Reihenfolge behandelt.
+  // Wichtig:
+  // Die Elternfamilie wird NICHT nur bei den Familien dieses Kindes gesucht.
+  // Eine Elternfamilie gehört zu den Eltern und wird von mehreren Geschwistern
+  // gemeinsam verwendet. Früher konnte deshalb beim Speichern eines weiteren
+  // Kindes eine zweite identische Elternfamilie entstehen.
   let zielFamilie = null;
+
   if (zielB) {
     const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-      .or(`and(partner_a_id.eq.${zielA},partner_b_id.eq.${zielB}),and(partner_a_id.eq.${zielB},partner_b_id.eq.${zielA})`)
+      .eq("familientyp", "Eltern")
+      .or(
+        `and(partner_a_id.eq.${zielA},partner_b_id.eq.${zielB}),` +
+        `and(partner_a_id.eq.${zielB},partner_b_id.eq.${zielA})`
+      )
+      .order("created_at", { ascending: true })
       .limit(1);
     if (error) throw error;
     zielFamilie = (data || [])[0] || null;
   } else {
     const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
+      .eq("familientyp", "Eltern")
       .eq("partner_a_id", zielA)
       .is("partner_b_id", null)
+      .order("created_at", { ascending: true })
       .limit(1);
     if (error) throw error;
     zielFamilie = (data || [])[0] || null;
   }
 
+  // Nur wenn wirklich noch keine passende Elternfamilie existiert,
+  // wird eine neue angelegt.
   if (!zielFamilie) {
     const { data, error } = await sb.from("familien")
       .insert({
@@ -2893,8 +2904,8 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
     zielFamilie = data;
   }
 
-  // Alle bisherigen Elternlinks dieses Kindes entfernen. Das ist wichtig:
-  // dadurch können alte falsche Vater/Mutter-Kombinationen nicht bestehen bleiben.
+  // Alle bisherigen Elternlinks dieses Kindes entfernen.
+  // Dadurch bleiben keine alten falschen Vater/Mutter-Kombinationen bestehen.
   for (const link of oldParentLinks) {
     if (link.familie_id === zielFamilie.id) continue;
     const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
