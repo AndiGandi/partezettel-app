@@ -346,7 +346,9 @@
 .tree-relationship-result{margin-top:.75rem;padding:.7rem;border-radius:8px;background:var(--accent-soft);min-height:2.2rem;font-size:.9rem}
 .tree-relationship-result:empty{display:none}
 .tree-relationship-result strong{font-family:Georgia,serif;font-weight:600}
-.tree-relationship-path{margin-top:.35rem;color:var(--ink-soft);font-size:.82rem;line-height:1.45}
+.tree-relationship-sentence{margin-top:.25rem;font-size:.95rem}
+.tree-relationship-path{margin-top:.55rem;color:var(--ink-soft);font-size:.88rem;line-height:1.55}
+.tree-relationship-path-title{display:block;font-weight:600;color:var(--ink);margin-bottom:.15rem}
 @media(max-width:700px){
  .tree-relationship-open{width:100%;margin-top:.45rem}
  .tree-relationship-fields{grid-template-columns:1fr}

@@ -4298,15 +4298,65 @@ function treeInLawRelation(path) {
   return "angeheiratet verwandt";
 }
 
+function treeRelationshipStepWord(fromId, edgeType, toId) {
+  if (edgeType === "spouse") {
+    return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
+  }
+  if (edgeType === "parent") {
+    return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+  }
+  return treeGenderWord(fromId, "Vater", "Mutter") + " von";
+}
+
+function treeHumanRelationshipPath(aId, path) {
+  if (!path || !path.length) return "";
+  const steps = [];
+  let currentId = aId;
+  let i = 0;
+
+  while (i < path.length) {
+    const e = path[i];
+
+    // Zwei aufeinanderfolgende Eltern/Kind-Kanten können einen Geschwister-
+    // zusammenhang darstellen. Beispiel: Alois -> Ferdinand (Elternteil)
+    // -> Emilie (Kind). Daraus wird verständlich: Alois ist Bruder von Emilie.
+    if (i + 1 < path.length &&
+        ((e.type === "parent" && path[i + 1].type === "child") ||
+         (e.type === "child" && path[i + 1].type === "parent"))) {
+      const siblingId = path[i + 1].to;
+      steps.push(`${treeGenderWord(currentId, "Bruder", "Schwester")} von ${treePersonLabel(siblingId)}`);
+      currentId = siblingId;
+      i += 2;
+      continue;
+    }
+
+    steps.push(`${treeRelationshipStepWord(currentId, e.type, e.to)} ${treePersonLabel(e.to)}`);
+    currentId = e.to;
+    i += 1;
+  }
+
+  return steps.join(" → ");
+}
+
+function treeRelationshipSentence(aId, bId, relation) {
+  const a = treePersonLabel(aId);
+  const b = treePersonLabel(bId);
+  if (!relation || relation === "dieselbe Person") return relation ? `${a} und ${b} sind dieselbe Person.` : "";
+  return `${a} ist ${relation.toLowerCase()} von ${b}.`;
+}
+
 function treeRelationshipResult(aId, bId) {
   if (!aId || !bId) return null;
   if (aId === bId) return { relation: "dieselbe Person", path: [] };
   const path = treeFindRelationshipPath(aId, bId);
   if (!path) return { relation: "Keine gespeicherte Verwandtschaft gefunden", path: null };
   const relation = treeInLawRelation(path) || treeBloodRelation(path) || "verwandt (genauer Verwandtschaftsgrad nicht eindeutig bestimmbar)";
-  const labels = [treePersonLabel(aId)];
-  for (const e of path) labels.push(`${e.type === "spouse" ? "Ehe/Partnerschaft mit" : e.type === "parent" ? "Elternteil von" : "Kind von"} ${treePersonLabel(e.to)}`);
-  return { relation, path, pathText: labels.join(" → ") };
+  return {
+    relation,
+    path,
+    sentence: treeRelationshipSentence(aId, bId, relation),
+    pathText: treeHumanRelationshipPath(aId, path)
+  };
 }
 
 function fillTreeRelationshipSelects() {
@@ -4345,7 +4395,7 @@ function initTreeRelationshipUI() {
     const found = treeRelationshipResult(a.value, b.value);
     if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
     if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
-    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.pathText ? `<div class="tree-relationship-path">${escTree(found.pathText)}</div>` : ""}`;
+    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}`;
   });
 }
 
