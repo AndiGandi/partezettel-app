@@ -199,9 +199,14 @@
   <!-- ===================== TAB: STAMMBAUM ===================== -->
   <section id="tab-stammbaum" class="tab-panel tree-panel">
     <div class="tree-toolbar">
-      <label class="field tree-person-select"><span>Mittelpunkt</span>
-        <select id="tree-person-select"><option value="">— Person auswählen —</option></select>
-      </label>
+      <div class="tree-person-select">
+        <label class="field"><span>Person suchen</span>
+          <input type="search" id="tree-person-search" placeholder="Name eingeben …" autocomplete="off">
+        </label>
+        <label class="field"><span>Mittelpunkt</span>
+          <select id="tree-person-select"><option value="">— Person auswählen —</option></select>
+        </label>
+      </div>
       <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft</button>
       <div class="tree-zoom-controls" aria-label="Stammbaum Zoom">
         <button type="button" id="tree-zoom-out" class="btn btn--ghost" aria-label="Verkleinern">−</button>
@@ -531,6 +536,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=137"></script>
+<script src="app.js?v=140"></script>
 </body>
 </html>

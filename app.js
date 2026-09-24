@@ -4427,9 +4427,40 @@ function initTreeRelationshipUI() {
   });
 }
 
+function treePersonSearchText(person) {
+  const birthYear = person?.geburtsjahr ? String(person.geburtsjahr) : (person?.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : "");
+  return `${person?.nachname || ""}, ${person?.vorname || ""}${birthYear ? ` (${birthYear})` : ""}`;
+}
+
+function fillTreePersonSelect(searchValue = "", preferredId = "") {
+  const select = document.getElementById("tree-person-select");
+  if (!select) return "";
+  const query = treeNormalizeName(searchValue);
+  const previous = preferredId || select.value;
+  const matches = (treeData.personen || []).filter((p) => {
+    if (!query) return true;
+    const haystack = treeNormalizeName(`${p.vorname || ""} ${p.nachname || ""} ${p.geburtsjahr || ""} ${p.geburtsdatum || ""}`);
+    return haystack.includes(query);
+  });
+  select.innerHTML = `<option value="">— Person auswählen —</option>`;
+  for (const p of matches) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = treePersonSearchText(p);
+    select.appendChild(opt);
+  }
+  if (previous && matches.some((p) => p.id === previous)) {
+    select.value = previous;
+  } else if (matches.length === 1) {
+    select.value = matches[0].id;
+  }
+  return select.value;
+}
+
 async function loadStammbaum() {
   const message = document.getElementById("tree-message");
   const select = document.getElementById("tree-person-select");
+  const search = document.getElementById("tree-person-search");
   try {
     message.textContent = "Stammbaum wird geladen …";
     await loadStammbaumData();
@@ -4440,15 +4471,11 @@ async function loadStammbaum() {
       return;
     }
     const current = select.value && treePerson(select.value) ? select.value : treeData.personen[0].id;
-    select.innerHTML = '<option value="">— Person auswählen —</option>';
-    treeData.personen.forEach((p) => {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = `${p.nachname}, ${p.vorname}`;
-      select.appendChild(opt);
-    });
-    select.value = current;
-    renderStammbaum(current);
+    fillTreePersonSelect(search?.value || "", current);
+    if (!select.value) {
+      select.value = current;
+    }
+    renderStammbaum(select.value);
     fillTreeRelationshipSelects();
     message.textContent = "";
   } catch (err) {
@@ -4465,7 +4492,12 @@ function updateTreeZoom() {
 }
 
 const treeSelect = document.getElementById("tree-person-select");
+const treePersonSearch = document.getElementById("tree-person-search");
 if (treeSelect) treeSelect.addEventListener("change", () => renderStammbaum(treeSelect.value));
+if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
+  const selected = fillTreePersonSelect(treePersonSearch.value, treeSelect?.value || "");
+  if (selected) renderStammbaum(selected);
+});
 const treeZoomIn = document.getElementById("tree-zoom-in");
 const treeZoomOut = document.getElementById("tree-zoom-out");
 const treeReset = document.getElementById("tree-reset");
