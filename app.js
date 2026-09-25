@@ -952,17 +952,36 @@ function personenVergleich(a,b) {
 function sortierePersonen(personen) { return [...personen].sort((a,b)=>personenVergleich(a,b)*personenSortRichtung); }
 function personenAuswahlText(person) {
   if (!person) return "(unbekannte Person)";
-  const name = `${person.vorname || ""} ${person.nachname || ""}`.trim() || "(unbekannte Person)";
-  const ledigenname = (person.Ledigenname || "").trim();
-  let text = name;
-  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== (person.nachname || "").trim().toLocaleLowerCase("de")) {
-    text += ` (geb. ${ledigenname})`;
-  }
+  const nachname = String(person.nachname || "").trim();
+  const vorname = String(person.vorname || "").trim();
+  const name = [nachname, vorname].filter(Boolean).join(", ") || "(unbekannte Person)";
+  const ledigenname = String(person.Ledigenname || "").trim();
   const geburtsjahr = person.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : (person.geburtsjahr ? String(person.geburtsjahr) : "");
   const sterbejahr = person.sterbedatum ? String(person.sterbedatum).slice(0, 4) : (person.sterbejahr ? String(person.sterbejahr) : "");
-  if (/^\d{4}$/.test(geburtsjahr)) text += ` — geb. ${geburtsjahr}`;
-  if (/^\d{4}$/.test(sterbejahr)) text += ` — gest. ${sterbejahr}`;
+  let text = name;
+  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")) {
+    text += ` (geb. ${ledigenname})`;
+  }
+  if (/^\d{4}$/.test(geburtsjahr)) text += ` (geb. ${geburtsjahr})`;
+  if (/^\d{4}$/.test(sterbejahr)) text += ` (gest. ${sterbejahr})`;
   return text;
+}
+
+function personenAuswahlSortierung(a, b) {
+  const an = String(a?.nachname || "").trim();
+  const bn = String(b?.nachname || "").trim();
+  const n = an.localeCompare(bn, "de", { sensitivity: "base" });
+  if (n) return n;
+  const av = String(a?.vorname || "").trim();
+  const bv = String(b?.vorname || "").trim();
+  const v = av.localeCompare(bv, "de", { sensitivity: "base" });
+  if (v) return v;
+  const ay = Number(a?.geburtsjahr || (a?.geburtsdatum ? String(a.geburtsdatum).slice(0,4) : 0)) || 0;
+  const by = Number(b?.geburtsjahr || (b?.geburtsdatum ? String(b.geburtsdatum).slice(0,4) : 0)) || 0;
+  if (ay && by) return ay - by;
+  if (ay) return -1;
+  if (by) return 1;
+  return String(a?.id || "").localeCompare(String(b?.id || ""));
 }
 
 function berechneFamilienSortKeys(personen,familien) {
@@ -2495,7 +2514,7 @@ async function loadDetailFamilie(personId) {
 
   [parentSelectVater, parentSelectMutter].forEach((select) => {
     select.innerHTML = '<option value="">— nicht angegeben —</option>';
-    personenCache.filter((p) => p.id !== personId).forEach((p) => {
+    personenCache.filter((p) => p.id !== personId).sort(personenAuswahlSortierung).forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.id;
       opt.textContent = personenAuswahlText(p);
@@ -4005,7 +4024,12 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
   const foto = treeData.photos.get(person.id);
   const isLinePerson = lineSurname && treeNormalizeName(person.nachname) === treeNormalizeName(lineSurname);
   const lineClass = isLinePerson ? `tree-node--line ${treeLineColorClass(lineSurname)}` : "";
-  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
+  const relationClass = treeRelationshipSelection.personAId === person.id
+    ? "tree-node--relation-a"
+    : treeRelationshipSelection.personBId === person.id
+      ? "tree-node--relation-b"
+      : "";
+  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
     <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
@@ -4313,6 +4337,8 @@ function treePersonGender(person) {
   if (g.includes("männ") || g.includes("maenn") || g === "m") return "m";
   return "u";
 }
+
+let treeRelationshipSelection = { personAId: null, personBId: null };
 
 function treePersonLabel(id) {
   const p = treePerson(id);
@@ -4776,12 +4802,13 @@ function treeRelationshipResult(aId, bId) {
 function fillTreeRelationshipSelects() {
   const selects = [document.getElementById("tree-relation-person-a"), document.getElementById("tree-relation-person-b")].filter(Boolean);
   const current = selects.map(s => s.value);
+  const personen = [...(treeData.personen || [])].sort(personenAuswahlSortierung);
   for (const select of selects) {
     select.innerHTML = '<option value="">— Person auswählen —</option>';
-    for (const p of treeData.personen || []) {
+    for (const p of personen) {
       const opt = document.createElement("option");
       opt.value = p.id;
-      opt.textContent = `${p.nachname}, ${p.vorname}`;
+      opt.textContent = treePersonSearchText(p);
       select.appendChild(opt);
     }
   }
@@ -4804,18 +4831,33 @@ function initTreeRelationshipUI() {
     if (!a.value && treeSelect?.value) a.value = treeSelect.value;
   });
   close?.addEventListener("click", () => { panel.hidden = true; });
-  reset.addEventListener("click", () => { a.value = ""; b.value = ""; result.innerHTML = ""; });
+  reset.addEventListener("click", () => {
+    a.value = "";
+    b.value = "";
+    result.innerHTML = "";
+    treeRelationshipSelection = { personAId: null, personBId: null };
+    const treeSelectElement = document.getElementById("tree-person-select");
+    if (treeSelectElement?.value) renderStammbaum(treeSelectElement.value);
+  });
   calc.addEventListener("click", () => {
-    const found = treeRelationshipResult(a.value, b.value);
+    const personAId = a.value;
+    const personBId = b.value;
+    const found = treeRelationshipResult(personAId, personBId);
     if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
+
+    treeRelationshipSelection = { personAId, personBId };
+    const treeSelectElement = document.getElementById("tree-person-select");
+    if (treeSelectElement && personAId && treePerson(personAId)) {
+      treeSelectElement.value = personAId;
+      renderStammbaum(personAId);
+    }
     if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
     result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}${found.path?.length ? treeRelationshipPathGraphic(a.value, found.path) : ""}`;
   });
 }
 
 function treePersonSearchText(person) {
-  const birthYear = person?.geburtsjahr ? String(person.geburtsjahr) : (person?.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : "");
-  return `${person?.nachname || ""}, ${person?.vorname || ""}${birthYear ? ` (${birthYear})` : ""}`;
+  return personenAuswahlText(person);
 }
 
 function fillTreePersonSelect(searchValue = "", preferredId = "") {
