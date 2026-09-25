@@ -4626,27 +4626,39 @@ function treeBuildBloodPath(aId, bId, model, blood) {
   const bBranch = bToAncestor.length >= 2 ? bToAncestor[bToAncestor.length - 2] : bId;
 
   if (aBranch && bBranch && aBranch !== bBranch) {
-    // Von A nach oben bis zum Kind des gemeinsamen Vorfahren.
+    // Von A nur bis zum ersten Knoten unterhalb des gemeinsamen Vorfahren.
+    // Wichtig: Der gemeinsame Vorfahr selbst darf NICHT in den sichtbaren
+    // Verwandtschaftspfad aufgenommen werden. Beispiel:
+    // Oskar -> Paula -> Hubert -> Andreas, nicht Oskar -> Christian -> ...
     for (const parentId of aToAncestor) {
       if (parentId === blood.commonAncestor) break;
       path.push({ from: current, to: parentId, type: "parent" });
       current = parentId;
     }
 
-    // Die beiden Äste sind Geschwister.
+    // Die beiden Knoten direkt unterhalb des gemeinsamen Vorfahren sind
+    // Geschwister. Bei einem direkten Geschwisterfall ist A selbst aBranch.
     if (current === aBranch) {
       path.push({ from: current, to: bBranch, type: "sibling" });
       current = bBranch;
+    } else {
+      return null;
     }
 
     // Vom Geschwisterknoten des B-Zweigs nach unten bis zu B.
-    const bDown = [...bToAncestor].reverse().filter((id) => id !== blood.commonAncestor && id !== bBranch);
+    const bDown = [...bToAncestor].reverse().filter(
+      (id) => id !== blood.commonAncestor && id !== bBranch
+    );
     for (const childId of bDown) {
-      if (childId === current) continue;
       path.push({ from: current, to: childId, type: "child" });
       current = childId;
     }
-    path.push({ from: current, to: bId, type: "child" });
+
+    // Nur anhängen, wenn B nicht bereits erreicht wurde. Dadurch kann ein
+    // Knoten niemals doppelt im sichtbaren Pfad erscheinen.
+    if (current !== bId) {
+      path.push({ from: current, to: bId, type: "child" });
+    }
     return path;
   }
 
