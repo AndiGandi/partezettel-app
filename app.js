@@ -4319,7 +4319,185 @@ function treePersonLabel(id) {
   return p ? `${p.vorname || ""} ${p.nachname || ""}`.trim() : "Unbekannt";
 }
 
+function treeRelationshipModel() {
+  const parentMap = new Map();
+  const childMap = new Map();
+  const add = (map, key, value) => {
+    if (!key || !value || key === value) return;
+    if (!map.has(key)) map.set(key, new Set());
+    map.get(key).add(value);
+  };
+
+  // Das Verwandtschaftsmodell arbeitet ausschließlich mit echten
+  // Eltern-Kind-Verbindungen. Ehe/Partnerschaft wird separat behandelt.
+  for (const family of treeData.familien || []) {
+    const parents = [family.partner_a_id, family.partner_b_id].filter(Boolean);
+    if (!parents.length) continue;
+    for (const childLink of treeData.kinder.filter((k) => k.familie_id === family.id)) {
+      const childId = childLink.kind_id;
+      if (!childId || !treePerson(childId)) continue;
+      for (const parentId of parents) {
+        if (!treePerson(parentId)) continue;
+        add(parentMap, childId, parentId);
+        add(childMap, parentId, childId);
+      }
+    }
+  }
+  return { parentMap, childMap };
+}
+
+function treeAncestorDistances(startId, model) {
+  const distances = new Map([[startId, 0]]);
+  const queue = [startId];
+  while (queue.length) {
+    const id = queue.shift();
+    const distance = distances.get(id) || 0;
+    for (const parentId of model.parentMap.get(id) || []) {
+      if (distances.has(parentId)) continue;
+      distances.set(parentId, distance + 1);
+      queue.push(parentId);
+    }
+  }
+  return distances;
+}
+
+function treeChooseCommonAncestor(aId, bId, model) {
+  const aAncestors = treeAncestorDistances(aId, model);
+  const bAncestors = treeAncestorDistances(bId, model);
+  const candidates = [];
+  for (const [ancestorId, aDistance] of aAncestors) {
+    if (ancestorId === aId || ancestorId === bId) continue;
+    const bDistance = bAncestors.get(ancestorId);
+    if (bDistance == null) continue;
+    candidates.push({ ancestorId, aDistance, bDistance });
+  }
+  candidates.sort((x, y) =>
+    (x.aDistance + x.bDistance) - (y.aDistance + y.bDistance) ||
+    Math.max(x.aDistance, x.bDistance) - Math.max(y.aDistance, y.bDistance)
+  );
+  return candidates[0] || null;
+}
+
+function treeParentPathToAncestor(startId, ancestorId, model) {
+  if (startId === ancestorId) return [];
+  const queue = [startId];
+  const visited = new Set([startId]);
+  const prev = new Map();
+  while (queue.length) {
+    const id = queue.shift();
+    for (const parentId of model.parentMap.get(id) || []) {
+      if (visited.has(parentId)) continue;
+      visited.add(parentId);
+      prev.set(parentId, id);
+      if (parentId === ancestorId) {
+        const ids = [];
+        let cur = ancestorId;
+        while (cur !== startId) {
+          ids.unshift(cur);
+          cur = prev.get(cur);
+          if (!cur) return null;
+        }
+        return ids;
+      }
+      queue.push(parentId);
+    }
+  }
+  return null;
+}
+
+function treeSiblingPath(aId, bId, model) {
+  const aParents = model.parentMap.get(aId) || new Set();
+  const bParents = model.parentMap.get(bId) || new Set();
+  for (const parentId of aParents) {
+    if (bParents.has(parentId)) return { parentId };
+  }
+  return null;
+}
+
+function treeBloodRelationFromDistances(aId, bId, aDistance, bDistance) {
+  const target = treePerson(bId);
+  const targetGender = treePersonGender(target);
+  const source = treePerson(aId);
+  const sourceGender = treePersonGender(source);
+  const word = (male, female) => targetGender === "m" ? male : targetGender === "w" ? female : male;
+  const sourceWord = (male, female) => sourceGender === "m" ? male : sourceGender === "w" ? female : male;
+
+  if (aDistance === 1 && bDistance === 1) return sourceWord("Bruder", "Schwester");
+
+  // A ist direkter Vorfahr von B.
+  if (aDistance === 0) {
+    if (bDistance === 1) return sourceWord("Vater", "Mutter");
+    if (bDistance === 2) return sourceWord("Großvater", "Großmutter");
+    return `${"Ur".repeat(bDistance - 2)}groß${sourceWord("vater", "mutter")}`;
+  }
+
+  // A ist direkter Nachkomme von B.
+  if (bDistance === 0) {
+    if (aDistance === 1) return sourceWord("Sohn", "Tochter");
+    if (aDistance === 2) return sourceWord("Enkel", "Enkelin");
+    return `${"Ur".repeat(aDistance - 2)}enkel${sourceGender === "w" ? "in" : ""}`;
+  }
+
+  // Seitenlinie: gleicher gemeinsamer Vorfahr.
+  if (aDistance === 1 && bDistance >= 2) {
+    const grade = bDistance - 2;
+    if (grade === 0) return sourceWord("Onkel", "Tante");
+    if (grade === 1) return sourceWord("Großonkel (1. Grades)", "Großtante (1. Grades)");
+    return sourceWord(`${"Ur".repeat(grade - 1)}großonkel (${grade}. Grades)`, `${"Ur".repeat(grade - 1)}großtante (${grade}. Grades)`);
+  }
+
+  if (bDistance === 1 && aDistance >= 2) {
+    const grade = aDistance - 2;
+    if (grade === 0) return sourceWord("Neffe", "Nichte");
+    if (grade === 1) return sourceWord("Großneffe (1. Grades)", "Großnichte (1. Grades)");
+    return sourceWord(`${"Ur".repeat(grade - 1)}großneffe (${grade}. Grades)`, `${"Ur".repeat(grade - 1)}großnichte (${grade}. Grades)`);
+  }
+
+  if (aDistance >= 2 && bDistance >= 2) {
+    const cousinDegree = Math.min(aDistance, bDistance) - 1;
+    const removed = Math.abs(aDistance - bDistance);
+    const base = `Cousin/Cousine ${cousinDegree}. Grades`;
+    return removed ? `${base}, ${removed} Generation${removed === 1 ? "" : "en"} entfernt` : base;
+  }
+  return null;
+}
+
+function treeBloodRelationship(aId, bId, model) {
+  const sibling = treeSiblingPath(aId, bId, model);
+  if (sibling) {
+    return {
+      relation: treeGenderWord(aId, "Bruder", "Schwester"),
+      commonAncestor: sibling.parentId,
+      aDistance: 1,
+      bDistance: 1
+    };
+  }
+
+  const aAncestors = treeAncestorDistances(aId, model);
+  const bAncestors = treeAncestorDistances(bId, model);
+
+  // Direkte Vorfahren/Nachkommen müssen vor dem gemeinsamen Vorfahren geprüft werden.
+  if (aAncestors.has(bId)) {
+    const distance = aAncestors.get(bId);
+    return { relation: treeBloodRelationFromDistances(aId, bId, distance, 0), commonAncestor: bId, aDistance: distance, bDistance: 0 };
+  }
+  if (bAncestors.has(aId)) {
+    const distance = bAncestors.get(aId);
+    return { relation: treeBloodRelationFromDistances(aId, bId, 0, distance), commonAncestor: aId, aDistance: 0, bDistance: distance };
+  }
+
+  const common = treeChooseCommonAncestor(aId, bId, model);
+  if (!common) return null;
+  return {
+    relation: treeBloodRelationFromDistances(aId, bId, common.aDistance, common.bDistance),
+    commonAncestor: common.ancestorId,
+    aDistance: common.aDistance,
+    bDistance: common.bDistance
+  };
+}
+
 function treeRelationshipGraph() {
+  // Kompatibilität für die bestehende UI und für angeheiratete Beziehungen.
   const graph = new Map();
   const add = (a, b, type) => {
     if (!a || !b || a === b) return;
@@ -4328,10 +4506,7 @@ function treeRelationshipGraph() {
   };
   for (const f of treeData.familien || []) {
     const a = f.partner_a_id, b = f.partner_b_id;
-    if (a && b) {
-      add(a, b, "spouse");
-      add(b, a, "spouse");
-    }
+    if (a && b) { add(a, b, "spouse"); add(b, a, "spouse"); }
     for (const k of treeChildrenForFamily(f.id)) {
       const child = k.person?.id || k.kind_id;
       if (!child) continue;
@@ -4377,43 +4552,6 @@ function treeGenderWord(id, male, female, neutral = "Person") {
   return g === "m" ? male : g === "w" ? female : neutral;
 }
 
-function treeBloodRelation(path) {
-  const up = path.filter((e) => e.type === "parent").length;
-  const down = path.filter((e) => e.type === "child").length;
-  if (path.every((e) => e.type === "parent") && up > 0) {
-    if (up === 1) return treeGenderWord(path[path.length - 1].to, "Vater", "Mutter");
-    if (up === 2) return treeGenderWord(path[path.length - 1].to, "Großvater", "Großmutter");
-    return treeGenderWord(path[path.length - 1].to, "Ur".repeat(up - 2) + "großvater", "Ur".repeat(up - 2) + "großmutter");
-  }
-  if (path.every((e) => e.type === "child") && down > 0) {
-    if (down === 1) return treeGenderWord(path[path.length - 1].to, "Sohn", "Tochter");
-    if (down === 2) return treeGenderWord(path[path.length - 1].to, "Enkel", "Enkelin");
-    return treeGenderWord(path[path.length - 1].to, "Ur".repeat(down - 2) + "enkel", "Ur".repeat(down - 2) + "enkelin");
-  }
-  if (up === 1 && down === 1) return treeGenderWord(path[path.length - 1].to, "Bruder", "Schwester");
-  if (up >= 2 && down >= 1) {
-    if (down === 1) {
-      if (up === 2) return treeGenderWord(path[path.length - 1].to, "Onkel", "Tante");
-      if (up === 3) return treeGenderWord(path[path.length - 1].to, "Großonkel", "Großtante");
-      return `${"Ur".repeat(up - 3)}groß${treeGenderWord(path[path.length - 1].to, "onkel", "tante")}`;
-    }
-    const degree = Math.min(up, down) - 1;
-    const removed = Math.abs(up - down);
-    const base = degree === 1 ? "Cousin/Cousine 1. Grades" : `Cousin/Cousine ${degree}. Grades`;
-    return removed ? `${base}, ${removed} Generation${removed === 1 ? "" : "en"} entfernt` : base;
-  }
-  if (down >= 2 && up === 1) {
-    // Hier ist die Ausgangsperson Onkel/Tante der Zielperson.
-    // Deshalb muss das Geschlecht der Ausgangsperson und nicht das der
-    // Zielperson verwendet werden. Andernfalls würde z.B. Alois → Luise
-    // fälschlich als „Nichte“ statt als „Onkel“ erscheinen.
-    if (down === 2) return treeGenderWord(path[0].from, "Onkel", "Tante");
-    if (down === 3) return treeGenderWord(path[0].from, "Großonkel", "Großtante");
-    return `${"Ur".repeat(down - 3)}groß${treeGenderWord(path[0].from, "onkel", "tante")}`;
-  }
-  return null;
-}
-
 function treeInLawRelation(path) {
   const spouseIndexes = path.map((e, i) => e.type === "spouse" ? i : -1).filter(i => i >= 0);
   if (!spouseIndexes.length) return null;
@@ -4424,7 +4562,6 @@ function treeInLawRelation(path) {
     if (other?.type === "parent") return treeGenderWord(path[path.length - 1].to, "Schwiegersohn", "Schwiegertochter");
     if (other?.type === "child") return treeGenderWord(path[path.length - 1].to, "Schwiegervater", "Schwiegermutter");
   }
-  // Geschwister des Ehepartners bzw. Ehepartner eines Geschwisters.
   const bloodOnly = path.filter(e => e.type !== "spouse");
   if (bloodOnly.length === 2 && bloodOnly.some(e => e.type === "parent") && bloodOnly.some(e => e.type === "child")) {
     return treeGenderWord(path[path.length - 1].to, "Schwager", "Schwägerin");
@@ -4438,15 +4575,57 @@ function treeInLawRelation(path) {
 }
 
 function treeRelationshipStepWord(fromId, edgeType, toId) {
-  if (edgeType === "spouse") {
-    return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
-  }
-  if (edgeType === "parent") {
-    // Die Ausgangsperson ist Elternteil der Zielperson.
-    return treeGenderWord(fromId, "Vater", "Mutter") + " von";
-  }
-  // Die Ausgangsperson ist Kind der Zielperson.
+  if (edgeType === "sibling") return treeGenderWord(fromId, "Bruder", "Schwester") + " von";
+  if (edgeType === "spouse") return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
+  if (edgeType === "parent") return treeGenderWord(fromId, "Vater", "Mutter") + " von";
   return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+}
+
+function treeBuildBloodPath(aId, bId, model, blood) {
+  if (!blood) return null;
+  if (blood.aDistance === 1 && blood.bDistance === 1) {
+    return [{ from: aId, to: bId, type: "sibling" }];
+  }
+  const aToAncestor = treeParentPathToAncestor(aId, blood.commonAncestor, model) || [];
+  const bToAncestor = treeParentPathToAncestor(bId, blood.commonAncestor, model) || [];
+  const path = [];
+  let current = aId;
+  for (const ancestorId of aToAncestor) {
+    path.push({ from: current, to: ancestorId, type: "parent" });
+    current = ancestorId;
+  }
+  // bToAncestor ist vom Ziel zum gemeinsamen Vorfahren aufgebaut.
+  // Für die Darstellung drehen wir die Strecke und entfernen den gemeinsamen
+  // Vorfahren selbst: gemeinsamer Vorfahr -> Kind -> ... -> Ziel.
+  const down = [...bToAncestor].filter((id) => id !== blood.commonAncestor);
+  down.push(bId);
+  if (down.length) {
+    // Wenn beide Personen direkte Kinder desselben gemeinsamen Vorfahren sind,
+    // wird der Mittelteil verständlich als Geschwisterbeziehung dargestellt.
+    if (path.length === 1 && down.length === 1) {
+      path.length = 0;
+      path.push({ from: aId, to: bId, type: "sibling" });
+      return path;
+    }
+    // Die erste Person in 'down' ist das Kind des gemeinsamen Vorfahren.
+    // Von dort geht es weiter bis zur Zielperson.
+    for (const childId of down) {
+      path.push({ from: current, to: childId, type: "child" });
+      current = childId;
+    }
+  }
+  return path;
+}
+
+function treeHumanRelationshipPath(aId, path) {
+  if (!path || !path.length) return "";
+  const steps = [];
+  let currentId = aId;
+  for (const e of path) {
+    steps.push(`${treeRelationshipStepWord(currentId, e.type, e.to)} ${treePersonLabel(e.to)}`);
+    currentId = e.to;
+  }
+  return steps.join(" → ");
 }
 
 function treeRelationshipPathGraphic(aId, path) {
@@ -4454,18 +4633,10 @@ function treeRelationshipPathGraphic(aId, path) {
   const items = [{ id: aId, label: treePersonLabel(aId) }];
   let currentId = aId;
   for (const edge of path) {
-    let relationLabel = "";
-    if (edge.type === "spouse") {
-      relationLabel = treeGenderWord(currentId, "Ehemann", "Ehefrau") + " von";
-    } else if (edge.type === "parent") {
-      relationLabel = treeGenderWord(currentId, "Vater", "Mutter") + " von";
-    } else {
-      relationLabel = treeGenderWord(currentId, "Sohn", "Tochter") + " von";
-    }
+    const relationLabel = treeRelationshipStepWord(currentId, edge.type, edge.to);
     items.push({ id: edge.to, label: treePersonLabel(edge.to), relationLabel });
     currentId = edge.to;
   }
-
   return `<div class="tree-relationship-graphic" aria-label="Grafischer Verwandtschaftspfad">${items.map((item, index) => {
     const person = treePerson(item.id);
     const dates = person ? [person.geburtsjahr, person.sterbejahr].filter(Boolean).join("–") : "";
@@ -4473,36 +4644,6 @@ function treeRelationshipPathGraphic(aId, path) {
     if (index === 0) return card;
     return `<div class="tree-relationship-arrow" aria-hidden="true"><span>${escTree(item.relationLabel)}</span><b>↓</b></div>${card}`;
   }).join("")}</div>`;
-}
-
-function treeHumanRelationshipPath(aId, path) {
-  if (!path || !path.length) return "";
-  const steps = [];
-  let currentId = aId;
-  let i = 0;
-
-  while (i < path.length) {
-    const e = path[i];
-
-    // Zwei aufeinanderfolgende Eltern/Kind-Kanten können einen Geschwister-
-    // zusammenhang darstellen. Beispiel: Alois -> Ferdinand (Elternteil)
-    // -> Emilie (Kind). Daraus wird verständlich: Alois ist Bruder von Emilie.
-    if (i + 1 < path.length &&
-        ((e.type === "parent" && path[i + 1].type === "child") ||
-         (e.type === "child" && path[i + 1].type === "parent"))) {
-      const siblingId = path[i + 1].to;
-      steps.push(`${treeGenderWord(currentId, "Bruder", "Schwester")} von ${treePersonLabel(siblingId)}`);
-      currentId = siblingId;
-      i += 2;
-      continue;
-    }
-
-    steps.push(`${treeRelationshipStepWord(currentId, e.type, e.to)} ${treePersonLabel(e.to)}`);
-    currentId = e.to;
-    i += 1;
-  }
-
-  return steps.join(" → ");
 }
 
 function treeRelationshipSentence(aId, bId, relation) {
@@ -4515,9 +4656,24 @@ function treeRelationshipSentence(aId, bId, relation) {
 function treeRelationshipResult(aId, bId) {
   if (!aId || !bId) return null;
   if (aId === bId) return { relation: "dieselbe Person", path: [] };
+
+  const model = treeRelationshipModel();
+  const blood = treeBloodRelationship(aId, bId, model);
+  if (blood?.relation) {
+    const path = treeBuildBloodPath(aId, bId, model, blood);
+    return {
+      relation: blood.relation,
+      path: path || [],
+      sentence: treeRelationshipSentence(aId, bId, blood.relation),
+      pathText: treeHumanRelationshipPath(aId, path || [])
+    };
+  }
+
+  // Falls keine Blutsverwandtschaft existiert, bleibt die bisherige
+  // angeheiratete Ermittlung erhalten.
   const path = treeFindRelationshipPath(aId, bId);
   if (!path) return { relation: "Keine gespeicherte Verwandtschaft gefunden", path: null };
-  const relation = treeInLawRelation(path) || treeBloodRelation(path) || "verwandt (genauer Verwandtschaftsgrad nicht eindeutig bestimmbar)";
+  const relation = treeInLawRelation(path) || "verwandt (genauer Verwandtschaftsgrad nicht eindeutig bestimmbar)";
   return {
     relation,
     path,
