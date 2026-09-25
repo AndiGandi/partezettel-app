@@ -4575,10 +4575,29 @@ function treeInLawRelation(path) {
 }
 
 function treeRelationshipStepWord(fromId, edgeType, toId) {
-  if (edgeType === "sibling") return treeGenderWord(fromId, "Bruder", "Schwester") + " von";
-  if (edgeType === "spouse") return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
-  if (edgeType === "parent") return treeGenderWord(fromId, "Vater", "Mutter") + " von";
-  return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+  if (edgeType === "sibling") {
+    return treeGenderWord(fromId, "Bruder", "Schwester") + " von";
+  }
+
+  if (edgeType === "spouse") {
+    return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
+  }
+
+  // parent: from = Kind, to = Elternteil
+  if (edgeType === "parent") {
+    return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+  }
+
+  // child: from = Elternteil, to = Kind
+  // Die Bezeichnung beschreibt die Beziehung der oberen Person zur
+  // darunterliegenden Person. Deshalb entscheidet das Geschlecht
+  // des Elternteils (fromId):
+  // Vater -> Tochter/Sohn = "Vater von"
+  // Mutter -> Tochter/Sohn = "Mutter von"
+  const fromGender = treePersonGender(treePerson(fromId));
+  if (fromGender === "m") return "Vater von";
+  if (fromGender === "w") return "Mutter von";
+  return "Elternteil von";
 }
 
 function treeBuildBloodPath(aId, bId, model, blood) {
@@ -4604,15 +4623,27 @@ function treeBuildBloodPath(aId, bId, model, blood) {
   let current = aId;
 
   // Direkter Vorfahren-/Nachkommenpfad.
+  // Der gemeinsame Knoten ist bei einem direkten Vorfahren bereits
+  // die Startperson und darf deshalb niemals nochmals als Pfadknoten
+  // eingefügt werden.
   if (blood.aDistance === 0 || blood.bDistance === 0) {
     if (blood.aDistance === 0) {
-      for (const childId of [...bToAncestor].reverse()) {
+      const childPath = [...bToAncestor]
+        .filter((id) => id !== blood.commonAncestor)
+        .reverse();
+
+      for (const childId of childPath) {
+        if (childId === current) continue;
         path.push({ from: current, to: childId, type: "child" });
         current = childId;
       }
-      path.push({ from: current, to: bId, type: "child" });
+
+      if (current !== bId) {
+        path.push({ from: current, to: bId, type: "child" });
+      }
     } else {
       for (const parentId of aToAncestor) {
+        if (parentId === blood.commonAncestor && parentId === current) continue;
         path.push({ from: current, to: parentId, type: "parent" });
         current = parentId;
       }
