@@ -4586,34 +4586,82 @@ function treeBuildBloodPath(aId, bId, model, blood) {
   if (blood.aDistance === 1 && blood.bDistance === 1) {
     return [{ from: aId, to: bId, type: "sibling" }];
   }
+
   const aToAncestor = treeParentPathToAncestor(aId, blood.commonAncestor, model) || [];
   const bToAncestor = treeParentPathToAncestor(bId, blood.commonAncestor, model) || [];
+
+  // Der Pfad soll aus Sicht der gewählten Startperson verlaufen.
+  // Bei einer Seitenlinie wird deshalb nicht über den gemeinsamen Vorfahren
+  // „hinweg“ gezeichnet. Stattdessen verbinden wir die beiden Äste über
+  // deren Geschwister auf der Ebene direkt unterhalb des gemeinsamen
+  // Vorfahren. Dadurch entsteht z. B.:
+  //
+  // Oskar → Paula → Hubert → Andreas
+  //
+  // und nicht eine technisch richtige, aber für den Benutzer verwirrende
+  // Darstellung über den gemeinsamen Großeltern-Knoten.
   const path = [];
   let current = aId;
-  for (const ancestorId of aToAncestor) {
-    path.push({ from: current, to: ancestorId, type: "parent" });
-    current = ancestorId;
-  }
-  // bToAncestor ist vom Ziel zum gemeinsamen Vorfahren aufgebaut.
-  // Für die Darstellung drehen wir die Strecke und entfernen den gemeinsamen
-  // Vorfahren selbst: gemeinsamer Vorfahr -> Kind -> ... -> Ziel.
-  const down = [...bToAncestor].filter((id) => id !== blood.commonAncestor);
-  down.push(bId);
-  if (down.length) {
-    // Wenn beide Personen direkte Kinder desselben gemeinsamen Vorfahren sind,
-    // wird der Mittelteil verständlich als Geschwisterbeziehung dargestellt.
-    if (path.length === 1 && down.length === 1) {
-      path.length = 0;
-      path.push({ from: aId, to: bId, type: "sibling" });
-      return path;
+
+  // Direkter Vorfahren-/Nachkommenpfad.
+  if (blood.aDistance === 0 || blood.bDistance === 0) {
+    if (blood.aDistance === 0) {
+      for (const childId of [...bToAncestor].reverse()) {
+        path.push({ from: current, to: childId, type: "child" });
+        current = childId;
+      }
+      path.push({ from: current, to: bId, type: "child" });
+    } else {
+      for (const parentId of aToAncestor) {
+        path.push({ from: current, to: parentId, type: "parent" });
+        current = parentId;
+      }
     }
-    // Die erste Person in 'down' ist das Kind des gemeinsamen Vorfahren.
-    // Von dort geht es weiter bis zur Zielperson.
-    for (const childId of down) {
+    return path;
+  }
+
+  // Beide Personen liegen in unterschiedlichen Ästen desselben Vorfahren.
+  // Zuerst von A bis zum Geschwisterknoten des B-Zweigs.
+  const aBranch = aToAncestor.length >= 2 ? aToAncestor[aToAncestor.length - 2] : aId;
+  const bBranch = bToAncestor.length >= 2 ? bToAncestor[bToAncestor.length - 2] : bId;
+
+  if (aBranch && bBranch && aBranch !== bBranch) {
+    // Von A nach oben bis zum Kind des gemeinsamen Vorfahren.
+    for (const parentId of aToAncestor) {
+      if (parentId === blood.commonAncestor) break;
+      path.push({ from: current, to: parentId, type: "parent" });
+      current = parentId;
+    }
+
+    // Die beiden Äste sind Geschwister.
+    if (current === aBranch) {
+      path.push({ from: current, to: bBranch, type: "sibling" });
+      current = bBranch;
+    }
+
+    // Vom Geschwisterknoten des B-Zweigs nach unten bis zu B.
+    const bDown = [...bToAncestor].reverse().filter((id) => id !== blood.commonAncestor && id !== bBranch);
+    for (const childId of bDown) {
+      if (childId === current) continue;
       path.push({ from: current, to: childId, type: "child" });
       current = childId;
     }
+    path.push({ from: current, to: bId, type: "child" });
+    return path;
   }
+
+  // Fallback für ungewöhnliche Graphen: sauberer gerichteter Pfad.
+  for (const parentId of aToAncestor) {
+    path.push({ from: current, to: parentId, type: "parent" });
+    current = parentId;
+  }
+  const down = [...bToAncestor].reverse();
+  for (const childId of down) {
+    if (childId === blood.commonAncestor || childId === current) continue;
+    path.push({ from: current, to: childId, type: "child" });
+    current = childId;
+  }
+  path.push({ from: current, to: bId, type: "child" });
   return path;
 }
 
