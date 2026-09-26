@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=160">
+<link rel="stylesheet" href="style.css?v=161">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 160</p>
+  <p id="app-version" class="app-header__version">Version 161</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -180,6 +180,13 @@
       <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
     </div>
     <div id="pending-banner" class="pending-banner" hidden></div>
+
+    <details class="egress-debug-panel">
+      <summary>Temporäre Egress-Messung</summary>
+      <div id="egress-debug-status" class="egress-debug-status" aria-live="polite"></div>
+      <button type="button" id="egress-debug-reset" class="btn btn--ghost">Messung zurücksetzen</button>
+      <p class="egress-debug-hint">Nur für den Test. Die Anzeige misst Bildabrufe der App; den tatsächlichen Supabase-Egress vergleichen wir separat im Supabase-Dashboard.</p>
+    </details>
 
     <div class="personen-sortierung">
       <label class="field"><span>Sortieren nach</span>
@@ -538,6 +545,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=160"></script>
+<script src="app.js?v=161"></script>
 </body>
 </html>

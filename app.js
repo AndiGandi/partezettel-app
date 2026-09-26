@@ -1,4 +1,5 @@
-// v157 Egress-Optimierung: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
+// v161 Temporäre Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
+// v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -13,6 +14,94 @@ function debugLog(msg) {
     el.scrollTop = el.scrollHeight;
   }
 }
+
+// ---------- Temporäre Egress-Messung (v161) ----------
+// Diese Messung verändert die Bildlogik nicht. Sie zählt nur, wann die App
+// eine neue Bild-URL setzt bzw. wann ein Bild geladen wurde. Wenn der Browser
+// Resource Timing für die signierte URL freigibt, wird zusätzlich die dort
+// gemeldete Transfergröße erfasst. Der tatsächliche Supabase-Egress bleibt
+// weiterhin ausschließlich im Supabase-Dashboard verbindlich.
+const egressMessung = {
+  start: Date.now(),
+  urlSetzungen: 0,
+  loadEvents: 0,
+  signierteURLAnfragen: 0,
+  signierteURLPfade: 0,
+  transferBytes: 0,
+  timingNullBytes: 0,
+  timingNichtMessbar: 0,
+  transferMessungen: 0
+};
+
+try {
+  if (typeof performance !== "undefined" && performance.setResourceTimingBufferSize) {
+    performance.setResourceTimingBufferSize(1000);
+  }
+} catch (_) {}
+
+function formatBytesDebug(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function findeResourceTiming(url) {
+  try {
+    const entries = performance.getEntriesByType("resource");
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i]?.name === url) return entries[i];
+    }
+  } catch (_) {}
+  return null;
+}
+
+function registriereEgressBildLoad(url) {
+  egressMessung.loadEvents++;
+  const timing = findeResourceTiming(url);
+  if (!timing) {
+    egressMessung.timingNichtMessbar++;
+  } else if (Number.isFinite(timing.transferSize)) {
+    egressMessung.transferMessungen++;
+    if (timing.transferSize > 0) egressMessung.transferBytes += timing.transferSize;
+    else egressMessung.timingNullBytes++;
+  } else {
+    egressMessung.timingNichtMessbar++;
+  }
+  aktualisiereEgressMessung();
+}
+
+function aktualisiereEgressMessung() {
+  const el = document.getElementById("egress-debug-status");
+  if (!el) return;
+  const seit = new Date(egressMessung.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  el.textContent =
+    `Messung seit: ${seit}\n` +
+    `Signierte URL-Anfragen: ${egressMessung.signierteURLAnfragen} · Pfade: ${egressMessung.signierteURLPfade}\n` +
+    `Neue Bild-URL-Zuweisungen: ${egressMessung.urlSetzungen}\n` +
+    `Bild-Ladevorgänge: ${egressMessung.loadEvents}\n` +
+    `ResourceTiming gemessen: ${formatBytesDebug(egressMessung.transferBytes)}\n` +
+    `ResourceTiming 0 B: ${egressMessung.timingNullBytes} · nicht messbar: ${egressMessung.timingNichtMessbar}`;
+}
+
+function resetEgressMessung() {
+  egressMessung.start = Date.now();
+  egressMessung.urlSetzungen = 0;
+  egressMessung.loadEvents = 0;
+  egressMessung.signierteURLAnfragen = 0;
+  egressMessung.signierteURLPfade = 0;
+  egressMessung.transferBytes = 0;
+  egressMessung.timingNullBytes = 0;
+  egressMessung.timingNichtMessbar = 0;
+  egressMessung.transferMessungen = 0;
+  aktualisiereEgressMessung();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const reset = document.getElementById("egress-debug-reset");
+  if (reset) reset.addEventListener("click", resetEgressMessung);
+  aktualisiereEgressMessung();
+});
 
 window.addEventListener("error", (e) => {
   debugLog(`❌ JS-FEHLER: ${e.message} (${e.filename}:${e.lineno})`);
@@ -1331,6 +1420,9 @@ async function ladeSchluesselfotos(personen, force = false) {
     if (!fotos.length) return;
 
     const pfade = [...new Set(fotos.map(f => f.dateipfad))];
+    egressMessung.signierteURLAnfragen++;
+    egressMessung.signierteURLPfade += pfade.length;
+    aktualisiereEgressMessung();
     const { data: signedList, error: signedError } = await sb.storage
       .from(BUCKET_FOTOS)
       .createSignedUrls(pfade, 3600);
@@ -1360,7 +1452,12 @@ function setzeSchluesselfotoInKarte(personenId) {
   const fotoEintrag = schluesselfotoCache.get(personenId);
   const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
   if (fotoUrl) {
-    if (karte.img.src !== fotoUrl) karte.img.src = fotoUrl;
+    if (karte.img.src !== fotoUrl) {
+      egressMessung.urlSetzungen++;
+      karte.img.dataset.egressDebugUrl = fotoUrl;
+      karte.img.src = fotoUrl;
+      aktualisiereEgressMessung();
+    }
     karte.img.hidden = false;
     karte.placeholder.hidden = true;
   } else {
@@ -1437,6 +1534,10 @@ function erstellePersonenKarte(p) {
   content.append(name, years, relations, note);
   li.append(img, placeholder, content);
   li.addEventListener("click", () => openPersonDetail(p.id));
+
+  img.addEventListener("load", () => {
+    registriereEgressBildLoad(img.dataset.egressDebugUrl || img.currentSrc || img.src || "");
+  });
 
   const karte = { li, img, placeholder, name, years, relations, note, person: p };
   personenKartenCache.set(p.id, karte);
