@@ -1,4 +1,4 @@
-// v163 Persistenter Personen-Cache + v162 Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
+// v164 Persistenter Personen-Cache + Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -15,15 +15,12 @@ function debugLog(msg) {
   }
 }
 
-// ---------- Temporäre Egress-Messung (v162) ----------
+// ---------- Temporäre Egress-Messung (v164) ----------
 // Nur für den kontrollierten Egress-Test. Die eigentliche Bild- und Suchlogik
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v162";
-const PERSONEN_IDB_DB = "partezettel-local-v163";
-const PERSONEN_IDB_STORE = "personen";
-const PERSONEN_IDB_KEY = "personen-cache";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v164";
 
 function neuesEgressMessObjekt() {
   return {
@@ -206,7 +203,6 @@ let personenCache = []; // {id, vorname, nachname, ...}
 let personenCacheGeladen = false;
 let personenLadePromise = null;
 let personenCacheZeitpunkt = 0;
-let personenCacheQuelle = "supabase";
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
@@ -1273,66 +1269,146 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
   return tod.exakt ? `Ende: ${datumAnzeige(tod.datum)} · Tod` : `Ende: Tod ${tod.jahr}`;
 }
 
-// ---------- Persistenter Personen-Cache (v163) ----------
-// Der Cache liegt in IndexedDB und überlebt das Schließen/Neuladen der App.
-// Wichtig: Er ersetzt noch NICHT die Server-Synchronisation. Beim Start wird
-// der lokale Stand sofort angezeigt und anschließend weiterhin mit Supabase
-// abgeglichen. So testen wir zunächst sicher die dauerhafte Speicherung, ohne
-// die Daten-Synchronisation oder das Datenmodell der Datenbank zu verändern.
-function oeffnePersonenIDB() {
+// ---------- Persistenter Personen-Cache (IndexedDB) ----------
+// v164: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
+// Noch KEINE Änderungsprüfung: Die Tabelle "personen" besitzt aktuell keine
+// geaendert_am/updated_at-Spalte. Die gezielte Änderungsprüfung folgt erst
+// nach einer ausdrücklich freigegebenen Datenbankänderung.
+const PERSONEN_DB_NAME = "partezettel-cache-v164";
+const PERSONEN_DB_VERSION = 1;
+const PERSONEN_STORE = "personen_bundle";
+
+function oeffnePersonenCacheDB() {
   return new Promise((resolve, reject) => {
-    if (!window.indexedDB) { reject(new Error("IndexedDB nicht verfügbar")); return; }
-    const req = indexedDB.open(PERSONEN_IDB_DB, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(PERSONEN_IDB_STORE)) db.createObjectStore(PERSONEN_IDB_STORE);
+    if (!window.indexedDB) {
+      reject(new Error("IndexedDB wird von diesem Browser nicht unterstützt."));
+      return;
+    }
+    const request = indexedDB.open(PERSONEN_DB_NAME, PERSONEN_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(PERSONEN_STORE)) {
+        db.createObjectStore(PERSONEN_STORE, { keyPath: "id" });
+      }
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error || new Error("IndexedDB konnte nicht geöffnet werden"));
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB konnte nicht geöffnet werden."));
   });
 }
 
-async function ladePersonenAusPersistentemCache() {
+async function lesePersonenAusPersistentemCache() {
   try {
-    const db = await oeffnePersonenIDB();
-    const daten = await new Promise((resolve, reject) => {
-      const tx = db.transaction(PERSONEN_IDB_STORE, "readonly");
-      const req = tx.objectStore(PERSONEN_IDB_STORE).get(PERSONEN_IDB_KEY);
+    const db = await oeffnePersonenCacheDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(PERSONEN_STORE, "readonly");
+      const req = tx.objectStore(PERSONEN_STORE).get("aktuell");
       req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error);
+      req.onerror = () => reject(req.error || new Error("Personen-Cache konnte nicht gelesen werden."));
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => reject(tx.error || new Error("Personen-Cache konnte nicht gelesen werden."));
+    });
+  } catch (err) {
+    debugLog(`⚠️ Persistenter Personen-Cache nicht lesbar: ${err.message || err}`);
+    return null;
+  }
+}
+
+async function speicherePersonenImPersistentenCache(bundle) {
+  try {
+    const db = await oeffnePersonenCacheDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PERSONEN_STORE, "readwrite");
+      tx.objectStore(PERSONEN_STORE).put({
+        id: "aktuell",
+        gespeichertAm: new Date().toISOString(),
+        ...bundle
+      });
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error || new Error("Personen-Cache konnte nicht gespeichert werden."));
+      tx.onabort = () => reject(tx.error || new Error("Personen-Cache wurde abgebrochen."));
     });
     db.close();
-    if (!daten || !Array.isArray(daten.personen) || daten.personen.length === 0) return false;
-    personenCache = daten.personen;
-    personenCacheGeladen = true;
-    personenCacheZeitpunkt = daten.gespeichertAm || Date.now();
-    personenCacheQuelle = "lokal";
-    debugLog(`💾 Persistenter Personen-Cache geladen: ${personenCache.length} Personen.`);
+    debugLog(`💾 Personen-Cache dauerhaft gespeichert: ${bundle.personen?.length || 0} Personen.`);
     return true;
   } catch (err) {
-    debugLog(`⚠️ Persistenter Cache nicht verfügbar: ${err.message || err}`);
+    debugLog(`⚠️ Persistenter Personen-Cache konnte nicht gespeichert werden: ${err.message || err}`);
     return false;
   }
 }
 
-async function speicherePersonenInPersistentemCache(personen) {
-  try {
-    const db = await oeffnePersonenIDB();
-    await new Promise((resolve, reject) => {
-      const tx = db.transaction(PERSONEN_IDB_STORE, "readwrite");
-      tx.objectStore(PERSONEN_IDB_STORE).put({
-        personen: Array.isArray(personen) ? personen : [],
-        gespeichertAm: Date.now()
-      }, PERSONEN_IDB_KEY);
-      tx.oncomplete = resolve;
-      tx.onerror = () => reject(tx.error);
-      tx.onabort = () => reject(tx.error || new Error("IndexedDB-Transaktion abgebrochen"));
-    });
-    db.close();
-    debugLog(`💾 Personen-Cache dauerhaft gespeichert: ${Array.isArray(personen) ? personen.length : 0} Personen.`);
-  } catch (err) {
-    debugLog(`⚠️ Persistenten Personen-Cache speichern: ${err.message || err}`);
+async function ladePersonenAusPersistentemCache() {
+  const bundle = await lesePersonenAusPersistentemCache();
+  if (!bundle || !Array.isArray(bundle.personen) || bundle.personen.length === 0) return false;
+
+  personenCache = bundle.personen;
+  familienAuswahlCache = Array.isArray(bundle.familien) ? bundle.familien : [];
+  const familienKinder = Array.isArray(bundle.familienKinder) ? bundle.familienKinder : [];
+  const beziehungen = Array.isArray(bundle.beziehungen) ? bundle.beziehungen : [];
+
+  partnerIdsAuswahlCache = new Set();
+  for (const f of familienAuswahlCache) {
+    const typ = String(f.familientyp || "").toLowerCase();
+    if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
+      if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+      if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+    }
   }
+  for (const b of beziehungen) {
+    if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+      if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+      if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+    }
+  }
+
+  const kinderByFamilie = new Map();
+  for (const k of familienKinder) {
+    if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []);
+    kinderByFamilie.get(k.familie_id).push(k.kind_id);
+  }
+  for (const f of familienAuswahlCache) f._kinder = kinderByFamilie.get(f.id) || [];
+
+  personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+    eltern: new Set(),
+    ehePartnerschaften: new Set(),
+    kinder: new Set(),
+  }]));
+  for (const fk of familienKinder) {
+    const familie = familienAuswahlCache.find((f) => f.id === fk.familie_id);
+    if (!familie || !fk.kind_id) continue;
+    const info = personenVerwandtschaftCache.get(fk.kind_id);
+    if (!info) continue;
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+    }
+  }
+  for (const familie of familienAuswahlCache) {
+    const typ = String(familie.familientyp || "").trim().toLocaleLowerCase("de");
+    const istEheOderPartnerschaft = typ === "ehe" || typ === "partnerschaft";
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (!partnerId || !istEheOderPartnerschaft) continue;
+      const info = personenVerwandtschaftCache.get(partnerId);
+      if (!info) continue;
+      info.ehePartnerschaften.add(familie.id);
+      for (const kindId of familie._kinder || []) {
+        if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+      }
+    }
+  }
+
+  try { berechneFamilienSortKeys(personenCache, familienAuswahlCache); } catch (_) {}
+  personenCacheGeladen = true;
+  personenCacheZeitpunkt = bundle.gespeichertAm ? Date.parse(bundle.gespeichertAm) || Date.now() : Date.now();
+  aktualisierePersonenCacheStatus(true);
+  debugLog(`📦 Personen aus dauerhaftem Cache geladen: ${personenCache.length} Personen.`);
+
+  const banner = document.getElementById("pending-banner");
+  const empty = document.getElementById("list-empty");
+  if (banner) banner.hidden = true;
+  await renderPersonenList(personenCache);
+  if (empty) empty.hidden = personenCache.length > 0;
+  const suchfeldNachLaden = document.getElementById("search-input");
+  if (suchfeldNachLaden?.value) window.partezettelPersonenSuche?.(suchfeldNachLaden.value);
+  return true;
 }
 
 // ---------- Personenliste laden ----------
@@ -1352,22 +1428,22 @@ async function loadPersonen(force = false) {
     return;
   }
 
-  // Während der laufenden Sitzung wird der bereits geladene Cache verwendet.
-  // Bei einem App-Neustart kann v163 zusätzlich den persistenten IndexedDB-
-  // Cache sofort anzeigen. Danach läuft die bestehende Server-Synchronisation
-  // weiter, damit Änderungen anderer Nutzer nicht verborgen bleiben.
-  if (!force && personenCacheGeladen && personenCacheQuelle === "lokal") {
-    aktualisierePersonenCacheStatus();
-    await renderPersonenList(personenCache);
-    const empty = document.getElementById("list-empty");
-    if (empty) empty.hidden = personenCache.length > 0;
-  } else if (!force && personenCacheGeladen) {
+  // Innerhalb derselben Sitzung den bereits aufgebauten Cache verwenden.
+  if (!force && personenCacheGeladen) {
     aktualisierePersonenCacheStatus();
     await renderPersonenList(personenCache);
     const empty = document.getElementById("list-empty");
     if (empty) empty.hidden = personenCache.length > 0;
     return;
   }
+  // Nach einem Safari-Neustart zuerst den dauerhaften IndexedDB-Cache laden.
+  // Nur wenn noch kein lokaler Cache vorhanden ist (oder force=true) wird die
+  // vollständige Personenliste aus Supabase geladen.
+  if (!force) {
+    const lokalGeladen = await ladePersonenAusPersistentemCache();
+    if (lokalGeladen) return;
+  }
+
   if (personenLadePromise) return personenLadePromise;
 
   personenLadePromise = (async () => {
@@ -1381,7 +1457,6 @@ async function loadPersonen(force = false) {
     if (error) throw error;
 
     personenCache = data || [];
-    personenCacheQuelle = "supabase";
     try {
       const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
         sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
@@ -1438,13 +1513,19 @@ async function loadPersonen(force = false) {
         }
       }
       berechneFamilienSortKeys(personenCache, familien || []);
+
+      // Den vollständigen, funktional nötigen Personen-/Auswahlcache dauerhaft sichern.
+      await speicherePersonenImPersistentenCache({
+        personen: personenCache,
+        familien: familienAuswahlCache,
+        familienKinder: familienKinder || [],
+        beziehungen: beziehungen || []
+      });
     } catch (familyErr) {
       debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`);
     }
     personenCacheGeladen = true;
     personenCacheZeitpunkt = Date.now();
-    personenCacheQuelle = "supabase";
-    await speicherePersonenInPersistentemCache(personenCache);
     aktualisierePersonenCacheStatus();
     debugLog(`✅ Personen-Cache geladen: ${personenCache.length} Personen.`);
     if (banner) banner.hidden = true;
@@ -1476,13 +1557,12 @@ function invalidierePersonenCache() {
   aktualisierePersonenCacheStatus();
 }
 
-function aktualisierePersonenCacheStatus() {
+function aktualisierePersonenCacheStatus(lokal = false) {
   const el = document.getElementById("personen-cache-status");
   if (!el) return;
   if (personenCacheGeladen) {
     const zeit = personenCacheZeitpunkt ? new Date(personenCacheZeitpunkt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
-    const quelle = personenCacheQuelle === "lokal" ? " · lokal" : " · Supabase";
-    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""}${quelle}`;
+    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""}${lokal ? " · lokal" : " · Supabase"}`;
     el.classList.add("is-loaded");
   } else {
     el.textContent = "Cache: wird geladen …";
@@ -1875,7 +1955,6 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
   try {
     await ensureSession();
     await flushQueue();
-    await ladePersonenAusPersistentemCache();
     // Auch bei einer bereits bestehenden Anmeldung die Personenliste sofort
     // laden. So ist der lokale Such-Cache schon beim ersten Öffnen vorhanden.
     await loadPersonen();
