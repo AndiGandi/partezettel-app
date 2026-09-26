@@ -1,4 +1,4 @@
-// v167 Persistenter Personen-Cache + eindeutige Cache-Quelle + Egress-Test.
+// v168 Persistenter Personen-Cache + Delta-Synchronisation + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -20,7 +20,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v167";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v168";
 
 function neuesEgressMessObjekt() {
   return {
@@ -212,6 +212,11 @@ let personenCacheQuelle = "";
 let familienAuswahlCache = [];
 let personenVerwandtschaftCache = new Map();
 let partnerIdsAuswahlCache = new Set();
+let familienKinderAuswahlCache = [];
+let beziehungenAuswahlCache = [];
+let personenCacheSyncSeq = 0;
+let personenCacheSyncInitialisiert = false;
+let syncLadePromise = null;
 
 // ---------- Anmeldung ----------
 async function ensureSession() {
@@ -1274,10 +1279,8 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 }
 
 // ---------- Persistenter Personen-Cache (IndexedDB) ----------
-// v166: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
-// Noch KEINE Änderungsprüfung: Die Tabelle "personen" besitzt aktuell keine
-// geaendert_am/updated_at-Spalte. Die gezielte Änderungsprüfung folgt erst
-// nach einer ausdrücklich freigegebenen Datenbankänderung.
+// v168: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
+// Die zentrale Tabelle sync_aenderungen hält den letzten Synchronisationsstand.
 const PERSONEN_DB_NAME = "partezettel-cache-v167";
 const PERSONEN_DB_VERSION = 1;
 const PERSONEN_STORE = "personen_bundle";
@@ -1389,6 +1392,10 @@ async function ladePersonenAusPersistentemCache() {
   familienAuswahlCache = Array.isArray(bundle.familien) ? bundle.familien : [];
   const familienKinder = Array.isArray(bundle.familienKinder) ? bundle.familienKinder : [];
   const beziehungen = Array.isArray(bundle.beziehungen) ? bundle.beziehungen : [];
+  familienKinderAuswahlCache = familienKinder;
+  beziehungenAuswahlCache = beziehungen;
+  personenCacheSyncSeq = Number.isFinite(Number(bundle.syncSeq)) ? Number(bundle.syncSeq) : 0;
+  personenCacheSyncInitialisiert = bundle.syncInitialisiert === true;
 
   partnerIdsAuswahlCache = new Set();
   for (const f of familienAuswahlCache) {
@@ -1457,6 +1464,178 @@ async function ladePersonenAusPersistentemCache() {
   return true;
 }
 
+// ---------- Delta-Synchronisation ----------
+async function holeSyncMaxSeq() {
+  const { data, error } = await sb
+    .from("sync_aenderungen")
+    .select("seq")
+    .order("seq", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return Number(data?.[0]?.seq || 0);
+}
+
+async function holeSyncAenderungenSeit(seq) {
+  const startSeq = Number(seq || 0);
+  const { data, error } = await sb
+    .from("sync_aenderungen")
+    .select("seq, tabelle, datensatz_id, aktion")
+    .gt("seq", startSeq)
+    .order("seq", { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+function baueAuswahlCachesAusSyncDaten() {
+  partnerIdsAuswahlCache = new Set();
+  for (const f of familienAuswahlCache) {
+    const typ = String(f.familientyp || "").toLowerCase();
+    if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
+      if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+      if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+    }
+  }
+  for (const b of beziehungenAuswahlCache) {
+    if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+      if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+      if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+    }
+  }
+
+  const kinderByFamilie = new Map();
+  for (const k of familienKinderAuswahlCache) {
+    if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []);
+    kinderByFamilie.get(k.familie_id).push(k.kind_id);
+  }
+  for (const f of familienAuswahlCache) f._kinder = kinderByFamilie.get(f.id) || [];
+
+  personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+    eltern: new Set(),
+    ehePartnerschaften: new Set(),
+    kinder: new Set(),
+  }]));
+  for (const fk of familienKinderAuswahlCache) {
+    const familie = familienAuswahlCache.find((f) => f.id === fk.familie_id);
+    if (!familie || !fk.kind_id) continue;
+    const info = personenVerwandtschaftCache.get(fk.kind_id);
+    if (!info) continue;
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+    }
+  }
+  for (const familie of familienAuswahlCache) {
+    const typ = String(familie.familientyp || "").trim().toLocaleLowerCase("de");
+    const istEheOderPartnerschaft = typ === "ehe" || typ === "partnerschaft";
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (!partnerId || !istEheOderPartnerschaft) continue;
+      const info = personenVerwandtschaftCache.get(partnerId);
+      if (!info) continue;
+      info.ehePartnerschaften.add(familie.id);
+      for (const kindId of familie._kinder || []) {
+        if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+      }
+    }
+  }
+  try { berechneFamilienSortKeys(personenCache, familienAuswahlCache); } catch (_) {}
+}
+
+async function ladeFamilienAusSupabaseFuerSync() {
+  const [{ data: familien, error: familienError }, { data: familienKinder, error: kinderError }, { data: beziehungen, error: beziehungsError }] = await Promise.all([
+    sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
+    sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp"),
+    sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp")
+  ]);
+  if (familienError) throw familienError;
+  if (kinderError) throw kinderError;
+  if (beziehungsError) throw beziehungsError;
+  familienAuswahlCache = familien || [];
+  familienKinderAuswahlCache = familienKinder || [];
+  beziehungenAuswahlCache = beziehungen || [];
+  baueAuswahlCachesAusSyncDaten();
+}
+
+async function synchronisierePersonenDelta() {
+  if (!personenCacheGeladen || !personenCacheSyncInitialisiert) return false;
+  if (syncLadePromise) return syncLadePromise;
+
+  syncLadePromise = (async () => {
+    const aenderungen = await holeSyncAenderungenSeit(personenCacheSyncSeq);
+    if (!aenderungen.length) return false;
+
+    const letzteAenderung = new Map();
+    for (const a of aenderungen) {
+      const key = `${a.tabelle}:${a.datensatz_id}`;
+      letzteAenderung.set(key, a);
+    }
+
+    const personenAenderungen = [...letzteAenderung.values()].filter(a => a.tabelle === "personen");
+    const zuLoeschendePersonen = new Set(personenAenderungen.filter(a => a.aktion === "DELETE").map(a => a.datensatz_id));
+    const zuLadendePersonen = personenAenderungen.filter(a => a.aktion !== "DELETE").map(a => a.datensatz_id);
+
+    if (zuLoeschendePersonen.size) {
+      personenCache = personenCache.filter(p => !zuLoeschendePersonen.has(p.id));
+      for (const id of zuLoeschendePersonen) {
+        const karte = personenKartenCache.get(id);
+        if (karte) karte.li.remove();
+        personenKartenCache.delete(id);
+      }
+    }
+
+    if (zuLadendePersonen.length) {
+      const { data, error } = await sb.from("personen")
+        .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
+        .in("id", [...new Set(zuLadendePersonen)]);
+      if (error) throw error;
+      const byId = new Map(personenCache.map(p => [p.id, p]));
+      for (const person of data || []) byId.set(person.id, person);
+      personenCache = [...byId.values()];
+    }
+
+    const familienGeaendert = [...letzteAenderung.values()].some(a =>
+      a.tabelle === "familien" || a.tabelle === "familien_kinder" || a.tabelle === "beziehung"
+    );
+    if (familienGeaendert) await ladeFamilienAusSupabaseFuerSync();
+
+    const fotosGeaendert = [...letzteAenderung.values()].some(a =>
+      a.tabelle === "fotos" || a.tabelle === "foto_personen"
+    );
+    if (fotosGeaendert) {
+      schluesselfotoCache.clear();
+      schluesselfotoMetaCache.clear();
+      schluesselfotoMetaGeladen = false;
+    }
+
+    baueAuswahlCachesAusSyncDaten();
+
+    const neuerStand = await holeSyncMaxSeq();
+    personenCacheSyncSeq = neuerStand;
+    await speicherePersonenImPersistentenCache({
+      personen: personenCache,
+      familien: familienAuswahlCache,
+      familienKinder: familienKinderAuswahlCache,
+      beziehungen: beziehungenAuswahlCache,
+      syncSeq: personenCacheSyncSeq,
+      syncInitialisiert: true
+    });
+
+    personenCacheZeitpunkt = Date.now();
+    personenCacheQuelle = "localStorage";
+    personenKartenCache.forEach((karte, id) => {
+      const person = personenCache.find(p => p.id === id);
+      if (person) aktualisierePersonenKarte(karte, person);
+    });
+    await renderPersonenList(personenCache);
+    const suchfeld = document.getElementById("search-input");
+    if (suchfeld?.value) window.partezettelPersonenSuche?.(suchfeld.value);
+    aktualisierePersonenCacheStatus();
+    debugLog(`🔄 Delta-Sync: ${aenderungen.length} Änderungen verarbeitet, neuer Stand seq ${personenCacheSyncSeq}.`);
+    return true;
+  })();
+
+  try { return await syncLadePromise; }
+  finally { syncLadePromise = null; }
+}
+
 // ---------- Personenliste laden ----------
 async function loadPersonen(force = false) {
   if (force) {
@@ -1474,20 +1653,37 @@ async function loadPersonen(force = false) {
     return;
   }
 
-  // Innerhalb derselben Sitzung den bereits aufgebauten Cache verwenden.
+  // Innerhalb derselben Sitzung zuerst nur den Änderungsstand prüfen.
   if (!force && personenCacheGeladen) {
+    if (personenCacheSyncInitialisiert) {
+      try {
+        await synchronisierePersonenDelta();
+      } catch (syncErr) {
+        debugLog(`⚠️ Delta-Sync: ${syncErr.message || syncErr}`);
+      }
+    }
     aktualisierePersonenCacheStatus();
     await renderPersonenList(personenCache);
     const empty = document.getElementById("list-empty");
     if (empty) empty.hidden = personenCache.length > 0;
     return;
   }
-  // Nach einem Safari-Neustart zuerst den dauerhaften IndexedDB-Cache laden.
-  // Nur wenn noch kein lokaler Cache vorhanden ist (oder force=true) wird die
-  // vollständige Personenliste aus Supabase geladen.
+  // Nach einem Safari-Neustart zuerst den dauerhaften Cache laden.
+  // Ein älterer Cache ohne syncSeq wird einmalig vollständig aktualisiert,
+  // damit der erste Synchronisationsstand sicher gesetzt wird.
   if (!force) {
     const lokalGeladen = await ladePersonenAusPersistentemCache();
-    if (lokalGeladen) return;
+    if (lokalGeladen && personenCacheSyncInitialisiert) {
+      try {
+        await synchronisierePersonenDelta();
+      } catch (syncErr) {
+        debugLog(`⚠️ Delta-Sync nach Cache-Laden: ${syncErr.message || syncErr}`);
+      }
+      return;
+    }
+    if (lokalGeladen && !personenCacheSyncInitialisiert) {
+      debugLog("ℹ️ Alter Cache ohne Sync-Stand: einmalige Aktualisierung wird durchgeführt.");
+    }
   }
 
   if (personenLadePromise) return personenLadePromise;
@@ -1564,11 +1760,19 @@ async function loadPersonen(force = false) {
       berechneFamilienSortKeys(personenCache, familien || []);
 
       // Den vollständigen, funktional nötigen Personen-/Auswahlcache dauerhaft sichern.
+      familienKinderAuswahlCache = familienKinder || [];
+      beziehungenAuswahlCache = beziehungen || [];
+      let syncSeqNachLaden = 0;
+      try { syncSeqNachLaden = await holeSyncMaxSeq(); } catch (syncErr) { debugLog(`⚠️ Sync-Stand konnte nicht gelesen werden: ${syncErr.message || syncErr}`); }
+      personenCacheSyncSeq = syncSeqNachLaden;
+      personenCacheSyncInitialisiert = true;
       await speicherePersonenImPersistentenCache({
         personen: personenCache,
         familien: familienAuswahlCache,
-        familienKinder: familienKinder || [],
-        beziehungen: beziehungen || []
+        familienKinder: familienKinderAuswahlCache,
+        beziehungen: beziehungenAuswahlCache,
+        syncSeq: personenCacheSyncSeq,
+        syncInitialisiert: true
       });
       personenCacheQuelle = "Supabase";
     } catch (familyErr) {
