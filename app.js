@@ -1,4 +1,4 @@
-// v150 Egress-Optimierung: Sitzungs- und Schlüsselfoto-Cache.
+// v95 Kinderliste: Kinderdatensätze werden separat nachgeladen.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -53,10 +53,6 @@ let audioChunks = [];
 let recordStartTime = null;
 let isRecording = false;
 let personenCache = []; // {id, vorname, nachname, ...}
-let personenCacheGeladen = false;
-let personenLadePromise = null;
-const PERSONEN_CACHE_MAX_ALTER_MS = 5 * 60 * 1000;
-let personenCacheZeitpunkt = 0;
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
@@ -956,36 +952,17 @@ function personenVergleich(a,b) {
 function sortierePersonen(personen) { return [...personen].sort((a,b)=>personenVergleich(a,b)*personenSortRichtung); }
 function personenAuswahlText(person) {
   if (!person) return "(unbekannte Person)";
-  const nachname = String(person.nachname || "").trim();
-  const vorname = String(person.vorname || "").trim();
-  const name = [nachname, vorname].filter(Boolean).join(", ") || "(unbekannte Person)";
-  const ledigenname = String(person.Ledigenname || "").trim();
-  const geburtsjahr = person.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : (person.geburtsjahr ? String(person.geburtsjahr) : "");
-  const sterbejahr = person.sterbedatum ? String(person.sterbedatum).slice(0, 4) : (person.sterbejahr ? String(person.sterbejahr) : "");
+  const name = `${person.vorname || ""} ${person.nachname || ""}`.trim() || "(unbekannte Person)";
+  const ledigenname = (person.Ledigenname || "").trim();
   let text = name;
-  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")) {
+  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== (person.nachname || "").trim().toLocaleLowerCase("de")) {
     text += ` (geb. ${ledigenname})`;
   }
-  if (/^\d{4}$/.test(geburtsjahr)) text += ` (geb. ${geburtsjahr})`;
-  if (/^\d{4}$/.test(sterbejahr)) text += ` (gest. ${sterbejahr})`;
+  const geburtsjahr = person.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : (person.geburtsjahr ? String(person.geburtsjahr) : "");
+  const sterbejahr = person.sterbedatum ? String(person.sterbedatum).slice(0, 4) : (person.sterbejahr ? String(person.sterbejahr) : "");
+  if (/^\d{4}$/.test(geburtsjahr)) text += ` — geb. ${geburtsjahr}`;
+  if (/^\d{4}$/.test(sterbejahr)) text += ` — gest. ${sterbejahr}`;
   return text;
-}
-
-function personenAuswahlSortierung(a, b) {
-  const an = String(a?.nachname || "").trim();
-  const bn = String(b?.nachname || "").trim();
-  const n = an.localeCompare(bn, "de", { sensitivity: "base" });
-  if (n) return n;
-  const av = String(a?.vorname || "").trim();
-  const bv = String(b?.vorname || "").trim();
-  const v = av.localeCompare(bv, "de", { sensitivity: "base" });
-  if (v) return v;
-  const ay = Number(a?.geburtsjahr || (a?.geburtsdatum ? String(a.geburtsdatum).slice(0,4) : 0)) || 0;
-  const by = Number(b?.geburtsjahr || (b?.geburtsdatum ? String(b.geburtsdatum).slice(0,4) : 0)) || 0;
-  if (ay && by) return ay - by;
-  if (ay) return -1;
-  if (by) return 1;
-  return String(a?.id || "").localeCompare(String(b?.id || ""));
 }
 
 function berechneFamilienSortKeys(personen,familien) {
@@ -1124,12 +1101,7 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 }
 
 // ---------- Personenliste laden ----------
-async function loadPersonen(force = false) {
-  if (force) {
-    schluesselfotoCache.clear();
-    schluesselfotoMetaCache.clear();
-    schluesselfotoMetaGeladen = false;
-  }
+async function loadPersonen() {
   const banner = document.getElementById("pending-banner");
   try {
     await ensureSession();
@@ -1139,360 +1111,152 @@ async function loadPersonen(force = false) {
     debugLog(`❌ Personen laden: ${msg}`);
     return;
   }
-
-  // Personen, Familien und Verknüpfungen bleiben innerhalb der Sitzung kurz
-  // im Speicher. Beim Wechseln zwischen Ansichten werden sie dadurch nicht
-  // jedes Mal erneut von Supabase geladen. Der Aktualisieren-Button ruft mit
-  // force=true bewusst eine frische Abfrage ab.
-  const cacheFrisch = personenCacheGeladen &&
-    (Date.now() - personenCacheZeitpunkt < PERSONEN_CACHE_MAX_ALTER_MS);
-  if (!force && cacheFrisch) {
-    renderPersonenList(personenCache);
-    const empty = document.getElementById("list-empty");
-    if (empty) empty.hidden = personenCache.length > 0;
-    return;
-  }
-  if (personenLadePromise) return personenLadePromise;
-
-  personenLadePromise = (async () => {
-    const list = document.getElementById("personen-list");
-    const empty = document.getElementById("list-empty");
-    const { data, error } = await sb
-      .from("personen")
-      .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
-      .order("nachname", { ascending: true });
-
-    if (error) throw error;
-
-    personenCache = data || [];
-    try {
-      const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
-        sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
-        sb.from("familien_kinder").select("familie_id, kind_id"),
-        sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
-      ]);
-      familienAuswahlCache = familien || [];
-      partnerIdsAuswahlCache = new Set();
-      for (const f of familienAuswahlCache) {
-        const typ = String(f.familientyp || "").toLowerCase();
-        if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
-          if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
-          if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
-        }
-      }
-      for (const b of beziehungen || []) {
-        if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
-          if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
-          if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
-        }
-      }
-      const kinderByFamilie = new Map();
-      for (const k of familienKinder || []) {
-        if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []);
-        kinderByFamilie.get(k.familie_id).push(k.kind_id);
-      }
-      for (const f of familien || []) f._kinder = kinderByFamilie.get(f.id) || [];
-
-      personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
-        eltern: new Set(),
-        ehePartnerschaften: new Set(),
-        kinder: new Set(),
-      }]));
-      for (const fk of familienKinder || []) {
-        const familie = (familien || []).find((f) => f.id === fk.familie_id);
-        if (!familie || !fk.kind_id) continue;
-        const info = personenVerwandtschaftCache.get(fk.kind_id);
-        if (!info) continue;
-        for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-          if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
-        }
-      }
-      for (const familie of familien || []) {
-        const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
-        const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
-        for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-          if (!partnerId || !istEheOderPartnerschaft) continue;
-          const info = personenVerwandtschaftCache.get(partnerId);
-          if (!info) continue;
-          info.ehePartnerschaften.add(familie.id);
-          for (const kindId of familie._kinder || []) {
-            if (kindId && kindId !== partnerId) info.kinder.add(kindId);
-          }
-        }
-      }
-      berechneFamilienSortKeys(personenCache, familien || []);
-    } catch (familyErr) {
-      debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`);
-    }
-    personenCacheGeladen = true;
-    personenCacheZeitpunkt = Date.now();
-    if (banner) banner.hidden = true;
-    await renderPersonenList(personenCache);
-    if (empty) empty.hidden = personenCache.length > 0;
-  })();
-
-  try {
-    await personenLadePromise;
-  } catch (err) {
-    console.error(err);
-    if (banner) { banner.hidden = false; banner.textContent = `Fehler beim Laden: ${err.message || err}`; }
-    debugLog(`❌ Personen laden: ${err.message || err}`);
-  } finally {
-    personenLadePromise = null;
-  }
-}
-
-function invalidierePersonenCache() {
-  personenCacheGeladen = false;
-  personenCacheZeitpunkt = 0;
-}
-
-const schluesselfotoCache = new Map(); // personenId -> { url, gueltigBis }
-const schluesselfotoMetaCache = new Map(); // personenId -> dateipfad | null
-let schluesselfotoMetaGeladen = false;
-const schluesselfotoLadePromise = { value: null };
-const schluesselfotoMetaPromise = { value: null };
-const personenKartenCache = new Map(); // personenId -> { li, img, placeholder, name, years, relations, note }
-let schluesselfotoObserver = null;
-
-async function ladeSchluesselfotoMetadaten(force = false) {
-  if (!force && schluesselfotoMetaGeladen) return;
-  if (schluesselfotoMetaPromise.value) {
-    await schluesselfotoMetaPromise.value;
-    return;
-  }
-
-  schluesselfotoMetaPromise.value = (async () => {
-    const { data, error } = await sb.from("fotos")
-      .select("personen_id, dateipfad")
-      .eq("ist_schluesselfoto", true);
-    if (error) {
-      debugLog(`❌ Schlüsselfoto-Metadaten laden: ${error.message}`);
-      return;
-    }
-
-    schluesselfotoMetaCache.clear();
-    for (const foto of data || []) {
-      if (foto?.personen_id) schluesselfotoMetaCache.set(foto.personen_id, foto.dateipfad || null);
-    }
-    schluesselfotoMetaGeladen = true;
-  })();
-
-  try { await schluesselfotoMetaPromise.value; }
-  finally { schluesselfotoMetaPromise.value = null; }
-}
-
-async function ladeSchluesselfotos(personen, force = false) {
-  if (!personen.length) return;
-  await ladeSchluesselfotoMetadaten(force);
-
-  const jetzt = Date.now();
-  const fehlende = personen.filter((p) => {
-    const pfad = schluesselfotoMetaCache.get(p.id);
-    const eintrag = schluesselfotoCache.get(p.id);
-    if (!pfad) {
-      schluesselfotoCache.delete(p.id);
-      return false;
-    }
-    return force || !eintrag || eintrag.gueltigBis <= jetzt || eintrag.pfad !== pfad;
-  });
-  if (!fehlende.length) return;
-  if (schluesselfotoLadePromise.value) {
-    await schluesselfotoLadePromise.value;
-    return;
-  }
-
-  schluesselfotoLadePromise.value = (async () => {
-    const fotos = fehlende
-      .map(p => ({ personenId: p.id, dateipfad: schluesselfotoMetaCache.get(p.id) }))
-      .filter(f => f.dateipfad);
-    if (!fotos.length) return;
-
-    const pfade = [...new Set(fotos.map(f => f.dateipfad))];
-    const { data: signedList, error: signedError } = await sb.storage
-      .from(BUCKET_FOTOS)
-      .createSignedUrls(pfade, 3600);
-    if (signedError) {
-      debugLog(`❌ Schlüsselfoto-URLs laden: ${signedError.message}`);
-      return;
-    }
-
-    const urlByPath = new Map();
-    for (const item of signedList || []) {
-      if (item?.path && item?.signedUrl) urlByPath.set(item.path, item.signedUrl);
-    }
-    const gueltigBis = Date.now() + (55 * 60 * 1000);
-    for (const foto of fotos) {
-      const url = urlByPath.get(foto.dateipfad);
-      if (url) schluesselfotoCache.set(foto.personenId, { url, pfad: foto.dateipfad, gueltigBis });
-    }
-  })();
-
-  try { await schluesselfotoLadePromise.value; }
-  finally { schluesselfotoLadePromise.value = null; }
-}
-
-function setzeSchluesselfotoInKarte(personenId) {
-  const karte = personenKartenCache.get(personenId);
-  if (!karte || !karte.img) return;
-  const fotoEintrag = schluesselfotoCache.get(personenId);
-  const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
-  if (fotoUrl) {
-    if (karte.img.src !== fotoUrl) karte.img.src = fotoUrl;
-    karte.img.hidden = false;
-    karte.placeholder.hidden = true;
-  } else {
-    karte.img.removeAttribute("src");
-    karte.img.hidden = true;
-    karte.placeholder.hidden = false;
-  }
-}
-
-function beobachteSchluesselfotos() {
   const list = document.getElementById("personen-list");
-  if (!list) return;
+  const empty = document.getElementById("list-empty");
+  const { data, error } = await sb
+    .from("personen")
+    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
+    .order("nachname", { ascending: true });
 
-  if (schluesselfotoObserver) schluesselfotoObserver.disconnect();
-  if (!("IntersectionObserver" in window)) {
-    const personen = [...personenKartenCache.values()]
-      .filter(k => !k.li.hidden)
-      .map(k => k.person)
-      .filter(Boolean);
-    ladeSchluesselfotos(personen).then(() => {
-      personen.forEach(p => setzeSchluesselfotoInKarte(p.id));
-    });
+  if (error) {
+    console.error(error);
     return;
   }
 
-  schluesselfotoObserver = new IntersectionObserver((entries) => {
-    const sichtbar = entries
-      .filter(entry => entry.isIntersecting)
-      .map(entry => personenKartenCache.get(entry.target.dataset.personId)?.person)
-      .filter(Boolean);
-    if (!sichtbar.length) return;
-    ladeSchluesselfotos(sichtbar).then(() => {
-      sichtbar.forEach(p => setzeSchluesselfotoInKarte(p.id));
-    });
-  }, { root: list, rootMargin: "400px 0px", threshold: 0.01 });
+  personenCache = data || [];
+  try {
+    const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
+      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
+      sb.from("familien_kinder").select("familie_id, kind_id"),
+      sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
+    ]);
+    familienAuswahlCache = familien || [];
+    partnerIdsAuswahlCache = new Set();
+    for (const f of familienAuswahlCache) {
+      const typ = String(f.familientyp || "").toLowerCase();
+      // Nur laufende Ehe/Partnerschaft sperrt die Person in der Auswahl.
+      // Beendete Beziehungen bleiben für eine spätere Ehe/Partnerschaft auswählbar.
+      if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
+        if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+        if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+      }
+    }
+    // Ältere Daten können noch ausschließlich in "beziehung" stehen.
+    // Diese werden ebenfalls nur dann als belegte Partnerschaft behandelt,
+    // wenn sie ausdrücklich Ehe oder Partnerschaft sind.
+    for (const b of beziehungen || []) {
+      if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+        if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+        if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+      }
+    }
+    const kinderByFamilie = new Map();
+    for (const k of familienKinder || []) { if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []); kinderByFamilie.get(k.familie_id).push(k.kind_id); }
+    for (const f of familien || []) f._kinder=kinderByFamilie.get(f.id)||[];
 
-  for (const karte of personenKartenCache.values()) {
-    if (!karte.li.hidden) schluesselfotoObserver.observe(karte.li);
+    // Kleine Verwandtschaftszusammenfassung für die Personenliste.
+    // Die Werte werden ausschließlich aus den bestehenden Familien- und
+    // Kinderverknüpfungen berechnet; es werden keine neuen Daten gespeichert.
+    personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+      eltern: new Set(),
+      ehePartnerschaften: new Set(),
+      kinder: new Set(),
+    }]));
+    for (const fk of familienKinder || []) {
+      const familie = (familien || []).find((f) => f.id === fk.familie_id);
+      if (!familie || !fk.kind_id) continue;
+      const info = personenVerwandtschaftCache.get(fk.kind_id);
+      if (!info) continue;
+      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+        if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+      }
+    }
+    for (const familie of familien || []) {
+      const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
+      const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
+      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+        if (!partnerId || !istEheOderPartnerschaft) continue;
+        const info = personenVerwandtschaftCache.get(partnerId);
+        if (!info) continue;
+        info.ehePartnerschaften.add(familie.id);
+        for (const kindId of familie._kinder || []) {
+          if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+        }
+      }
+    }
+    berechneFamilienSortKeys(personenCache,familien||[]);
+  } catch (familyErr) { debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`); }
+  if (banner) banner.hidden = true;
+  renderPersonenList(personenCache);
+  empty.hidden = personenCache.length > 0;
+}
+
+const schluesselfotoCache = new Map();
+
+async function ladeSchluesselfotos(personen) {
+  schluesselfotoCache.clear();
+  if (!personen.length) return;
+  const ids = personen.map(p => p.id);
+  const { data, error } = await sb.from("fotos").select("id, personen_id, dateipfad, ist_schluesselfoto").in("personen_id", ids).eq("ist_schluesselfoto", true);
+  if (error) { debugLog(`❌ Schlüsselfotos laden: ${error.message}`); return; }
+  for (const foto of data || []) {
+    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    if (signed?.signedUrl) schluesselfotoCache.set(foto.personen_id, signed.signedUrl);
   }
-}
-
-function erstellePersonenKarte(p) {
-  const li = document.createElement("li");
-  li.className = "person-card";
-  li.dataset.personId = p.id;
-
-  const fotoEintrag = schluesselfotoCache.get(p.id);
-  const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
-  const img = document.createElement("img");
-  img.className = "person-card__photo";
-  img.alt = `Schlüsselfoto von ${p.vorname} ${p.nachname}`;
-  img.loading = "lazy";
-  img.decoding = "async";
-  img.hidden = !fotoUrl;
-  if (fotoUrl) img.src = fotoUrl;
-
-  const placeholder = document.createElement("div");
-  placeholder.className = "person-card__photo-placeholder";
-  placeholder.setAttribute("aria-hidden", "true");
-  placeholder.textContent = "👤";
-  placeholder.hidden = !!fotoUrl;
-
-  const content = document.createElement("div");
-  content.className = "person-card__content";
-  const name = document.createElement("div");
-  name.className = "person-card__name";
-  const years = document.createElement("div");
-  years.className = "person-card__years";
-  const relations = document.createElement("div");
-  relations.className = "person-card__relations";
-  const note = document.createElement("div");
-  note.className = "person-card__note";
-
-  content.append(name, years, relations, note);
-  li.append(img, placeholder, content);
-  li.addEventListener("click", () => openPersonDetail(p.id));
-
-  const karte = { li, img, placeholder, name, years, relations, note, person: p };
-  personenKartenCache.set(p.id, karte);
-  aktualisierePersonenKarte(karte, p);
-  return karte;
-}
-
-function aktualisierePersonenKarte(karte, p) {
-  karte.person = p;
-  karte.li.dataset.personId = p.id;
-  karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
-  karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
-
-  const sterbeJahrAnzeige = p.sterbedatum
-    ? p.sterbedatum.split("-")[0]
-    : (p.sterbejahr ? String(p.sterbejahr) : "");
-  const jahre = [
-    p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""),
-    sterbeJahrAnzeige
-  ].filter(Boolean).join(" – ");
-  const alterAnzeige = lebensalterAnzeige(p);
-  karte.years.textContent = `${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}`;
-  karte.years.hidden = !karte.years.textContent;
-
-  const verwandtschaft = personenVerwandtschaftCache.get(p.id);
-  const elternAnzahl = verwandtschaft?.eltern?.size || 0;
-  const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
-  const kinderAnzahl = verwandtschaft?.kinder?.size || 0;
-  karte.relations.textContent = `👥 Eltern: ${elternAnzahl} · 💍 Ehe/Partn.: ${ehePartnerschaftenAnzahl} · 👶 Kinder: ${kinderAnzahl}`;
-  karte.relations.setAttribute("aria-label", `Verwandtschaft: Eltern ${elternAnzahl}, Ehe oder Partnerschaften ${ehePartnerschaftenAnzahl}, Kinder ${kinderAnzahl}`);
-
-  karte.note.textContent = p.Notiz || "";
-  karte.note.hidden = !p.Notiz;
-  setzeSchluesselfotoInKarte(p.id);
 }
 
 async function renderPersonenList(personen) {
+  personen = sortierePersonen(personen);
   const list = document.getElementById("personen-list");
-  if (!list) return;
-  const sortiertePersonen = sortierePersonen(personen);
-  const sichtbarIds = new Set(sortiertePersonen.map(p => p.id));
-
-  // Karten werden nur einmal erzeugt und danach wiederverwendet. Beim Tippen in
-  // der Suche werden dadurch weder <img>-Elemente noch deren src neu erzeugt.
-  for (const p of personenCache) {
-    if (!personenKartenCache.has(p.id)) erstellePersonenKarte(p);
-    const karte = personenKartenCache.get(p.id);
-    aktualisierePersonenKarte(karte, p);
-    karte.li.hidden = !sichtbarIds.has(p.id);
-  }
-
-  // Sortierung durch Verschieben der bestehenden DOM-Knoten, nicht durch Neuanlage.
-  const fragment = document.createDocumentFragment();
-  for (const p of sortiertePersonen) {
-    const karte = personenKartenCache.get(p.id);
-    if (karte) fragment.appendChild(karte.li);
-  }
-  list.appendChild(fragment);
-  beobachteSchluesselfotos();
+  list.innerHTML = "";
+  await ladeSchluesselfotos(personen);
+  personen.forEach((p) => {
+    const li = document.createElement("li");
+    li.className = "person-card";
+    const sterbeJahrAnzeige = p.sterbedatum
+      ? p.sterbedatum.split("-")[0]
+      : (p.sterbejahr ? String(p.sterbejahr) : "");
+    const jahre = [p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""), sterbeJahrAnzeige]
+      .filter(Boolean)
+      .join(" – ");
+    const alterAnzeige = lebensalterAnzeige(p);
+    const fotoUrl = schluesselfotoCache.get(p.id);
+    const verwandtschaft = personenVerwandtschaftCache.get(p.id);
+    const elternAnzahl = verwandtschaft?.eltern?.size || 0;
+    const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
+    const kinderAnzahl = verwandtschaft?.kinder?.size || 0;
+    li.innerHTML = `
+      ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
+      <div class="person-card__content">
+        <div class="person-card__name">${p.vorname} ${p.nachname}</div>
+        ${jahre || alterAnzeige ? `<div class="person-card__years">${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}</div>` : ""}
+        <div class="person-card__relations" aria-label="Verwandtschaft: Eltern ${elternAnzahl}, Ehe oder Partnerschaften ${ehePartnerschaftenAnzahl}, Kinder ${kinderAnzahl}">👥 Eltern: ${elternAnzahl} · 💍 Ehe/Partn.: ${ehePartnerschaftenAnzahl} · 👶 Kinder: ${kinderAnzahl}</div>
+        ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
+      </div>
+    `;
+    li.addEventListener("click", () => openPersonDetail(p.id));
+    list.appendChild(li);
+  });
 }
+
+
+
+document.getElementById("search-input").addEventListener("input", (e) => {
+  const q = e.target.value.toLowerCase();
+  const filtered = personenCache.filter((p) =>
+    `${p.vorname} ${p.nachname}`.toLowerCase().includes(q)
+  );
+  renderPersonenList(filtered);
+});
 
 
 const personenSortSelect=document.getElementById("personen-sortierung");
 const personenSortButton=document.getElementById("personen-sort-richtung");
-function aktualisierePersonenSortierung(){
-  const q=(document.getElementById("search-input")?.value||"").trim().toLocaleLowerCase("de");
-  const gefiltert = !q ? personenCache : personenCache.filter(p => {
-    const text = `${p.nachname || ""} ${p.vorname || ""}`.toLocaleLowerCase("de");
-    return text.includes(q);
-  });
-  renderPersonenList(gefiltert);
-}
-const personenSuchfeld = document.getElementById("search-input");
-if(personenSuchfeld) personenSuchfeld.addEventListener("input", aktualisierePersonenSortierung);
+function aktualisierePersonenSortierung(){const q=(document.getElementById("search-input")?.value||"").toLowerCase();renderPersonenList(personenCache.filter(p=>`${p.vorname} ${p.nachname}`.toLowerCase().includes(q)));}
 if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});
 if(personenSortButton)personenSortButton.addEventListener("click",()=>{personenSortRichtung*=-1;personenSortButton.textContent=personenSortRichtung===1?"↑":"↓";aktualisierePersonenSortierung();});
 
-document.getElementById("refresh-btn").addEventListener("click", () => loadPersonen(true));
+document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
 
 // ---------- Init ----------
 (async function init() {
@@ -1857,8 +1621,7 @@ async function loadDetailFotos(personId) {
       if (keyError) { msg.textContent = `Fehler: ${keyError.message}`; return; }
       msg.textContent = "Schlüsselfoto gesetzt ✓";
       await loadDetailFotos(personId);
-      invalidierePersonenCache();
-      await loadPersonen(true);
+      await loadPersonen();
     });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm(istGruppenfoto ? "Diese Person vom Gruppenfoto entfernen?" : "Foto bzw. Verknüpfung wirklich entfernen?")) return;
@@ -1876,8 +1639,7 @@ async function loadDetailFotos(personId) {
         await sb.from("fotos").delete().eq("id", foto.id);
       }
       await loadDetailFotos(personId);
-      invalidierePersonenCache();
-      loadPersonen(true);
+      loadPersonen();
     });
     container.appendChild(div);
   }
@@ -2733,7 +2495,7 @@ async function loadDetailFamilie(personId) {
 
   [parentSelectVater, parentSelectMutter].forEach((select) => {
     select.innerHTML = '<option value="">— nicht angegeben —</option>';
-    personenCache.filter((p) => p.id !== personId).sort(personenAuswahlSortierung).forEach((p) => {
+    personenCache.filter((p) => p.id !== personId).forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.id;
       opt.textContent = personenAuswahlText(p);
@@ -4243,12 +4005,7 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
   const foto = treeData.photos.get(person.id);
   const isLinePerson = lineSurname && treeNormalizeName(person.nachname) === treeNormalizeName(lineSurname);
   const lineClass = isLinePerson ? `tree-node--line ${treeLineColorClass(lineSurname)}` : "";
-  const relationClass = treeRelationshipSelection.personAId === person.id
-    ? "tree-node--relation-a"
-    : treeRelationshipSelection.personBId === person.id
-      ? "tree-node--relation-b"
-      : "";
-  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
+  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
     <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
@@ -4556,8 +4313,6 @@ function treePersonGender(person) {
   if (g.includes("männ") || g.includes("maenn") || g === "m") return "m";
   return "u";
 }
-
-let treeRelationshipSelection = { personAId: null, personBId: null };
 
 function treePersonLabel(id) {
   const p = treePerson(id);
@@ -5021,13 +4776,12 @@ function treeRelationshipResult(aId, bId) {
 function fillTreeRelationshipSelects() {
   const selects = [document.getElementById("tree-relation-person-a"), document.getElementById("tree-relation-person-b")].filter(Boolean);
   const current = selects.map(s => s.value);
-  const personen = [...(treeData.personen || [])].sort(personenAuswahlSortierung);
   for (const select of selects) {
     select.innerHTML = '<option value="">— Person auswählen —</option>';
-    for (const p of personen) {
+    for (const p of treeData.personen || []) {
       const opt = document.createElement("option");
       opt.value = p.id;
-      opt.textContent = treePersonSearchText(p);
+      opt.textContent = `${p.nachname}, ${p.vorname}`;
       select.appendChild(opt);
     }
   }
@@ -5050,33 +4804,18 @@ function initTreeRelationshipUI() {
     if (!a.value && treeSelect?.value) a.value = treeSelect.value;
   });
   close?.addEventListener("click", () => { panel.hidden = true; });
-  reset.addEventListener("click", () => {
-    a.value = "";
-    b.value = "";
-    result.innerHTML = "";
-    treeRelationshipSelection = { personAId: null, personBId: null };
-    const treeSelectElement = document.getElementById("tree-person-select");
-    if (treeSelectElement?.value) renderStammbaum(treeSelectElement.value);
-  });
+  reset.addEventListener("click", () => { a.value = ""; b.value = ""; result.innerHTML = ""; });
   calc.addEventListener("click", () => {
-    const personAId = a.value;
-    const personBId = b.value;
-    const found = treeRelationshipResult(personAId, personBId);
+    const found = treeRelationshipResult(a.value, b.value);
     if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
-
-    treeRelationshipSelection = { personAId, personBId };
-    const treeSelectElement = document.getElementById("tree-person-select");
-    if (treeSelectElement && personAId && treePerson(personAId)) {
-      treeSelectElement.value = personAId;
-      renderStammbaum(personAId);
-    }
     if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
     result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}${found.path?.length ? treeRelationshipPathGraphic(a.value, found.path) : ""}`;
   });
 }
 
 function treePersonSearchText(person) {
-  return personenAuswahlText(person);
+  const birthYear = person?.geburtsjahr ? String(person.geburtsjahr) : (person?.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : "");
+  return `${person?.nachname || ""}, ${person?.vorname || ""}${birthYear ? ` (${birthYear})` : ""}`;
 }
 
 function fillTreePersonSelect(searchValue = "", preferredId = "") {
