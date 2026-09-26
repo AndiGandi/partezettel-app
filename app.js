@@ -1244,6 +1244,8 @@ function invalidierePersonenCache() {
 
 const schluesselfotoCache = new Map(); // personenId -> { url, gueltigBis }
 const schluesselfotoLadePromise = { value: null };
+const personenKartenCache = new Map(); // personenId -> { li, img, name, years, relations, note }
+let schluesselfotoObserver = null;
 
 async function ladeSchluesselfotos(personen, force = false) {
   if (!personen.length) return;
@@ -1277,9 +1279,10 @@ async function ladeSchluesselfotos(personen, force = false) {
     const fotos = data || [];
     if (!fotos.length) return;
 
-    // Eine einzige Signed-URL-Anfrage für alle benötigten Bilder statt einer
-    // Anfrage pro Person. Die URL wird bis kurz vor Ablauf wiederverwendet.
+    // Eine einzige Signed-URL-Anfrage für die gerade sichtbaren/benötigten Bilder.
+    // Bereits gültige URLs bleiben im Cache und werden nicht erneut angefordert.
     const pfade = fotos.map(f => f.dateipfad).filter(Boolean);
+    if (!pfade.length) return;
     const { data: signedList, error: signedError } = await sb.storage
       .from(BUCKET_FOTOS)
       .createSignedUrls(pfade, 3600);
@@ -1302,50 +1305,149 @@ async function ladeSchluesselfotos(personen, force = false) {
   finally { schluesselfotoLadePromise.value = null; }
 }
 
-async function renderPersonenList(personen) {
-  personen = sortierePersonen(personen);
-  const list = document.getElementById("personen-list");
-  list.innerHTML = "";
-  await ladeSchluesselfotos(personen);
-  personen.forEach((p) => {
-    const li = document.createElement("li");
-    li.className = "person-card";
-    const sterbeJahrAnzeige = p.sterbedatum
-      ? p.sterbedatum.split("-")[0]
-      : (p.sterbejahr ? String(p.sterbejahr) : "");
-    const jahre = [p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""), sterbeJahrAnzeige]
-      .filter(Boolean)
-      .join(" – ");
-    const alterAnzeige = lebensalterAnzeige(p);
-    const fotoEintrag = schluesselfotoCache.get(p.id);
-    const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
-    const verwandtschaft = personenVerwandtschaftCache.get(p.id);
-    const elternAnzahl = verwandtschaft?.eltern?.size || 0;
-    const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
-    const kinderAnzahl = verwandtschaft?.kinder?.size || 0;
-    li.innerHTML = `
-      ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
-      <div class="person-card__content">
-        <div class="person-card__name">${p.vorname} ${p.nachname}</div>
-        ${jahre || alterAnzeige ? `<div class="person-card__years">${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}</div>` : ""}
-        <div class="person-card__relations" aria-label="Verwandtschaft: Eltern ${elternAnzahl}, Ehe oder Partnerschaften ${ehePartnerschaftenAnzahl}, Kinder ${kinderAnzahl}">👥 Eltern: ${elternAnzahl} · 💍 Ehe/Partn.: ${ehePartnerschaftenAnzahl} · 👶 Kinder: ${kinderAnzahl}</div>
-        ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
-      </div>
-    `;
-    li.addEventListener("click", () => openPersonDetail(p.id));
-    list.appendChild(li);
-  });
+function setzeSchluesselfotoInKarte(personenId) {
+  const karte = personenKartenCache.get(personenId);
+  if (!karte || !karte.img) return;
+  const fotoEintrag = schluesselfotoCache.get(personenId);
+  const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
+  if (fotoUrl) {
+    if (karte.img.src !== fotoUrl) karte.img.src = fotoUrl;
+    karte.img.hidden = false;
+    karte.placeholder.hidden = true;
+  } else {
+    karte.img.removeAttribute("src");
+    karte.img.hidden = true;
+    karte.placeholder.hidden = false;
+  }
 }
 
+function beobachteSchluesselfotos() {
+  const list = document.getElementById("personen-list");
+  if (!list) return;
 
+  if (schluesselfotoObserver) schluesselfotoObserver.disconnect();
+  if (!("IntersectionObserver" in window)) {
+    const personen = [...personenKartenCache.values()]
+      .filter(k => !k.li.hidden)
+      .map(k => k.person)
+      .filter(Boolean);
+    ladeSchluesselfotos(personen).then(() => {
+      personen.forEach(p => setzeSchluesselfotoInKarte(p.id));
+    });
+    return;
+  }
 
-document.getElementById("search-input").addEventListener("input", (e) => {
-  const q = e.target.value.toLowerCase();
-  const filtered = personenCache.filter((p) =>
-    `${p.vorname} ${p.nachname}`.toLowerCase().includes(q)
-  );
-  renderPersonenList(filtered);
-});
+  schluesselfotoObserver = new IntersectionObserver((entries) => {
+    const sichtbar = entries
+      .filter(entry => entry.isIntersecting)
+      .map(entry => personenKartenCache.get(entry.target.dataset.personId)?.person)
+      .filter(Boolean);
+    if (!sichtbar.length) return;
+    ladeSchluesselfotos(sichtbar).then(() => {
+      sichtbar.forEach(p => setzeSchluesselfotoInKarte(p.id));
+    });
+  }, { root: list, rootMargin: "400px 0px", threshold: 0.01 });
+
+  for (const karte of personenKartenCache.values()) {
+    if (!karte.li.hidden) schluesselfotoObserver.observe(karte.li);
+  }
+}
+
+function erstellePersonenKarte(p) {
+  const li = document.createElement("li");
+  li.className = "person-card";
+  li.dataset.personId = p.id;
+
+  const fotoEintrag = schluesselfotoCache.get(p.id);
+  const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
+  const img = document.createElement("img");
+  img.className = "person-card__photo";
+  img.alt = `Schlüsselfoto von ${p.vorname} ${p.nachname}`;
+  img.loading = "lazy";
+  img.decoding = "async";
+  img.hidden = !fotoUrl;
+  if (fotoUrl) img.src = fotoUrl;
+
+  const placeholder = document.createElement("div");
+  placeholder.className = "person-card__photo-placeholder";
+  placeholder.setAttribute("aria-hidden", "true");
+  placeholder.textContent = "👤";
+  placeholder.hidden = !!fotoUrl;
+
+  const content = document.createElement("div");
+  content.className = "person-card__content";
+  const name = document.createElement("div");
+  name.className = "person-card__name";
+  const years = document.createElement("div");
+  years.className = "person-card__years";
+  const relations = document.createElement("div");
+  relations.className = "person-card__relations";
+  const note = document.createElement("div");
+  note.className = "person-card__note";
+
+  content.append(name, years, relations, note);
+  li.append(img, placeholder, content);
+  li.addEventListener("click", () => openPersonDetail(p.id));
+
+  const karte = { li, img, placeholder, name, years, relations, note, person: p };
+  personenKartenCache.set(p.id, karte);
+  aktualisierePersonenKarte(karte, p);
+  return karte;
+}
+
+function aktualisierePersonenKarte(karte, p) {
+  karte.person = p;
+  karte.li.dataset.personId = p.id;
+  karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
+
+  const sterbeJahrAnzeige = p.sterbedatum
+    ? p.sterbedatum.split("-")[0]
+    : (p.sterbejahr ? String(p.sterbejahr) : "");
+  const jahre = [
+    p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""),
+    sterbeJahrAnzeige
+  ].filter(Boolean).join(" – ");
+  const alterAnzeige = lebensalterAnzeige(p);
+  karte.years.textContent = `${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}`;
+  karte.years.hidden = !karte.years.textContent;
+
+  const verwandtschaft = personenVerwandtschaftCache.get(p.id);
+  const elternAnzahl = verwandtschaft?.eltern?.size || 0;
+  const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
+  const kinderAnzahl = verwandtschaft?.kinder?.size || 0;
+  karte.relations.textContent = `👥 Eltern: ${elternAnzahl} · 💍 Ehe/Partn.: ${ehePartnerschaftenAnzahl} · 👶 Kinder: ${kinderAnzahl}`;
+  karte.relations.setAttribute("aria-label", `Verwandtschaft: Eltern ${elternAnzahl}, Ehe oder Partnerschaften ${ehePartnerschaftenAnzahl}, Kinder ${kinderAnzahl}`);
+
+  karte.note.textContent = p.Notiz || "";
+  karte.note.hidden = !p.Notiz;
+  setzeSchluesselfotoInKarte(p.id);
+}
+
+async function renderPersonenList(personen) {
+  const list = document.getElementById("personen-list");
+  if (!list) return;
+  const sortiertePersonen = sortierePersonen(personen);
+  const sichtbarIds = new Set(sortiertePersonen.map(p => p.id));
+
+  // Karten werden nur einmal erzeugt und danach wiederverwendet. Beim Tippen in
+  // der Suche werden dadurch weder <img>-Elemente noch deren src neu erzeugt.
+  for (const p of personenCache) {
+    if (!personenKartenCache.has(p.id)) erstellePersonenKarte(p);
+    const karte = personenKartenCache.get(p.id);
+    aktualisierePersonenKarte(karte, p);
+    karte.li.hidden = !sichtbarIds.has(p.id);
+  }
+
+  // Sortierung durch Verschieben der bestehenden DOM-Knoten, nicht durch Neuanlage.
+  const fragment = document.createDocumentFragment();
+  for (const p of sortiertePersonen) {
+    const karte = personenKartenCache.get(p.id);
+    if (karte) fragment.appendChild(karte.li);
+  }
+  list.appendChild(fragment);
+  beobachteSchluesselfotos();
+}
 
 
 const personenSortSelect=document.getElementById("personen-sortierung");
