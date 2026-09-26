@@ -1,4 +1,4 @@
-// v154 Egress-Optimierung: Sitzungs- und Schlüsselfoto-Cache + robuste lokale Namenssuche.
+// v155 Egress-Optimierung: Sitzungscache + robuste lokale Namenssuche beim iPad-Start.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -1499,18 +1499,32 @@ const personenSortButton=document.getElementById("personen-sort-richtung");
 // personenCache. Beim Tippen werden keine Supabase-Daten geladen und keine
 // Personenkarten bzw. Bilder neu erzeugt. Die Karten werden nur sichtbar/
 // unsichtbar geschaltet. Das ist besonders robust auf iPad/iPhone.
-function filterePersonenListeLokal() {
+let personenSucheLauf = 0;
+async function filterePersonenListeLokal() {
+  const lauf = ++personenSucheLauf;
   const feld = document.getElementById("search-input");
   const q = (feld?.value || "").trim().toLocaleLowerCase("de-DE");
   const list = document.getElementById("personen-list");
   const empty = document.getElementById("list-empty");
+
+  // Falls beim ersten Tippen der Personen-Cache noch geladen wird, warten wir
+  // hier aktiv darauf. Dadurch geht eine frühe Eingabe auf dem iPad nicht
+  // verloren. Danach wird dieselbe Eingabe sofort lokal ausgewertet.
+  if (!personenCacheGeladen || !Array.isArray(personenCache) || !personenCache.length) {
+    if (empty) {
+      empty.hidden = false;
+      empty.textContent = "Personen werden geladen …";
+    }
+    try { await loadPersonen(); } catch (_) {}
+    if (lauf !== personenSucheLauf) return;
+  }
 
   aktualisierePersonenCacheStatus();
 
   if (!Array.isArray(personenCache) || !personenCache.length) {
     if (empty) {
       empty.hidden = false;
-      empty.textContent = "Personen werden noch geladen …";
+      empty.textContent = "Keine Personen geladen.";
     }
     return;
   }
@@ -1530,8 +1544,8 @@ function filterePersonenListeLokal() {
     empty.hidden = treffer > 0;
   }
 
-  // Bei der Suche wird absichtlich kein renderPersonenList() aufgerufen:
-  // bestehende DOM-Karten und ihre Bilder bleiben unverändert.
+  // Niemals renderPersonenList() aufrufen: bestehende Karten und Bilder
+  // bleiben erhalten. Nur hidden wird geändert.
   if (list) list.setAttribute("data-suchtreffer", String(treffer));
 }
 
