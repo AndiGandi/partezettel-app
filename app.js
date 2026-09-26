@@ -1,4 +1,4 @@
-// v164 Persistenter Personen-Cache + Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
+// v165 Persistenter Personen-Cache + Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -15,12 +15,12 @@ function debugLog(msg) {
   }
 }
 
-// ---------- Temporäre Egress-Messung (v164) ----------
+// ---------- Temporäre Egress-Messung (v165) ----------
 // Nur für den kontrollierten Egress-Test. Die eigentliche Bild- und Suchlogik
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v164";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v165";
 
 function neuesEgressMessObjekt() {
   return {
@@ -203,6 +203,7 @@ let personenCache = []; // {id, vorname, nachname, ...}
 let personenCacheGeladen = false;
 let personenLadePromise = null;
 let personenCacheZeitpunkt = 0;
+let personenCacheQuelle = "";
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
@@ -1270,13 +1271,14 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 }
 
 // ---------- Persistenter Personen-Cache (IndexedDB) ----------
-// v164: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
+// v165: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
 // Noch KEINE Änderungsprüfung: Die Tabelle "personen" besitzt aktuell keine
 // geaendert_am/updated_at-Spalte. Die gezielte Änderungsprüfung folgt erst
 // nach einer ausdrücklich freigegebenen Datenbankänderung.
-const PERSONEN_DB_NAME = "partezettel-cache-v164";
+const PERSONEN_DB_NAME = "partezettel-cache-v165";
 const PERSONEN_DB_VERSION = 1;
 const PERSONEN_STORE = "personen_bundle";
+const PERSONEN_LOCAL_KEY = "partezettel-personen-cache-v165";
 
 function oeffnePersonenCacheDB() {
   return new Promise((resolve, reject) => {
@@ -1328,6 +1330,17 @@ async function speicherePersonenImPersistentenCache(bundle) {
       tx.onabort = () => reject(tx.error || new Error("Personen-Cache wurde abgebrochen."));
     });
     db.close();
+    // Zusätzliche Safari-Fallback-Sicherung: Der kompakte Personen-/Auswahlcache
+    // wird parallel auch in localStorage abgelegt. Dadurch bleibt der Cache auch
+    // dann erhalten, wenn IndexedDB auf dem Gerät nicht zuverlässig verfügbar ist.
+    try {
+      localStorage.setItem(PERSONEN_LOCAL_KEY, JSON.stringify({
+        gespeichertAm: new Date().toISOString(),
+        ...bundle
+      }));
+    } catch (storageErr) {
+      debugLog(`⚠️ localStorage-Fallback nicht speicherbar: ${storageErr.message || storageErr}`);
+    }
     debugLog(`💾 Personen-Cache dauerhaft gespeichert: ${bundle.personen?.length || 0} Personen.`);
     return true;
   } catch (err) {
@@ -1337,7 +1350,22 @@ async function speicherePersonenImPersistentenCache(bundle) {
 }
 
 async function ladePersonenAusPersistentemCache() {
-  const bundle = await lesePersonenAusPersistentemCache();
+  let bundle = await lesePersonenAusPersistentemCache();
+  let quelle = "IndexedDB";
+  if (!bundle || !Array.isArray(bundle.personen) || bundle.personen.length === 0) {
+    try {
+      const raw = localStorage.getItem(PERSONEN_LOCAL_KEY);
+      if (raw) {
+        const fallback = JSON.parse(raw);
+        if (Array.isArray(fallback?.personen) && fallback.personen.length > 0) {
+          bundle = fallback;
+          quelle = "localStorage";
+        }
+      }
+    } catch (storageErr) {
+      debugLog(`⚠️ localStorage-Cache nicht lesbar: ${storageErr.message || storageErr}`);
+    }
+  }
   if (!bundle || !Array.isArray(bundle.personen) || bundle.personen.length === 0) return false;
 
   personenCache = bundle.personen;
@@ -1397,6 +1425,7 @@ async function ladePersonenAusPersistentemCache() {
 
   try { berechneFamilienSortKeys(personenCache, familienAuswahlCache); } catch (_) {}
   personenCacheGeladen = true;
+  personenCacheQuelle = quelle;
   personenCacheZeitpunkt = bundle.gespeichertAm ? Date.parse(bundle.gespeichertAm) || Date.now() : Date.now();
   aktualisierePersonenCacheStatus(true);
   debugLog(`📦 Personen aus dauerhaftem Cache geladen: ${personenCache.length} Personen.`);
@@ -1521,6 +1550,7 @@ async function loadPersonen(force = false) {
         familienKinder: familienKinder || [],
         beziehungen: beziehungen || []
       });
+      personenCacheQuelle = "Supabase";
     } catch (familyErr) {
       debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`);
     }
@@ -1554,6 +1584,7 @@ async function loadPersonen(force = false) {
 function invalidierePersonenCache() {
   personenCacheGeladen = false;
   personenCacheZeitpunkt = 0;
+  personenCacheQuelle = "";
   aktualisierePersonenCacheStatus();
 }
 
