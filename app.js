@@ -1125,6 +1125,11 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 
 // ---------- Personenliste laden ----------
 async function loadPersonen(force = false) {
+  if (force) {
+    schluesselfotoCache.clear();
+    schluesselfotoMetaCache.clear();
+    schluesselfotoMetaGeladen = false;
+  }
   const banner = document.getElementById("pending-banner");
   try {
     await ensureSession();
@@ -1243,16 +1248,53 @@ function invalidierePersonenCache() {
 }
 
 const schluesselfotoCache = new Map(); // personenId -> { url, gueltigBis }
+const schluesselfotoMetaCache = new Map(); // personenId -> dateipfad | null
+let schluesselfotoMetaGeladen = false;
 const schluesselfotoLadePromise = { value: null };
-const personenKartenCache = new Map(); // personenId -> { li, img, name, years, relations, note }
+const schluesselfotoMetaPromise = { value: null };
+const personenKartenCache = new Map(); // personenId -> { li, img, placeholder, name, years, relations, note }
 let schluesselfotoObserver = null;
+
+async function ladeSchluesselfotoMetadaten(force = false) {
+  if (!force && schluesselfotoMetaGeladen) return;
+  if (schluesselfotoMetaPromise.value) {
+    await schluesselfotoMetaPromise.value;
+    return;
+  }
+
+  schluesselfotoMetaPromise.value = (async () => {
+    const { data, error } = await sb.from("fotos")
+      .select("personen_id, dateipfad")
+      .eq("ist_schluesselfoto", true);
+    if (error) {
+      debugLog(`❌ Schlüsselfoto-Metadaten laden: ${error.message}`);
+      return;
+    }
+
+    schluesselfotoMetaCache.clear();
+    for (const foto of data || []) {
+      if (foto?.personen_id) schluesselfotoMetaCache.set(foto.personen_id, foto.dateipfad || null);
+    }
+    schluesselfotoMetaGeladen = true;
+  })();
+
+  try { await schluesselfotoMetaPromise.value; }
+  finally { schluesselfotoMetaPromise.value = null; }
+}
 
 async function ladeSchluesselfotos(personen, force = false) {
   if (!personen.length) return;
+  await ladeSchluesselfotoMetadaten(force);
+
   const jetzt = Date.now();
-  const fehlende = force ? personen : personen.filter((p) => {
+  const fehlende = personen.filter((p) => {
+    const pfad = schluesselfotoMetaCache.get(p.id);
     const eintrag = schluesselfotoCache.get(p.id);
-    return !eintrag || eintrag.gueltigBis <= jetzt;
+    if (!pfad) {
+      schluesselfotoCache.delete(p.id);
+      return false;
+    }
+    return force || !eintrag || eintrag.gueltigBis <= jetzt || eintrag.pfad !== pfad;
   });
   if (!fehlende.length) return;
   if (schluesselfotoLadePromise.value) {
@@ -1261,28 +1303,12 @@ async function ladeSchluesselfotos(personen, force = false) {
   }
 
   schluesselfotoLadePromise.value = (async () => {
-    const ids = fehlende.map(p => p.id);
-    const { data, error } = await sb.from("fotos")
-      .select("id, personen_id, dateipfad, ist_schluesselfoto")
-      .in("personen_id", ids)
-      .eq("ist_schluesselfoto", true);
-    if (error) {
-      debugLog(`❌ Schlüsselfotos laden: ${error.message}`);
-      return;
-    }
-
-    const gefundeneIds = new Set((data || []).map(f => f.personen_id));
-    for (const person of fehlende) {
-      if (!gefundeneIds.has(person.id)) schluesselfotoCache.delete(person.id);
-    }
-
-    const fotos = data || [];
+    const fotos = fehlende
+      .map(p => ({ personenId: p.id, dateipfad: schluesselfotoMetaCache.get(p.id) }))
+      .filter(f => f.dateipfad);
     if (!fotos.length) return;
 
-    // Eine einzige Signed-URL-Anfrage für die gerade sichtbaren/benötigten Bilder.
-    // Bereits gültige URLs bleiben im Cache und werden nicht erneut angefordert.
-    const pfade = fotos.map(f => f.dateipfad).filter(Boolean);
-    if (!pfade.length) return;
+    const pfade = [...new Set(fotos.map(f => f.dateipfad))];
     const { data: signedList, error: signedError } = await sb.storage
       .from(BUCKET_FOTOS)
       .createSignedUrls(pfade, 3600);
@@ -1290,6 +1316,7 @@ async function ladeSchluesselfotos(personen, force = false) {
       debugLog(`❌ Schlüsselfoto-URLs laden: ${signedError.message}`);
       return;
     }
+
     const urlByPath = new Map();
     for (const item of signedList || []) {
       if (item?.path && item?.signedUrl) urlByPath.set(item.path, item.signedUrl);
@@ -1297,7 +1324,7 @@ async function ladeSchluesselfotos(personen, force = false) {
     const gueltigBis = Date.now() + (55 * 60 * 1000);
     for (const foto of fotos) {
       const url = urlByPath.get(foto.dateipfad);
-      if (url) schluesselfotoCache.set(foto.personen_id, { url, gueltigBis });
+      if (url) schluesselfotoCache.set(foto.personenId, { url, pfad: foto.dateipfad, gueltigBis });
     }
   })();
 
@@ -1452,7 +1479,16 @@ async function renderPersonenList(personen) {
 
 const personenSortSelect=document.getElementById("personen-sortierung");
 const personenSortButton=document.getElementById("personen-sort-richtung");
-function aktualisierePersonenSortierung(){const q=(document.getElementById("search-input")?.value||"").toLowerCase();renderPersonenList(personenCache.filter(p=>`${p.vorname} ${p.nachname}`.toLowerCase().includes(q)));}
+function aktualisierePersonenSortierung(){
+  const q=(document.getElementById("search-input")?.value||"").trim().toLocaleLowerCase("de");
+  const gefiltert = !q ? personenCache : personenCache.filter(p => {
+    const text = `${p.nachname || ""} ${p.vorname || ""}`.toLocaleLowerCase("de");
+    return text.includes(q);
+  });
+  renderPersonenList(gefiltert);
+}
+const personenSuchfeld = document.getElementById("search-input");
+if(personenSuchfeld) personenSuchfeld.addEventListener("input", aktualisierePersonenSortierung);
 if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});
 if(personenSortButton)personenSortButton.addEventListener("click",()=>{personenSortRichtung*=-1;personenSortButton.textContent=personenSortRichtung===1?"↑":"↓";aktualisierePersonenSortierung();});
 

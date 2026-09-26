@@ -516,3 +516,6 @@
 .tree-node--relation-b{outline:3px solid var(--ink);outline-offset:3px;box-shadow:0 4px 14px rgba(43,42,40,.20)}
 .tree-relationship-arrow{font-size:.82rem;min-height:34px}
 .tree-relationship-arrow span{font-weight:700}
+
+/* v152: iPad Safari darf versteckte Platzhalter nicht neben Schlüsselfotos anzeigen. */
+.person-card__photo-placeholder[hidden]{display:none !important}
