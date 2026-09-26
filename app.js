@@ -1,4 +1,4 @@
-// v168 Persistenter Personen-Cache + Delta-Synchronisation + Egress-Test.
+// v169 Persistenter Personen-Cache + Delta-Synchronisation + Sync-Diagnose + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -20,7 +20,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v168";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v169";
 
 function neuesEgressMessObjekt() {
   return {
@@ -36,6 +36,14 @@ function neuesEgressMessObjekt() {
     timingNullBytes: 0,
     timingNichtMessbar: 0,
     transferMessungen: 0,
+    syncPruefungen: 0,
+    syncLetzteAenderungen: 0,
+    syncLetzteSeq: 0,
+    syncPersonenAktualisiert: 0,
+    syncPersonenGeloescht: 0,
+    syncBeziehungenAktualisiert: 0,
+    syncFehler: "",
+    syncLetzteZeit: 0,
     uniqueAssignedUrls: [],
     uniqueLoadedUrls: [],
     schritte: []
@@ -144,6 +152,9 @@ function aktualisiereEgressMessung() {
   el.textContent =
     `Messung seit: ${seit}\n` +
     `Personen-Supabase-Abfragen: ${egressMessung.personenSupabaseAbrufe}\n` +
+    `Delta-Sync: ${egressMessung.syncPruefungen || 0} Prüfung(en) · letzte Änderung(en): ${egressMessung.syncLetzteAenderungen || 0} · seq: ${egressMessung.syncLetzteSeq || 0}\n` +
+    `Delta verarbeitet: ${egressMessung.syncPersonenAktualisiert || 0} Person(en) aktualisiert · ${egressMessung.syncPersonenGeloescht || 0} gelöscht${egressMessung.syncBeziehungenAktualisiert ? ` · Beziehungen/Familien neu geladen: ${egressMessung.syncBeziehungenAktualisiert}` : ""}\n` +
+    (egressMessung.syncFehler ? `Delta-Sync Fehler: ${egressMessung.syncFehler}\n` : "") +
     `Signierte URL-Anfragen: ${egressMessung.signierteURLAnfragen} · Pfade: ${egressMessung.signierteURLPfade}\n` +
     `Bild-URL-Zuweisungen gesamt: ${egressMessung.urlSetzungen} · eindeutig: ${egressMessung.eindeutigeURLSetzungen}\n` +
     `Bild-Ladevorgänge gesamt: ${egressMessung.loadEvents} · eindeutige URLs: ${egressMessung.eindeutigeLoadURLs}\n` +
@@ -1279,7 +1290,7 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 }
 
 // ---------- Persistenter Personen-Cache (IndexedDB) ----------
-// v168: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
+// v169: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
 // Die zentrale Tabelle sync_aenderungen hält den letzten Synchronisationsstand.
 const PERSONEN_DB_NAME = "partezettel-cache-v167";
 const PERSONEN_DB_VERSION = 1;
@@ -1559,8 +1570,24 @@ async function synchronisierePersonenDelta() {
   if (syncLadePromise) return syncLadePromise;
 
   syncLadePromise = (async () => {
+    egressMessung.syncPruefungen = Number(egressMessung.syncPruefungen || 0) + 1;
+    egressMessung.syncFehler = "";
+    egressMessung.syncLetzteZeit = Date.now();
+    egressMessung.syncLetzteSeq = Number(personenCacheSyncSeq || 0);
     const aenderungen = await holeSyncAenderungenSeit(personenCacheSyncSeq);
-    if (!aenderungen.length) return false;
+    egressMessung.syncLetzteAenderungen = aenderungen.length;
+    egressMessung.syncPersonenAktualisiert = 0;
+    egressMessung.syncPersonenGeloescht = 0;
+    egressMessung.syncBeziehungenAktualisiert = 0;
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
+    if (!aenderungen.length) {
+      const aktuellerStand = await holeSyncMaxSeq();
+      egressMessung.syncLetzteSeq = aktuellerStand;
+      speichereEgressMessung();
+      aktualisiereEgressMessung();
+      return false;
+    }
 
     const letzteAenderung = new Map();
     for (const a of aenderungen) {
@@ -1574,6 +1601,7 @@ async function synchronisierePersonenDelta() {
 
     if (zuLoeschendePersonen.size) {
       personenCache = personenCache.filter(p => !zuLoeschendePersonen.has(p.id));
+      egressMessung.syncPersonenGeloescht = zuLoeschendePersonen.size;
       for (const id of zuLoeschendePersonen) {
         const karte = personenKartenCache.get(id);
         if (karte) karte.li.remove();
@@ -1589,12 +1617,16 @@ async function synchronisierePersonenDelta() {
       const byId = new Map(personenCache.map(p => [p.id, p]));
       for (const person of data || []) byId.set(person.id, person);
       personenCache = [...byId.values()];
+      egressMessung.syncPersonenAktualisiert = (data || []).length;
     }
 
     const familienGeaendert = [...letzteAenderung.values()].some(a =>
       a.tabelle === "familien" || a.tabelle === "familien_kinder" || a.tabelle === "beziehung"
     );
-    if (familienGeaendert) await ladeFamilienAusSupabaseFuerSync();
+    if (familienGeaendert) {
+      await ladeFamilienAusSupabaseFuerSync();
+      egressMessung.syncBeziehungenAktualisiert = 1;
+    }
 
     const fotosGeaendert = [...letzteAenderung.values()].some(a =>
       a.tabelle === "fotos" || a.tabelle === "foto_personen"
@@ -1609,6 +1641,9 @@ async function synchronisierePersonenDelta() {
 
     const neuerStand = await holeSyncMaxSeq();
     personenCacheSyncSeq = neuerStand;
+    egressMessung.syncLetzteSeq = neuerStand;
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
     await speicherePersonenImPersistentenCache({
       personen: personenCache,
       familien: familienAuswahlCache,
@@ -1632,8 +1667,16 @@ async function synchronisierePersonenDelta() {
     return true;
   })();
 
-  try { return await syncLadePromise; }
-  finally { syncLadePromise = null; }
+  try {
+    return await syncLadePromise;
+  } catch (err) {
+    egressMessung.syncFehler = String(err?.message || err || "Unbekannter Fehler");
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
+    throw err;
+  } finally {
+    syncLadePromise = null;
+  }
 }
 
 // ---------- Personenliste laden ----------
