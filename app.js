@@ -1,4 +1,4 @@
-// v162 Temporäre Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
+// v163 Persistenter Personen-Cache + v162 Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -21,6 +21,9 @@ function debugLog(msg) {
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
 const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v162";
+const PERSONEN_IDB_DB = "partezettel-local-v163";
+const PERSONEN_IDB_STORE = "personen";
+const PERSONEN_IDB_KEY = "personen-cache";
 
 function neuesEgressMessObjekt() {
   return {
@@ -203,6 +206,7 @@ let personenCache = []; // {id, vorname, nachname, ...}
 let personenCacheGeladen = false;
 let personenLadePromise = null;
 let personenCacheZeitpunkt = 0;
+let personenCacheQuelle = "supabase";
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
@@ -1269,6 +1273,68 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
   return tod.exakt ? `Ende: ${datumAnzeige(tod.datum)} · Tod` : `Ende: Tod ${tod.jahr}`;
 }
 
+// ---------- Persistenter Personen-Cache (v163) ----------
+// Der Cache liegt in IndexedDB und überlebt das Schließen/Neuladen der App.
+// Wichtig: Er ersetzt noch NICHT die Server-Synchronisation. Beim Start wird
+// der lokale Stand sofort angezeigt und anschließend weiterhin mit Supabase
+// abgeglichen. So testen wir zunächst sicher die dauerhafte Speicherung, ohne
+// die Daten-Synchronisation oder das Datenmodell der Datenbank zu verändern.
+function oeffnePersonenIDB() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) { reject(new Error("IndexedDB nicht verfügbar")); return; }
+    const req = indexedDB.open(PERSONEN_IDB_DB, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(PERSONEN_IDB_STORE)) db.createObjectStore(PERSONEN_IDB_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("IndexedDB konnte nicht geöffnet werden"));
+  });
+}
+
+async function ladePersonenAusPersistentemCache() {
+  try {
+    const db = await oeffnePersonenIDB();
+    const daten = await new Promise((resolve, reject) => {
+      const tx = db.transaction(PERSONEN_IDB_STORE, "readonly");
+      const req = tx.objectStore(PERSONEN_IDB_STORE).get(PERSONEN_IDB_KEY);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+    db.close();
+    if (!daten || !Array.isArray(daten.personen) || daten.personen.length === 0) return false;
+    personenCache = daten.personen;
+    personenCacheGeladen = true;
+    personenCacheZeitpunkt = daten.gespeichertAm || Date.now();
+    personenCacheQuelle = "lokal";
+    debugLog(`💾 Persistenter Personen-Cache geladen: ${personenCache.length} Personen.`);
+    return true;
+  } catch (err) {
+    debugLog(`⚠️ Persistenter Cache nicht verfügbar: ${err.message || err}`);
+    return false;
+  }
+}
+
+async function speicherePersonenInPersistentemCache(personen) {
+  try {
+    const db = await oeffnePersonenIDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PERSONEN_IDB_STORE, "readwrite");
+      tx.objectStore(PERSONEN_IDB_STORE).put({
+        personen: Array.isArray(personen) ? personen : [],
+        gespeichertAm: Date.now()
+      }, PERSONEN_IDB_KEY);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error || new Error("IndexedDB-Transaktion abgebrochen"));
+    });
+    db.close();
+    debugLog(`💾 Personen-Cache dauerhaft gespeichert: ${Array.isArray(personen) ? personen.length : 0} Personen.`);
+  } catch (err) {
+    debugLog(`⚠️ Persistenten Personen-Cache speichern: ${err.message || err}`);
+  }
+}
+
 // ---------- Personenliste laden ----------
 async function loadPersonen(force = false) {
   if (force) {
@@ -1286,12 +1352,16 @@ async function loadPersonen(force = false) {
     return;
   }
 
-  // Personen, Familien und Verknüpfungen bleiben während der gesamten
-  // laufenden Sitzung im Speicher. Beim Wechseln zwischen Ansichten und bei
-  // der lokalen Suche werden sie NICHT erneut von Supabase geladen.
-  // Nur eine bewusste Aktualisierung (force=true) oder eine Invalidierung
-  // nach einer Datenänderung lädt die Daten neu.
-  if (!force && personenCacheGeladen) {
+  // Während der laufenden Sitzung wird der bereits geladene Cache verwendet.
+  // Bei einem App-Neustart kann v163 zusätzlich den persistenten IndexedDB-
+  // Cache sofort anzeigen. Danach läuft die bestehende Server-Synchronisation
+  // weiter, damit Änderungen anderer Nutzer nicht verborgen bleiben.
+  if (!force && personenCacheGeladen && personenCacheQuelle === "lokal") {
+    aktualisierePersonenCacheStatus();
+    await renderPersonenList(personenCache);
+    const empty = document.getElementById("list-empty");
+    if (empty) empty.hidden = personenCache.length > 0;
+  } else if (!force && personenCacheGeladen) {
     aktualisierePersonenCacheStatus();
     await renderPersonenList(personenCache);
     const empty = document.getElementById("list-empty");
@@ -1311,6 +1381,7 @@ async function loadPersonen(force = false) {
     if (error) throw error;
 
     personenCache = data || [];
+    personenCacheQuelle = "supabase";
     try {
       const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
         sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
@@ -1372,6 +1443,8 @@ async function loadPersonen(force = false) {
     }
     personenCacheGeladen = true;
     personenCacheZeitpunkt = Date.now();
+    personenCacheQuelle = "supabase";
+    await speicherePersonenInPersistentemCache(personenCache);
     aktualisierePersonenCacheStatus();
     debugLog(`✅ Personen-Cache geladen: ${personenCache.length} Personen.`);
     if (banner) banner.hidden = true;
@@ -1408,7 +1481,8 @@ function aktualisierePersonenCacheStatus() {
   if (!el) return;
   if (personenCacheGeladen) {
     const zeit = personenCacheZeitpunkt ? new Date(personenCacheZeitpunkt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
-    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""}`;
+    const quelle = personenCacheQuelle === "lokal" ? " · lokal" : " · Supabase";
+    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""}${quelle}`;
     el.classList.add("is-loaded");
   } else {
     el.textContent = "Cache: wird geladen …";
@@ -1801,6 +1875,7 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
   try {
     await ensureSession();
     await flushQueue();
+    await ladePersonenAusPersistentemCache();
     // Auch bei einer bereits bestehenden Anmeldung die Personenliste sofort
     // laden. So ist der lokale Such-Cache schon beim ersten Öffnen vorhanden.
     await loadPersonen();
