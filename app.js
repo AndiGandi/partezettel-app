@@ -1271,14 +1271,14 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 }
 
 // ---------- Persistenter Personen-Cache (IndexedDB) ----------
-// v165: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
+// v166: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
 // Noch KEINE Änderungsprüfung: Die Tabelle "personen" besitzt aktuell keine
 // geaendert_am/updated_at-Spalte. Die gezielte Änderungsprüfung folgt erst
 // nach einer ausdrücklich freigegebenen Datenbankänderung.
-const PERSONEN_DB_NAME = "partezettel-cache-v165";
+const PERSONEN_DB_NAME = "partezettel-cache-v166";
 const PERSONEN_DB_VERSION = 1;
 const PERSONEN_STORE = "personen_bundle";
-const PERSONEN_LOCAL_KEY = "partezettel-personen-cache-v165";
+const PERSONEN_LOCAL_KEY = "partezettel-personen-cache-v166";
 
 function oeffnePersonenCacheDB() {
   return new Promise((resolve, reject) => {
@@ -1316,56 +1316,70 @@ async function lesePersonenAusPersistentemCache() {
 }
 
 async function speicherePersonenImPersistentenCache(bundle) {
+  const gespeichertAm = new Date().toISOString();
+  const cacheBundle = {
+    id: "aktuell",
+    gespeichertAm,
+    ...bundle
+  };
+
+  // v166: localStorage und IndexedDB sind zwei unabhängige Speicherwege.
+  // Ein Fehler in IndexedDB darf NICHT verhindern, dass der Safari-Fallback
+  // gespeichert wird.
+  let localGespeichert = false;
+  try {
+    localStorage.setItem(PERSONEN_LOCAL_KEY, JSON.stringify(cacheBundle));
+    localGespeichert = true;
+    debugLog(`💾 Personen-Cache in localStorage gespeichert: ${bundle.personen?.length || 0} Personen.`);
+  } catch (storageErr) {
+    debugLog(`⚠️ localStorage-Cache nicht speicherbar: ${storageErr.message || storageErr}`);
+  }
+
+  let indexedGespeichert = false;
   try {
     const db = await oeffnePersonenCacheDB();
     await new Promise((resolve, reject) => {
       const tx = db.transaction(PERSONEN_STORE, "readwrite");
-      tx.objectStore(PERSONEN_STORE).put({
-        id: "aktuell",
-        gespeichertAm: new Date().toISOString(),
-        ...bundle
-      });
+      tx.objectStore(PERSONEN_STORE).put(cacheBundle);
       tx.oncomplete = resolve;
       tx.onerror = () => reject(tx.error || new Error("Personen-Cache konnte nicht gespeichert werden."));
       tx.onabort = () => reject(tx.error || new Error("Personen-Cache wurde abgebrochen."));
     });
     db.close();
-    // Zusätzliche Safari-Fallback-Sicherung: Der kompakte Personen-/Auswahlcache
-    // wird parallel auch in localStorage abgelegt. Dadurch bleibt der Cache auch
-    // dann erhalten, wenn IndexedDB auf dem Gerät nicht zuverlässig verfügbar ist.
-    try {
-      localStorage.setItem(PERSONEN_LOCAL_KEY, JSON.stringify({
-        gespeichertAm: new Date().toISOString(),
-        ...bundle
-      }));
-    } catch (storageErr) {
-      debugLog(`⚠️ localStorage-Fallback nicht speicherbar: ${storageErr.message || storageErr}`);
-    }
-    debugLog(`💾 Personen-Cache dauerhaft gespeichert: ${bundle.personen?.length || 0} Personen.`);
-    return true;
+    indexedGespeichert = true;
+    debugLog(`💾 Personen-Cache in IndexedDB gespeichert: ${bundle.personen?.length || 0} Personen.`);
   } catch (err) {
-    debugLog(`⚠️ Persistenter Personen-Cache konnte nicht gespeichert werden: ${err.message || err}`);
-    return false;
+    debugLog(`⚠️ IndexedDB-Cache nicht speicherbar: ${err.message || err}`);
   }
+
+  return localGespeichert || indexedGespeichert;
 }
 
 async function ladePersonenAusPersistentemCache() {
-  let bundle = await lesePersonenAusPersistentemCache();
-  let quelle = "IndexedDB";
-  if (!bundle || !Array.isArray(bundle.personen) || bundle.personen.length === 0) {
-    try {
-      const raw = localStorage.getItem(PERSONEN_LOCAL_KEY);
-      if (raw) {
-        const fallback = JSON.parse(raw);
-        if (Array.isArray(fallback?.personen) && fallback.personen.length > 0) {
-          bundle = fallback;
-          quelle = "localStorage";
-        }
+  // v166: Safari zuerst aus localStorage bedienen. IndexedDB bleibt als
+  // zusätzlicher dauerhafter Speicherweg erhalten.
+  let bundle = null;
+  let quelle = "";
+  try {
+    const raw = localStorage.getItem(PERSONEN_LOCAL_KEY);
+    if (raw) {
+      const fallback = JSON.parse(raw);
+      if (Array.isArray(fallback?.personen) && fallback.personen.length > 0) {
+        bundle = fallback;
+        quelle = "localStorage";
       }
-    } catch (storageErr) {
-      debugLog(`⚠️ localStorage-Cache nicht lesbar: ${storageErr.message || storageErr}`);
+    }
+  } catch (storageErr) {
+    debugLog(`⚠️ localStorage-Cache nicht lesbar: ${storageErr.message || storageErr}`);
+  }
+
+  if (!bundle) {
+    bundle = await lesePersonenAusPersistentemCache();
+    if (bundle && Array.isArray(bundle.personen) && bundle.personen.length > 0) {
+      quelle = "IndexedDB";
     }
   }
+
   if (!bundle || !Array.isArray(bundle.personen) || bundle.personen.length === 0) return false;
 
   personenCache = bundle.personen;
