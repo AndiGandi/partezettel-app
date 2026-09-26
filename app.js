@@ -1,4 +1,4 @@
-// v95 Kinderliste: Kinderdatensätze werden separat nachgeladen.
+// v150 Egress-Optimierung: Sitzungs- und Schlüsselfoto-Cache.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -53,6 +53,10 @@ let audioChunks = [];
 let recordStartTime = null;
 let isRecording = false;
 let personenCache = []; // {id, vorname, nachname, ...}
+let personenCacheGeladen = false;
+let personenLadePromise = null;
+const PERSONEN_CACHE_MAX_ALTER_MS = 5 * 60 * 1000;
+let personenCacheZeitpunkt = 0;
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
@@ -1120,7 +1124,7 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 }
 
 // ---------- Personenliste laden ----------
-async function loadPersonen() {
+async function loadPersonen(force = false) {
   const banner = document.getElementById("pending-banner");
   try {
     await ensureSession();
@@ -1130,98 +1134,172 @@ async function loadPersonen() {
     debugLog(`❌ Personen laden: ${msg}`);
     return;
   }
-  const list = document.getElementById("personen-list");
-  const empty = document.getElementById("list-empty");
-  const { data, error } = await sb
-    .from("personen")
-    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
-    .order("nachname", { ascending: true });
 
-  if (error) {
-    console.error(error);
+  // Personen, Familien und Verknüpfungen bleiben innerhalb der Sitzung kurz
+  // im Speicher. Beim Wechseln zwischen Ansichten werden sie dadurch nicht
+  // jedes Mal erneut von Supabase geladen. Der Aktualisieren-Button ruft mit
+  // force=true bewusst eine frische Abfrage ab.
+  const cacheFrisch = personenCacheGeladen &&
+    (Date.now() - personenCacheZeitpunkt < PERSONEN_CACHE_MAX_ALTER_MS);
+  if (!force && cacheFrisch) {
+    renderPersonenList(personenCache);
+    const empty = document.getElementById("list-empty");
+    if (empty) empty.hidden = personenCache.length > 0;
+    return;
+  }
+  if (personenLadePromise) return personenLadePromise;
+
+  personenLadePromise = (async () => {
+    const list = document.getElementById("personen-list");
+    const empty = document.getElementById("list-empty");
+    const { data, error } = await sb
+      .from("personen")
+      .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
+      .order("nachname", { ascending: true });
+
+    if (error) throw error;
+
+    personenCache = data || [];
+    try {
+      const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
+        sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
+        sb.from("familien_kinder").select("familie_id, kind_id"),
+        sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
+      ]);
+      familienAuswahlCache = familien || [];
+      partnerIdsAuswahlCache = new Set();
+      for (const f of familienAuswahlCache) {
+        const typ = String(f.familientyp || "").toLowerCase();
+        if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
+          if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+          if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+        }
+      }
+      for (const b of beziehungen || []) {
+        if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+          if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+          if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+        }
+      }
+      const kinderByFamilie = new Map();
+      for (const k of familienKinder || []) {
+        if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []);
+        kinderByFamilie.get(k.familie_id).push(k.kind_id);
+      }
+      for (const f of familien || []) f._kinder = kinderByFamilie.get(f.id) || [];
+
+      personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+        eltern: new Set(),
+        ehePartnerschaften: new Set(),
+        kinder: new Set(),
+      }]));
+      for (const fk of familienKinder || []) {
+        const familie = (familien || []).find((f) => f.id === fk.familie_id);
+        if (!familie || !fk.kind_id) continue;
+        const info = personenVerwandtschaftCache.get(fk.kind_id);
+        if (!info) continue;
+        for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+          if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+        }
+      }
+      for (const familie of familien || []) {
+        const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
+        const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
+        for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+          if (!partnerId || !istEheOderPartnerschaft) continue;
+          const info = personenVerwandtschaftCache.get(partnerId);
+          if (!info) continue;
+          info.ehePartnerschaften.add(familie.id);
+          for (const kindId of familie._kinder || []) {
+            if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+          }
+        }
+      }
+      berechneFamilienSortKeys(personenCache, familien || []);
+    } catch (familyErr) {
+      debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`);
+    }
+    personenCacheGeladen = true;
+    personenCacheZeitpunkt = Date.now();
+    if (banner) banner.hidden = true;
+    await renderPersonenList(personenCache);
+    if (empty) empty.hidden = personenCache.length > 0;
+  })();
+
+  try {
+    await personenLadePromise;
+  } catch (err) {
+    console.error(err);
+    if (banner) { banner.hidden = false; banner.textContent = `Fehler beim Laden: ${err.message || err}`; }
+    debugLog(`❌ Personen laden: ${err.message || err}`);
+  } finally {
+    personenLadePromise = null;
+  }
+}
+
+function invalidierePersonenCache() {
+  personenCacheGeladen = false;
+  personenCacheZeitpunkt = 0;
+}
+
+const schluesselfotoCache = new Map(); // personenId -> { url, gueltigBis }
+const schluesselfotoLadePromise = { value: null };
+
+async function ladeSchluesselfotos(personen, force = false) {
+  if (!personen.length) return;
+  const jetzt = Date.now();
+  const fehlende = force ? personen : personen.filter((p) => {
+    const eintrag = schluesselfotoCache.get(p.id);
+    return !eintrag || eintrag.gueltigBis <= jetzt;
+  });
+  if (!fehlende.length) return;
+  if (schluesselfotoLadePromise.value) {
+    await schluesselfotoLadePromise.value;
     return;
   }
 
-  personenCache = data || [];
-  try {
-    const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
-      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
-      sb.from("familien_kinder").select("familie_id, kind_id"),
-      sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
-    ]);
-    familienAuswahlCache = familien || [];
-    partnerIdsAuswahlCache = new Set();
-    for (const f of familienAuswahlCache) {
-      const typ = String(f.familientyp || "").toLowerCase();
-      // Nur laufende Ehe/Partnerschaft sperrt die Person in der Auswahl.
-      // Beendete Beziehungen bleiben für eine spätere Ehe/Partnerschaft auswählbar.
-      if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
-        if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
-        if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
-      }
+  schluesselfotoLadePromise.value = (async () => {
+    const ids = fehlende.map(p => p.id);
+    const { data, error } = await sb.from("fotos")
+      .select("id, personen_id, dateipfad, ist_schluesselfoto")
+      .in("personen_id", ids)
+      .eq("ist_schluesselfoto", true);
+    if (error) {
+      debugLog(`❌ Schlüsselfotos laden: ${error.message}`);
+      return;
     }
-    // Ältere Daten können noch ausschließlich in "beziehung" stehen.
-    // Diese werden ebenfalls nur dann als belegte Partnerschaft behandelt,
-    // wenn sie ausdrücklich Ehe oder Partnerschaft sind.
-    for (const b of beziehungen || []) {
-      if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
-        if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
-        if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
-      }
-    }
-    const kinderByFamilie = new Map();
-    for (const k of familienKinder || []) { if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []); kinderByFamilie.get(k.familie_id).push(k.kind_id); }
-    for (const f of familien || []) f._kinder=kinderByFamilie.get(f.id)||[];
 
-    // Kleine Verwandtschaftszusammenfassung für die Personenliste.
-    // Die Werte werden ausschließlich aus den bestehenden Familien- und
-    // Kinderverknüpfungen berechnet; es werden keine neuen Daten gespeichert.
-    personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
-      eltern: new Set(),
-      ehePartnerschaften: new Set(),
-      kinder: new Set(),
-    }]));
-    for (const fk of familienKinder || []) {
-      const familie = (familien || []).find((f) => f.id === fk.familie_id);
-      if (!familie || !fk.kind_id) continue;
-      const info = personenVerwandtschaftCache.get(fk.kind_id);
-      if (!info) continue;
-      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-        if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
-      }
+    const gefundeneIds = new Set((data || []).map(f => f.personen_id));
+    for (const person of fehlende) {
+      if (!gefundeneIds.has(person.id)) schluesselfotoCache.delete(person.id);
     }
-    for (const familie of familien || []) {
-      const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
-      const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
-      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-        if (!partnerId || !istEheOderPartnerschaft) continue;
-        const info = personenVerwandtschaftCache.get(partnerId);
-        if (!info) continue;
-        info.ehePartnerschaften.add(familie.id);
-        for (const kindId of familie._kinder || []) {
-          if (kindId && kindId !== partnerId) info.kinder.add(kindId);
-        }
-      }
+
+    const fotos = data || [];
+    if (!fotos.length) return;
+
+    // Eine einzige Signed-URL-Anfrage für alle benötigten Bilder statt einer
+    // Anfrage pro Person. Die URL wird bis kurz vor Ablauf wiederverwendet.
+    const pfade = fotos.map(f => f.dateipfad).filter(Boolean);
+    const { data: signedList, error: signedError } = await sb.storage
+      .from(BUCKET_FOTOS)
+      .createSignedUrls(pfade, 3600);
+    if (signedError) {
+      debugLog(`❌ Schlüsselfoto-URLs laden: ${signedError.message}`);
+      return;
     }
-    berechneFamilienSortKeys(personenCache,familien||[]);
-  } catch (familyErr) { debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`); }
-  if (banner) banner.hidden = true;
-  renderPersonenList(personenCache);
-  empty.hidden = personenCache.length > 0;
-}
+    const urlByPath = new Map();
+    for (const item of signedList || []) {
+      if (item?.path && item?.signedUrl) urlByPath.set(item.path, item.signedUrl);
+    }
+    const gueltigBis = Date.now() + (55 * 60 * 1000);
+    for (const foto of fotos) {
+      const url = urlByPath.get(foto.dateipfad);
+      if (url) schluesselfotoCache.set(foto.personen_id, { url, gueltigBis });
+    }
+  })();
 
-const schluesselfotoCache = new Map();
-
-async function ladeSchluesselfotos(personen) {
-  schluesselfotoCache.clear();
-  if (!personen.length) return;
-  const ids = personen.map(p => p.id);
-  const { data, error } = await sb.from("fotos").select("id, personen_id, dateipfad, ist_schluesselfoto").in("personen_id", ids).eq("ist_schluesselfoto", true);
-  if (error) { debugLog(`❌ Schlüsselfotos laden: ${error.message}`); return; }
-  for (const foto of data || []) {
-    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
-    if (signed?.signedUrl) schluesselfotoCache.set(foto.personen_id, signed.signedUrl);
-  }
+  try { await schluesselfotoLadePromise.value; }
+  finally { schluesselfotoLadePromise.value = null; }
 }
 
 async function renderPersonenList(personen) {
@@ -1239,7 +1317,8 @@ async function renderPersonenList(personen) {
       .filter(Boolean)
       .join(" – ");
     const alterAnzeige = lebensalterAnzeige(p);
-    const fotoUrl = schluesselfotoCache.get(p.id);
+    const fotoEintrag = schluesselfotoCache.get(p.id);
+    const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
     const verwandtschaft = personenVerwandtschaftCache.get(p.id);
     const elternAnzahl = verwandtschaft?.eltern?.size || 0;
     const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
@@ -1275,7 +1354,7 @@ function aktualisierePersonenSortierung(){const q=(document.getElementById("sear
 if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});
 if(personenSortButton)personenSortButton.addEventListener("click",()=>{personenSortRichtung*=-1;personenSortButton.textContent=personenSortRichtung===1?"↑":"↓";aktualisierePersonenSortierung();});
 
-document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
+document.getElementById("refresh-btn").addEventListener("click", () => loadPersonen(true));
 
 // ---------- Init ----------
 (async function init() {
@@ -1640,7 +1719,8 @@ async function loadDetailFotos(personId) {
       if (keyError) { msg.textContent = `Fehler: ${keyError.message}`; return; }
       msg.textContent = "Schlüsselfoto gesetzt ✓";
       await loadDetailFotos(personId);
-      await loadPersonen();
+      invalidierePersonenCache();
+      await loadPersonen(true);
     });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm(istGruppenfoto ? "Diese Person vom Gruppenfoto entfernen?" : "Foto bzw. Verknüpfung wirklich entfernen?")) return;
@@ -1658,7 +1738,8 @@ async function loadDetailFotos(personId) {
         await sb.from("fotos").delete().eq("id", foto.id);
       }
       await loadDetailFotos(personId);
-      loadPersonen();
+      invalidierePersonenCache();
+      loadPersonen(true);
     });
     container.appendChild(div);
   }
