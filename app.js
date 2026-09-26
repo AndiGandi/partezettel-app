@@ -1,4 +1,4 @@
-// v161 Temporäre Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
+// v162 Temporäre Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -15,23 +15,57 @@ function debugLog(msg) {
   }
 }
 
-// ---------- Temporäre Egress-Messung (v161) ----------
-// Diese Messung verändert die Bildlogik nicht. Sie zählt nur, wann die App
-// eine neue Bild-URL setzt bzw. wann ein Bild geladen wurde. Wenn der Browser
-// Resource Timing für die signierte URL freigibt, wird zusätzlich die dort
-// gemeldete Transfergröße erfasst. Der tatsächliche Supabase-Egress bleibt
-// weiterhin ausschließlich im Supabase-Dashboard verbindlich.
-const egressMessung = {
-  start: Date.now(),
-  urlSetzungen: 0,
-  loadEvents: 0,
-  signierteURLAnfragen: 0,
-  signierteURLPfade: 0,
-  transferBytes: 0,
-  timingNullBytes: 0,
-  timingNichtMessbar: 0,
-  transferMessungen: 0
-};
+// ---------- Temporäre Egress-Messung (v162) ----------
+// Nur für den kontrollierten Egress-Test. Die eigentliche Bild- und Suchlogik
+// bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
+// ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
+// auf 0 zurücksetzt.
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v162";
+
+function neuesEgressMessObjekt() {
+  return {
+    start: Date.now(),
+    urlSetzungen: 0,
+    eindeutigeURLSetzungen: 0,
+    loadEvents: 0,
+    eindeutigeLoadURLs: 0,
+    signierteURLAnfragen: 0,
+    signierteURLPfade: 0,
+    transferBytes: 0,
+    timingNullBytes: 0,
+    timingNichtMessbar: 0,
+    transferMessungen: 0,
+    uniqueAssignedUrls: [],
+    uniqueLoadedUrls: [],
+    schritte: []
+  };
+}
+
+function ladeEgressMessung() {
+  try {
+    const raw = sessionStorage.getItem(EGRESS_DEBUG_KEY);
+    if (!raw) return neuesEgressMessObjekt();
+    const parsed = JSON.parse(raw);
+    const basis = neuesEgressMessObjekt();
+    return {
+      ...basis,
+      ...parsed,
+      uniqueAssignedUrls: Array.isArray(parsed.uniqueAssignedUrls) ? parsed.uniqueAssignedUrls : [],
+      uniqueLoadedUrls: Array.isArray(parsed.uniqueLoadedUrls) ? parsed.uniqueLoadedUrls : [],
+      schritte: Array.isArray(parsed.schritte) ? parsed.schritte : []
+    };
+  } catch (_) {
+    return neuesEgressMessObjekt();
+  }
+}
+
+const egressMessung = ladeEgressMessung();
+
+function speichereEgressMessung() {
+  try {
+    sessionStorage.setItem(EGRESS_DEBUG_KEY, JSON.stringify(egressMessung));
+  } catch (_) {}
+}
 
 try {
   if (typeof performance !== "undefined" && performance.setResourceTimingBufferSize) {
@@ -58,6 +92,11 @@ function findeResourceTiming(url) {
 
 function registriereEgressBildLoad(url) {
   egressMessung.loadEvents++;
+  if (url && !egressMessung.uniqueLoadedUrls.includes(url)) {
+    egressMessung.uniqueLoadedUrls.push(url);
+    egressMessung.eindeutigeLoadURLs++;
+  }
+
   const timing = findeResourceTiming(url);
   if (!timing) {
     egressMessung.timingNichtMessbar++;
@@ -68,6 +107,26 @@ function registriereEgressBildLoad(url) {
   } else {
     egressMessung.timingNichtMessbar++;
   }
+  speichereEgressMessung();
+  aktualisiereEgressMessung();
+}
+
+function registriereEgressSchritt(label) {
+  const step = {
+    zeit: new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    label: String(label || "(ohne Suche)"),
+    urlSetzungen: egressMessung.urlSetzungen,
+    eindeutigeURLSetzungen: egressMessung.eindeutigeURLSetzungen,
+    loadEvents: egressMessung.loadEvents,
+    eindeutigeLoadURLs: egressMessung.eindeutigeLoadURLs,
+    signierteURLAnfragen: egressMessung.signierteURLAnfragen,
+    transferBytes: egressMessung.transferBytes,
+    timingNullBytes: egressMessung.timingNullBytes,
+    timingNichtMessbar: egressMessung.timingNichtMessbar
+  };
+  egressMessung.schritte.push(step);
+  if (egressMessung.schritte.length > 12) egressMessung.schritte.shift();
+  speichereEgressMessung();
   aktualisiereEgressMessung();
 }
 
@@ -75,25 +134,24 @@ function aktualisiereEgressMessung() {
   const el = document.getElementById("egress-debug-status");
   if (!el) return;
   const seit = new Date(egressMessung.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const schritte = egressMessung.schritte.length
+    ? "\n\nLetzte Messschritte:\n" + egressMessung.schritte.map((s, i) =>
+        `${i + 1}. ${s.zeit} „${s.label}“ → URLs ${s.urlSetzungen} (+${s.eindeutigeURLSetzungen} eindeutig), Loads ${s.loadEvents} (+${s.eindeutigeLoadURLs} eindeutig), Timing ${formatBytesDebug(s.transferBytes)}, 0 B ${s.timingNullBytes}, n.m. ${s.timingNichtMessbar}`
+      ).join("\n")
+    : "";
   el.textContent =
     `Messung seit: ${seit}\n` +
     `Signierte URL-Anfragen: ${egressMessung.signierteURLAnfragen} · Pfade: ${egressMessung.signierteURLPfade}\n` +
-    `Neue Bild-URL-Zuweisungen: ${egressMessung.urlSetzungen}\n` +
-    `Bild-Ladevorgänge: ${egressMessung.loadEvents}\n` +
-    `ResourceTiming gemessen: ${formatBytesDebug(egressMessung.transferBytes)}\n` +
-    `ResourceTiming 0 B: ${egressMessung.timingNullBytes} · nicht messbar: ${egressMessung.timingNichtMessbar}`;
+    `Bild-URL-Zuweisungen gesamt: ${egressMessung.urlSetzungen} · eindeutig: ${egressMessung.eindeutigeURLSetzungen}\n` +
+    `Bild-Ladevorgänge gesamt: ${egressMessung.loadEvents} · eindeutige URLs: ${egressMessung.eindeutigeLoadURLs}\n` +
+    `ResourceTiming > 0 B: ${formatBytesDebug(egressMessung.transferBytes)}\n` +
+    `ResourceTiming 0 B: ${egressMessung.timingNullBytes} · nicht messbar: ${egressMessung.timingNichtMessbar}` + schritte;
 }
 
 function resetEgressMessung() {
-  egressMessung.start = Date.now();
-  egressMessung.urlSetzungen = 0;
-  egressMessung.loadEvents = 0;
-  egressMessung.signierteURLAnfragen = 0;
-  egressMessung.signierteURLPfade = 0;
-  egressMessung.transferBytes = 0;
-  egressMessung.timingNullBytes = 0;
-  egressMessung.timingNichtMessbar = 0;
-  egressMessung.transferMessungen = 0;
+  const neu = neuesEgressMessObjekt();
+  Object.keys(neu).forEach(key => { egressMessung[key] = neu[key]; });
+  speichereEgressMessung();
   aktualisiereEgressMessung();
 }
 
@@ -1422,6 +1480,7 @@ async function ladeSchluesselfotos(personen, force = false) {
     const pfade = [...new Set(fotos.map(f => f.dateipfad))];
     egressMessung.signierteURLAnfragen++;
     egressMessung.signierteURLPfade += pfade.length;
+    speichereEgressMessung();
     aktualisiereEgressMessung();
     const { data: signedList, error: signedError } = await sb.storage
       .from(BUCKET_FOTOS)
@@ -1454,6 +1513,11 @@ function setzeSchluesselfotoInKarte(personenId) {
   if (fotoUrl) {
     if (karte.img.src !== fotoUrl) {
       egressMessung.urlSetzungen++;
+      if (!egressMessung.uniqueAssignedUrls.includes(fotoUrl)) {
+        egressMessung.uniqueAssignedUrls.push(fotoUrl);
+        egressMessung.eindeutigeURLSetzungen++;
+      }
+      speichereEgressMessung();
       karte.img.dataset.egressDebugUrl = fotoUrl;
       karte.img.src = fotoUrl;
       aktualisiereEgressMessung();
@@ -1696,15 +1760,35 @@ function aktualisierePersonenSortierung() {
   renderPersonenList(personenCache);
 }
 
+let egressSuchSchrittTimer = null;
+function registriereEgressSuchSchrittNachSuche(suchwert) {
+  clearTimeout(egressSuchSchrittTimer);
+  egressSuchSchrittTimer = setTimeout(() => {
+    registriereEgressSchritt(suchwert ? `Suche: ${suchwert}` : "Suche: leer");
+  }, 800);
+}
+
 const personenSuchfeld = document.getElementById("search-input");
 if (personenSuchfeld) {
-  personenSuchfeld.addEventListener("input", () => window.partezettelPersonenSuche(personenSuchfeld.value));
-  personenSuchfeld.addEventListener("search", () => window.partezettelPersonenSuche(personenSuchfeld.value));
-  personenSuchfeld.addEventListener("keyup", () => window.partezettelPersonenSuche(personenSuchfeld.value));
+  personenSuchfeld.addEventListener("input", () => {
+    window.partezettelPersonenSuche(personenSuchfeld.value);
+    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
+  });
+  personenSuchfeld.addEventListener("search", () => {
+    window.partezettelPersonenSuche(personenSuchfeld.value);
+    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
+  });
+  personenSuchfeld.addEventListener("keyup", () => {
+    window.partezettelPersonenSuche(personenSuchfeld.value);
+    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
+  });
 }
 
 document.addEventListener("input", (event) => {
-  if (event.target?.id === "search-input") window.partezettelPersonenSuche(event.target.value);
+  if (event.target?.id === "search-input") {
+    window.partezettelPersonenSuche(event.target.value);
+    registriereEgressSuchSchrittNachSuche(event.target.value);
+  }
 });
 
 if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});

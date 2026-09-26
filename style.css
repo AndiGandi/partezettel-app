@@ -534,7 +534,7 @@
 .person-card[hidden]{display:none !important}
 
 
-/* v161: temporäre Messanzeige für den Egress-Test */
+/* v162: temporäre Messanzeige für den Egress-Test */
 .egress-debug-panel{margin:.65rem 0 .8rem;border:1px dashed var(--line);border-radius:var(--radius);padding:.55rem .7rem;font-size:.76rem;color:var(--ink-soft);background:var(--card)}
 .egress-debug-panel summary{cursor:pointer;font-weight:600;color:var(--ink)}
 .egress-debug-status{white-space:pre-line;background:#f7f7f5;border:1px solid var(--line);border-radius:6px;padding:.55rem .65rem;margin:.55rem 0;line-height:1.5;font-variant-numeric:tabular-nums}
