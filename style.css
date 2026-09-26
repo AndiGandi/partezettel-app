@@ -510,3 +510,22 @@
   text-underline-offset:2px;
 }
 .familie-partner-link:active { opacity:.65; }
+
+/* v149: ausgewählte Personen in der Verwandtschaftsanzeige */
+.tree-node--relation-a{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 4px 14px rgba(43,42,40,.20)}
+.tree-node--relation-b{outline:3px solid var(--ink);outline-offset:3px;box-shadow:0 4px 14px rgba(43,42,40,.20)}
+.tree-relationship-arrow{font-size:.82rem;min-height:34px}
+.tree-relationship-arrow span{font-weight:700}
+
+/* v152: iPad Safari darf versteckte Platzhalter nicht neben Schlüsselfotos anzeigen. */
+.person-card__photo-placeholder[hidden]{display:none !important}
+
+.personen-cache-status {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  white-space: nowrap;
+  align-self: center;
+}
+.personen-cache-status.is-loaded {
+  opacity: 0.8;
+}
