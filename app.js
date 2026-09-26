@@ -1509,15 +1509,24 @@ const personenSortButton=document.getElementById("personen-sort-richtung");
 // Event-Listener nach einem View-/PWA-Wechsel noch korrekt ausführt.
 let personenSucheLauf = 0;
 
+function normalizePersonenSuchtext(value) {
+  return String(value ?? "")
+    .toLocaleLowerCase("de-DE")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function personenSuchtext(p) {
-  return [p?.vorname, p?.nachname, p?.Ledigenname]
-    .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
-    .map(v => String(v).toLocaleLowerCase("de-DE"))
-    .join(" ");
+  return normalizePersonenSuchtext(
+    [p?.vorname, p?.nachname, p?.Ledigenname]
+      .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+      .join(" ")
+  );
 }
 
 function wendePersonenSucheAn(suchwert) {
-  const q = String(suchwert ?? "").trim().toLocaleLowerCase("de-DE");
+  const q = normalizePersonenSuchtext(suchwert);
+  const tokens = q ? q.split(" ").filter(Boolean) : [];
   const list = document.getElementById("personen-list");
   const empty = document.getElementById("list-empty");
 
@@ -1531,6 +1540,7 @@ function wendePersonenSucheAn(suchwert) {
 
   // Alle Karten sind nach loadPersonen bereits vorhanden. Falls die Suche
   // außergewöhnlich früh kommt, werden fehlende Karten einmalig erzeugt.
+  // Beim Filtern werden weder Karten noch Bilder neu erzeugt.
   for (const p of personenCache) {
     if (!personenKartenCache.has(p.id)) erstellePersonenKarte(p);
   }
@@ -1539,7 +1549,12 @@ function wendePersonenSucheAn(suchwert) {
   for (const p of personenCache) {
     const karte = personenKartenCache.get(p.id);
     if (!karte) continue;
-    const sichtbar = q === "" || personenSuchtext(p).includes(q);
+
+    // Mehrwortsuche: Jeder Suchbegriff muss als Teilstring im gemeinsamen
+    // Namens-Suchraum vorkommen. Dadurch ist die Reihenfolge egal:
+    // "Ganahl Alois" findet "Alois Ganahl" und umgekehrt.
+    const haystack = personenSuchtext(p);
+    const sichtbar = tokens.length === 0 || tokens.every(token => haystack.includes(token));
     karte.li.hidden = !sichtbar;
     if (sichtbar) treffer++;
   }
