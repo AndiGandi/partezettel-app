@@ -1,4 +1,4 @@
-// v165 Persistenter Personen-Cache + Egress-Messung: Bildabrufe, ResourceTiming und lokaler Suchcache.
+// v167 Persistenter Personen-Cache + eindeutige Cache-Quelle + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -20,7 +20,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v165";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v167";
 
 function neuesEgressMessObjekt() {
   return {
@@ -30,6 +30,7 @@ function neuesEgressMessObjekt() {
     loadEvents: 0,
     eindeutigeLoadURLs: 0,
     signierteURLAnfragen: 0,
+    personenSupabaseAbrufe: 0,
     signierteURLPfade: 0,
     transferBytes: 0,
     timingNullBytes: 0,
@@ -120,6 +121,7 @@ function registriereEgressSchritt(label) {
     loadEvents: egressMessung.loadEvents,
     eindeutigeLoadURLs: egressMessung.eindeutigeLoadURLs,
     signierteURLAnfragen: egressMessung.signierteURLAnfragen,
+    personenSupabaseAbrufe: egressMessung.personenSupabaseAbrufe,
     transferBytes: egressMessung.transferBytes,
     timingNullBytes: egressMessung.timingNullBytes,
     timingNichtMessbar: egressMessung.timingNichtMessbar
@@ -141,6 +143,7 @@ function aktualisiereEgressMessung() {
     : "";
   el.textContent =
     `Messung seit: ${seit}\n` +
+    `Personen-Supabase-Abfragen: ${egressMessung.personenSupabaseAbrufe}\n` +
     `Signierte URL-Anfragen: ${egressMessung.signierteURLAnfragen} · Pfade: ${egressMessung.signierteURLPfade}\n` +
     `Bild-URL-Zuweisungen gesamt: ${egressMessung.urlSetzungen} · eindeutig: ${egressMessung.eindeutigeURLSetzungen}\n` +
     `Bild-Ladevorgänge gesamt: ${egressMessung.loadEvents} · eindeutige URLs: ${egressMessung.eindeutigeLoadURLs}\n` +
@@ -1275,10 +1278,10 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
 // Noch KEINE Änderungsprüfung: Die Tabelle "personen" besitzt aktuell keine
 // geaendert_am/updated_at-Spalte. Die gezielte Änderungsprüfung folgt erst
 // nach einer ausdrücklich freigegebenen Datenbankänderung.
-const PERSONEN_DB_NAME = "partezettel-cache-v166";
+const PERSONEN_DB_NAME = "partezettel-cache-v167";
 const PERSONEN_DB_VERSION = 1;
 const PERSONEN_STORE = "personen_bundle";
-const PERSONEN_LOCAL_KEY = "partezettel-personen-cache-v166";
+const PERSONEN_LOCAL_KEY = "partezettel-personen-cache-v167";
 
 function oeffnePersonenCacheDB() {
   return new Promise((resolve, reject) => {
@@ -1441,7 +1444,7 @@ async function ladePersonenAusPersistentemCache() {
   personenCacheGeladen = true;
   personenCacheQuelle = quelle;
   personenCacheZeitpunkt = bundle.gespeichertAm ? Date.parse(bundle.gespeichertAm) || Date.now() : Date.now();
-  aktualisierePersonenCacheStatus(true);
+  aktualisierePersonenCacheStatus();
   debugLog(`📦 Personen aus dauerhaftem Cache geladen: ${personenCache.length} Personen.`);
 
   const banner = document.getElementById("pending-banner");
@@ -1492,6 +1495,9 @@ async function loadPersonen(force = false) {
   personenLadePromise = (async () => {
     const list = document.getElementById("personen-list");
     const empty = document.getElementById("list-empty");
+    egressMessung.personenSupabaseAbrufe++;
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
     const { data, error } = await sb
       .from("personen")
       .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
@@ -1568,6 +1574,7 @@ async function loadPersonen(force = false) {
     } catch (familyErr) {
       debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`);
     }
+    personenCacheQuelle = "Supabase";
     personenCacheGeladen = true;
     personenCacheZeitpunkt = Date.now();
     aktualisierePersonenCacheStatus();
@@ -1602,12 +1609,14 @@ function invalidierePersonenCache() {
   aktualisierePersonenCacheStatus();
 }
 
-function aktualisierePersonenCacheStatus(lokal = false) {
+function aktualisierePersonenCacheStatus() {
   const el = document.getElementById("personen-cache-status");
   if (!el) return;
   if (personenCacheGeladen) {
     const zeit = personenCacheZeitpunkt ? new Date(personenCacheZeitpunkt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
-    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""}${lokal ? " · lokal" : " · Supabase"}`;
+    const lokal = personenCacheQuelle === "localStorage" || personenCacheQuelle === "IndexedDB";
+    const quelleText = lokal ? "lokal" : "Supabase";
+    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""} · ${quelleText}`;
     el.classList.add("is-loaded");
   } else {
     el.textContent = "Cache: wird geladen …";
