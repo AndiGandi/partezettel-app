@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=155">
+<link rel="stylesheet" href="style.css?v=156">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 155</p>
+  <p id="app-version" class="app-header__version">Version 156</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -175,8 +175,8 @@
   <!-- ===================== TAB: PERSONEN-LISTE ===================== -->
   <section id="tab-liste" class="tab-panel">
     <div class="list-toolbar">
-      <input type="search" id="search-input" placeholder="Person suchen …">
-      <span id="personen-cache-status" class="personen-cache-status" aria-live="polite">Cache: wird geladen …</span>
+      <input type="search" id="search-input" placeholder="Person suchen …" autocomplete="off" oninput="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)" onkeyup="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)">
+      <span id="personen-cache-status" class="personen-cache-status" aria-live="polite">Cache: wird geladen …</span><span id="personen-suchtreffer" class="personen-suchtreffer" aria-live="polite"></span>
       <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
     </div>
     <div id="pending-banner" class="pending-banner" hidden></div>
@@ -538,6 +538,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=155"></script>
+<script src="app.js?v=156"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-// v155 Egress-Optimierung: Sitzungscache + robuste lokale Namenssuche beim iPad-Start.
+// v156 Egress-Optimierung: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -1230,6 +1230,13 @@ async function loadPersonen(force = false) {
     if (banner) banner.hidden = true;
     await renderPersonenList(personenCache);
     if (empty) empty.hidden = personenCache.length > 0;
+    // Falls der Nutzer schon während des Ladevorgangs in das Suchfeld
+    // geschrieben hat, die aktuelle Eingabe nach dem Cache-Aufbau sofort
+    // anwenden. Dadurch geht kein erster Buchstabe verloren.
+    const suchfeldNachLaden = document.getElementById("search-input");
+    if (suchfeldNachLaden?.value) {
+      window.partezettelPersonenSuche?.(suchfeldNachLaden.value);
+    }
   })();
 
   try {
@@ -1495,65 +1502,79 @@ async function renderPersonenList(personen) {
 const personenSortSelect=document.getElementById("personen-sortierung");
 const personenSortButton=document.getElementById("personen-sort-richtung");
 
-// Die Namenssuche arbeitet ausschließlich auf dem bereits geladenen
-// personenCache. Beim Tippen werden keine Supabase-Daten geladen und keine
-// Personenkarten bzw. Bilder neu erzeugt. Die Karten werden nur sichtbar/
-// unsichtbar geschaltet. Das ist besonders robust auf iPad/iPhone.
+// ---------- Robuste lokale Namenssuche ----------
+// Die Suche arbeitet ausschließlich auf dem bereits geladenen personenCache.
+// Der direkte Handler wird zusätzlich vom <input>-Element aufgerufen. Damit
+// hängt die Suche nicht davon ab, ob iPadOS einen zuvor registrierten
+// Event-Listener nach einem View-/PWA-Wechsel noch korrekt ausführt.
 let personenSucheLauf = 0;
-async function filterePersonenListeLokal() {
-  const lauf = ++personenSucheLauf;
-  const feld = document.getElementById("search-input");
-  const q = (feld?.value || "").trim().toLocaleLowerCase("de-DE");
+
+function personenSuchtext(p) {
+  return [p?.vorname, p?.nachname, p?.Ledigenname]
+    .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+    .map(v => String(v).toLocaleLowerCase("de-DE"))
+    .join(" ");
+}
+
+function wendePersonenSucheAn(suchwert) {
+  const q = String(suchwert ?? "").trim().toLocaleLowerCase("de-DE");
   const list = document.getElementById("personen-list");
   const empty = document.getElementById("list-empty");
 
-  // Falls beim ersten Tippen der Personen-Cache noch geladen wird, warten wir
-  // hier aktiv darauf. Dadurch geht eine frühe Eingabe auf dem iPad nicht
-  // verloren. Danach wird dieselbe Eingabe sofort lokal ausgewertet.
   if (!personenCacheGeladen || !Array.isArray(personenCache) || !personenCache.length) {
     if (empty) {
       empty.hidden = false;
-      empty.textContent = "Personen werden geladen …";
+      empty.textContent = "Personen werden noch geladen …";
     }
-    try { await loadPersonen(); } catch (_) {}
-    if (lauf !== personenSucheLauf) return;
+    return false;
   }
 
-  aktualisierePersonenCacheStatus();
-
-  if (!Array.isArray(personenCache) || !personenCache.length) {
-    if (empty) {
-      empty.hidden = false;
-      empty.textContent = "Keine Personen geladen.";
-    }
-    return;
+  // Alle Karten sind nach loadPersonen bereits vorhanden. Falls die Suche
+  // außergewöhnlich früh kommt, werden fehlende Karten einmalig erzeugt.
+  for (const p of personenCache) {
+    if (!personenKartenCache.has(p.id)) erstellePersonenKarte(p);
   }
 
   let treffer = 0;
   for (const p of personenCache) {
     const karte = personenKartenCache.get(p.id);
     if (!karte) continue;
-    const text = `${p.nachname || ""} ${p.vorname || ""} ${p.Ledigenname || ""}`.toLocaleLowerCase("de-DE");
-    const sichtbar = !q || text.includes(q);
+    const sichtbar = q === "" || personenSuchtext(p).includes(q);
     karte.li.hidden = !sichtbar;
     if (sichtbar) treffer++;
   }
 
   if (empty) {
-    empty.textContent = treffer ? "" : `Keine Person für „${feld?.value || q}“ gefunden.`;
+    empty.textContent = treffer
+      ? ""
+      : `Keine Person für „${suchwert || q}“ gefunden.`;
     empty.hidden = treffer > 0;
   }
-
-  // Niemals renderPersonenList() aufrufen: bestehende Karten und Bilder
-  // bleiben erhalten. Nur hidden wird geändert.
   if (list) list.setAttribute("data-suchtreffer", String(treffer));
+
+  const status = document.getElementById("personen-suchtreffer");
+  if (status) status.textContent = q ? `${treffer} Treffer` : `${treffer} Personen`;
+  return true;
 }
 
-function aktualisierePersonenSortierung(){
+// Öffentliche Funktion für den direkten oninput/onkeyup-Handler im HTML.
+window.partezettelPersonenSuche = function (suchwert) {
+  personenSucheLauf++;
+  return wendePersonenSucheAn(suchwert);
+};
+
+// Fallback für programmatische Änderungen und ältere Ansichten.
+function filterePersonenListeLokal() {
+  const feld = document.getElementById("search-input");
+  return window.partezettelPersonenSuche(feld?.value || "");
+}
+
+function aktualisierePersonenSortierung() {
   aktualisierePersonenCacheStatus();
-  const q=(document.getElementById("search-input")?.value||"").trim();
+  const feld = document.getElementById("search-input");
+  const q = (feld?.value || "").trim();
   if (q) {
-    filterePersonenListeLokal();
+    window.partezettelPersonenSuche(q);
     return;
   }
   renderPersonenList(personenCache);
@@ -1561,16 +1582,13 @@ function aktualisierePersonenSortierung(){
 
 const personenSuchfeld = document.getElementById("search-input");
 if (personenSuchfeld) {
-  personenSuchfeld.addEventListener("input", filterePersonenListeLokal);
-  personenSuchfeld.addEventListener("search", filterePersonenListeLokal);
-  personenSuchfeld.addEventListener("keyup", filterePersonenListeLokal);
+  personenSuchfeld.addEventListener("input", () => window.partezettelPersonenSuche(personenSuchfeld.value));
+  personenSuchfeld.addEventListener("search", () => window.partezettelPersonenSuche(personenSuchfeld.value));
+  personenSuchfeld.addEventListener("keyup", () => window.partezettelPersonenSuche(personenSuchfeld.value));
 }
 
-// Zusätzliche delegierte Absicherung: Falls iOS den direkten Listener beim
-// Wiederherstellen der PWA-Ansicht nicht übernimmt, reagiert die Suche
-// trotzdem sofort auf die Eingabe.
 document.addEventListener("input", (event) => {
-  if (event.target?.id === "search-input") filterePersonenListeLokal();
+  if (event.target?.id === "search-input") window.partezettelPersonenSuche(event.target.value);
 });
 
 if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});
