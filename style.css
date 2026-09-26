@@ -529,3 +529,6 @@
 .personen-cache-status.is-loaded {
   opacity: 0.8;
 }
+
+/* v157: Versteckte Suchtreffer auf iPad Safari sicher ausblenden */
+.person-card[hidden]{display:none !important}
