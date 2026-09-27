@@ -1,5 +1,5 @@
 :root{--paper:#F7F5F1;--ink:#2B2A28;--ink-soft:#5C574E;--accent:#7A6A4F;--accent-soft:#E7E0D4;--line:#D8D2C6;--card:#FFF;--danger:#9A4B3E;--radius:10px}
-*{box-sizing:border-box}html{font-size:16px}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.45;padding-bottom:3rem}.app-header{padding:1.35rem 1.25rem .9rem;text-align:center;border-bottom:1px solid var(--line)}.app-header h1{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:400;font-size:1.65rem;margin:0 0 .2rem}.app-header__version{margin:.05rem 0 .12rem;color:var(--ink);font-size:.78rem;font-weight:600;letter-spacing:.03em}.app-header__subtitle{margin:0;color:var(--ink-soft);font-size:.9rem;font-style:italic}.tabs{display:flex;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:200}.tab-btn{flex:1;padding:.7rem .5rem;background:none;border:0;border-bottom:2px solid transparent;font-size:.95rem;color:var(--ink-soft)}.tab-btn.is-active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}.tab-panel{display:none;padding:1rem;max-width:600px;margin:0 auto}.tab-panel.is-active{display:block}.field-group{border:1px solid var(--line);border-radius:var(--radius);padding:.8rem .9rem;margin:0 0 .85rem;background:var(--card)}.field-group legend{padding:0 .35rem;font-family:Georgia,serif;font-size:1rem;color:var(--ink)}.field{display:block;margin-bottom:.7rem}.field:last-child{margin-bottom:0}.field span{display:block;font-size:.82rem;color:var(--ink-soft);margin-bottom:.25rem}.feld-fehler{border:2px solid var(--danger)!important;box-shadow:0 0 0 2px rgba(170,55,55,.14)}input[type=text],input[type=search],select,textarea{width:100%;min-width:0;padding:.55rem .6rem;border:1px solid var(--line);border-radius:7px;font-size:.95rem;background:#fff;color:var(--ink);font-family:inherit}textarea{resize:vertical}.field-row{display:block}.date-parts{display:grid;grid-template-columns:3.4rem 5.0rem 5.0rem;gap:.35rem;width:100%}.date-parts select{min-width:0;padding:.5rem .35rem;font-size:.88rem}.capture-row{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}.capture-status{font-size:.83rem;color:var(--ink-soft)}.preview-img{display:block;margin:.6rem auto 0;max-width:100%;width:auto;max-height:150px;object-fit:contain;border-radius:7px;border:1px solid var(--line);cursor:zoom-in}.btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;border:0;border-radius:7px;padding:.58rem .85rem;font-size:.9rem;cursor:pointer;font-family:inherit}.btn--primary{background:var(--ink);color:var(--paper)}.btn--secondary{background:var(--accent-soft);color:var(--ink)}.btn--ghost{background:transparent;border:1px solid var(--line);color:var(--ink-soft)}.btn--full{width:100%;margin-top:.2rem}.capture-btn input{display:none}.form-message{text-align:center;min-height:1.25em;font-size:.86rem;color:var(--accent);margin:.45rem 0}.list-toolbar{display:flex;gap:.5rem;margin-bottom:.8rem}.list-toolbar input{flex:1}.pending-banner{background:#F0E9D8;border:1px solid var(--accent-soft);border-radius:7px;padding:.55rem .75rem;font-size:.82rem;color:var(--ink-soft);margin-bottom:.8rem}.personen-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem}.person-card{display:flex;align-items:center;gap:.75rem;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:.65rem .75rem;cursor:pointer;min-height:68px;-webkit-tap-highlight-color:transparent}.person-card:active{transform:scale(.995)}.person-card__photo,.person-card__photo-placeholder{width:56px;height:56px;object-fit:cover;border-radius:50%;border:1px solid var(--line);flex:0 0 56px}.person-card__photo-placeholder{display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--ink-soft);font-size:1.35rem}.person-card__content{min-width:0;flex:1}.person-card__name{font-family:Georgia,"Iowan Old Style",serif;font-size:1rem;overflow-wrap:anywhere}.person-card__years{font-size:.78rem;color:var(--ink-soft)}.person-card__relations{font-size:.72rem;color:var(--ink-soft);margin-top:.08rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.person-card__note{font-size:.82rem;color:var(--ink-soft);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.list-empty{text-align:center;color:var(--ink-soft);padding:2rem 0}.detail-overlay{position:fixed;inset:0;background:rgba(43,42,40,.55);z-index:1000;display:flex;align-items:flex-start}.detail-overlay[hidden]{display:none}.detail-sheet{background:var(--paper);width:100%;height:100dvh;max-height:100dvh;overflow-y:auto;border-radius:0;padding:.9rem 1rem 1.5rem}.detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;position:sticky;top:0;background:var(--paper);padding:1.8rem .9rem .7rem .25rem;z-index:2}.detail-header .btn{min-width:44px;min-height:44px;padding:.55rem .8rem;font-size:1.15rem}.detail-header h2{font-family:Georgia,serif;font-weight:400;font-size:1.15rem;margin:0}.detail-media-list{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.7rem}.detail-media-item{display:flex;align-items:center;gap:.5rem;background:#fff;border:1px solid var(--line);border-radius:7px;padding:.4rem .5rem}.detail-media-item img{width:48px;height:48px;object-fit:cover;border-radius:5px;cursor:zoom-in}.detail-photo-viewer{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:1rem}.detail-photo-viewer[hidden]{display:none}.detail-photo-viewer img{display:block;max-width:100%;max-height:90vh;object-fit:contain;border-radius:6px;cursor:zoom-out;user-select:none;-webkit-user-select:none}.detail-photo-viewer__close{position:absolute;top:max(1rem,env(safe-area-inset-top));right:max(1rem,env(safe-area-inset-right));min-width:46px;min-height:46px;border:1px solid rgba(255,255,255,.45);border-radius:50%;background:rgba(0,0,0,.45);color:#fff;font-size:1.5rem;line-height:1;cursor:pointer}.detail-media-item audio{flex:1;height:30px}.detail-media-item .beziehung-text{flex:1;font-size:.86rem}.detail-media-item .del-btn{background:none;border:0;color:var(--danger);font-size:1rem;cursor:pointer;padding:.2rem}.detail-actions{margin-top:.9rem;padding-top:.75rem;border-top:1px solid var(--line)}.detail-delete-btn{background:var(--danger);color:#fff;margin-top:.8rem}.debug-panel{margin-top:1.2rem;border:1px dashed var(--line);border-radius:var(--radius);padding:.6rem .75rem;font-size:.78rem;color:var(--ink-soft)}.debug-panel summary{cursor:pointer;font-weight:600}.debug-panel pre{white-space:pre-wrap;word-break:break-word;background:#111;color:#cfeacb;padding:.65rem;border-radius:6px;max-height:35vh;overflow:auto;margin:.6rem 0;font-size:.7rem}.photo-editor{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:.65rem}.photo-editor[hidden]{display:none}.photo-editor__sheet{width:min(680px,100%);max-height:96vh;overflow:auto;background:var(--paper);border-radius:12px;padding:.8rem}.photo-editor__sheet h2{font-family:Georgia,serif;font-weight:400;margin:.1rem 0 .25rem}.photo-editor__hint{font-size:.8rem;color:var(--ink-soft);margin:.2rem 0 .6rem}.photo-editor__canvas-wrap{width:100%;max-height:55vh;display:flex;justify-content:center;align-items:center;background:#222;border-radius:8px;overflow:hidden;touch-action:none}#photo-editor-canvas{display:block;max-width:100%;max-height:55vh;width:auto;height:auto;touch-action:none}.crop-controls{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .7rem;margin:.65rem 0}.crop-controls label{font-size:.75rem;color:var(--ink-soft)}.crop-controls input{width:100%;display:block;margin-top:.1rem}@media(min-width:700px){.tab-panel{max-width:760px}.personen-list{gap:.6rem}.person-card{padding:.7rem .85rem}.person-card__photo,.person-card__photo-placeholder{width:64px;height:64px;flex-basis:64px}}@media(max-width:620px){.tab-panel{padding:.75rem}.date-parts{grid-template-columns:3.2rem 4.9rem 4.8rem}.field-group{padding:.7rem .75rem}.person-card{min-height:64px;padding:.55rem .65rem}.person-card__photo,.person-card__photo-placeholder{width:52px;height:52px;flex-basis:52px}}
+*{box-sizing:border-box}html{font-size:16px}body{margin:0;background:var(--paper);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.45;padding-bottom:3rem}.app-header{padding:1.35rem 1.25rem .9rem;text-align:center;border-bottom:1px solid var(--line)}.app-header h1{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:400;font-size:1.65rem;margin:0 0 .2rem}.app-header__subtitle{margin:0;color:var(--ink-soft);font-size:.9rem;font-style:italic}.tabs{display:flex;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--paper);z-index:200}.tab-btn{flex:1;padding:.7rem .5rem;background:none;border:0;border-bottom:2px solid transparent;font-size:.95rem;color:var(--ink-soft)}.tab-btn.is-active{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}.tab-panel{display:none;padding:1rem;max-width:600px;margin:0 auto}.tab-panel.is-active{display:block}.field-group{border:1px solid var(--line);border-radius:var(--radius);padding:.8rem .9rem;margin:0 0 .85rem;background:var(--card)}.field-group legend{padding:0 .35rem;font-family:Georgia,serif;font-size:1rem;color:var(--ink)}.field{display:block;margin-bottom:.7rem}.field:last-child{margin-bottom:0}.field span{display:block;font-size:.82rem;color:var(--ink-soft);margin-bottom:.25rem}input[type=text],input[type=search],select,textarea{width:100%;min-width:0;padding:.55rem .6rem;border:1px solid var(--line);border-radius:7px;font-size:.95rem;background:#fff;color:var(--ink);font-family:inherit}textarea{resize:vertical}.field-row{display:block}.date-parts{display:grid;grid-template-columns:3.4rem 5.0rem 5.0rem;gap:.35rem;width:100%}.date-parts select{min-width:0;padding:.5rem .35rem;font-size:.88rem}.capture-row{display:flex;align-items:center;gap:.55rem;flex-wrap:wrap}.capture-status{font-size:.83rem;color:var(--ink-soft)}.preview-img{display:block;margin:.6rem auto 0;max-width:100%;width:auto;max-height:150px;object-fit:contain;border-radius:7px;border:1px solid var(--line);cursor:zoom-in}.btn{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;border:0;border-radius:7px;padding:.58rem .85rem;font-size:.9rem;cursor:pointer;font-family:inherit}.btn--primary{background:var(--ink);color:var(--paper)}.btn--secondary{background:var(--accent-soft);color:var(--ink)}.btn--ghost{background:transparent;border:1px solid var(--line);color:var(--ink-soft)}.btn--full{width:100%;margin-top:.2rem}.capture-btn input{display:none}.form-message{text-align:center;min-height:1.25em;font-size:.86rem;color:var(--accent);margin:.45rem 0}.list-toolbar{display:flex;gap:.5rem;margin-bottom:.8rem}.list-toolbar input{flex:1}.pending-banner{background:#F0E9D8;border:1px solid var(--accent-soft);border-radius:7px;padding:.55rem .75rem;font-size:.82rem;color:var(--ink-soft);margin-bottom:.8rem}.personen-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem}.person-card{display:flex;align-items:center;gap:.75rem;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:.65rem .75rem;cursor:pointer;min-height:68px;-webkit-tap-highlight-color:transparent}.person-card:active{transform:scale(.995)}.person-card__photo,.person-card__photo-placeholder{width:56px;height:56px;object-fit:cover;border-radius:50%;border:1px solid var(--line);flex:0 0 56px}.person-card__photo-placeholder{display:flex;align-items:center;justify-content:center;background:var(--accent-soft);color:var(--ink-soft);font-size:1.35rem}.person-card__content{min-width:0;flex:1}.person-card__name{font-family:Georgia,"Iowan Old Style",serif;font-size:1rem;overflow-wrap:anywhere}.person-card__years{font-size:.78rem;color:var(--ink-soft)}.person-card__relations{font-size:.72rem;color:var(--ink-soft);margin-top:.08rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.person-card__note{font-size:.82rem;color:var(--ink-soft);margin-top:.25rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.list-empty{text-align:center;color:var(--ink-soft);padding:2rem 0}.detail-overlay{position:fixed;inset:0;background:rgba(43,42,40,.55);z-index:1000;display:flex;align-items:flex-start}.detail-overlay[hidden]{display:none}.detail-sheet{background:var(--paper);width:100%;height:100dvh;max-height:100dvh;overflow-y:auto;border-radius:0;padding:.9rem 1rem 1.5rem}.detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;position:sticky;top:0;background:var(--paper);padding:1.8rem .9rem .7rem .25rem;z-index:2}.detail-header .btn{min-width:44px;min-height:44px;padding:.55rem .8rem;font-size:1.15rem}.detail-header h2{font-family:Georgia,serif;font-weight:400;font-size:1.15rem;margin:0}.detail-media-list{display:flex;flex-direction:column;gap:.5rem;margin-bottom:.7rem}.detail-media-item{display:flex;align-items:center;gap:.5rem;background:#fff;border:1px solid var(--line);border-radius:7px;padding:.4rem .5rem}.detail-media-item img{width:48px;height:48px;object-fit:cover;border-radius:5px;cursor:zoom-in}.detail-photo-viewer{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.88);display:flex;align-items:center;justify-content:center;padding:1rem}.detail-photo-viewer[hidden]{display:none}.detail-photo-viewer img{display:block;max-width:100%;max-height:90vh;object-fit:contain;border-radius:6px;cursor:zoom-out;user-select:none;-webkit-user-select:none}.detail-photo-viewer__close{position:absolute;top:max(1rem,env(safe-area-inset-top));right:max(1rem,env(safe-area-inset-right));min-width:46px;min-height:46px;border:1px solid rgba(255,255,255,.45);border-radius:50%;background:rgba(0,0,0,.45);color:#fff;font-size:1.5rem;line-height:1;cursor:pointer}.detail-media-item audio{flex:1;height:30px}.detail-media-item .beziehung-text{flex:1;font-size:.86rem}.detail-media-item .del-btn{background:none;border:0;color:var(--danger);font-size:1rem;cursor:pointer;padding:.2rem}.detail-actions{margin-top:.9rem;padding-top:.75rem;border-top:1px solid var(--line)}.detail-delete-btn{background:var(--danger);color:#fff;margin-top:.8rem}.debug-panel{margin-top:1.2rem;border:1px dashed var(--line);border-radius:var(--radius);padding:.6rem .75rem;font-size:.78rem;color:var(--ink-soft)}.debug-panel summary{cursor:pointer;font-weight:600}.debug-panel pre{white-space:pre-wrap;word-break:break-word;background:#111;color:#cfeacb;padding:.65rem;border-radius:6px;max-height:35vh;overflow:auto;margin:.6rem 0;font-size:.7rem}.photo-editor{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:.65rem}.photo-editor[hidden]{display:none}.photo-editor__sheet{width:min(680px,100%);max-height:96vh;overflow:auto;background:var(--paper);border-radius:12px;padding:.8rem}.photo-editor__sheet h2{font-family:Georgia,serif;font-weight:400;margin:.1rem 0 .25rem}.photo-editor__hint{font-size:.8rem;color:var(--ink-soft);margin:.2rem 0 .6rem}.photo-editor__canvas-wrap{width:100%;max-height:55vh;display:flex;justify-content:center;align-items:center;background:#222;border-radius:8px;overflow:hidden;touch-action:none}#photo-editor-canvas{display:block;max-width:100%;max-height:55vh;width:auto;height:auto;touch-action:none}.crop-controls{display:grid;grid-template-columns:1fr 1fr;gap:.35rem .7rem;margin:.65rem 0}.crop-controls label{font-size:.75rem;color:var(--ink-soft)}.crop-controls input{width:100%;display:block;margin-top:.1rem}@media(min-width:700px){.tab-panel{max-width:760px}.personen-list{gap:.6rem}.person-card{padding:.7rem .85rem}.person-card__photo,.person-card__photo-placeholder{width:64px;height:64px;flex-basis:64px}}@media(max-width:620px){.tab-panel{padding:.75rem}.date-parts{grid-template-columns:3.2rem 4.9rem 4.8rem}.field-group{padding:.7rem .75rem}.person-card{min-height:64px;padding:.55rem .65rem}.person-card__photo,.person-card__photo-placeholder{width:52px;height:52px;flex-basis:52px}}
 
 /* Familienbereich */
 .familie-item { align-items: center; }
@@ -13,7 +13,7 @@
 /* ===================== Stammbaum v31 ===================== */
 .tree-panel{max-width:1200px !important}
 .tree-toolbar{display:flex;align-items:flex-end;gap:.75rem;margin-bottom:.55rem}
-.tree-person-select{flex:1;margin:0;display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr);gap:.55rem}.tree-person-select .field{margin:0}
+.tree-person-select{flex:1;margin:0}
 .tree-zoom-controls{display:flex;align-items:center;gap:.3rem;white-space:nowrap;padding-bottom:.05rem}
 .tree-zoom-controls .btn{min-width:42px;min-height:42px;padding:.45rem .65rem}
 #tree-zoom-value{min-width:48px;text-align:center;font-size:.8rem;color:var(--ink-soft)}
@@ -80,7 +80,7 @@
 .tree-relationship{display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:58px;line-height:1}
 .tree-relationship .tree-partner-link{display:block;width:24px;height:2px;background:var(--accent);flex:0 0 24px}
 .tree-relationship--marriage .tree-marriage__label{margin-bottom:.15rem}
-@media(max-width:700px){.tree-person-select{grid-template-columns:1fr}.tree-couple{gap:.2rem}.tree-relationship{min-width:44px}.tree-relationship .tree-partner-link{width:18px;flex-basis:18px}.tree-marriage__label{font-size:.66rem}.tree-marriage__rings{font-size:1.25rem}}
+@media(max-width:700px){.tree-couple{gap:.2rem}.tree-relationship{min-width:44px}.tree-relationship .tree-partner-link{width:18px;flex-basis:18px}.tree-marriage__label{font-size:.66rem}.tree-marriage__rings{font-size:1.25rem}}
 
 
 /* Stammbaum: Elternpaar eindeutig mit dem Mittelpunkt verbinden */
@@ -346,17 +346,7 @@
 .tree-relationship-result{margin-top:.75rem;padding:.7rem;border-radius:8px;background:var(--accent-soft);min-height:2.2rem;font-size:.9rem}
 .tree-relationship-result:empty{display:none}
 .tree-relationship-result strong{font-family:Georgia,serif;font-weight:600}
-.tree-relationship-sentence{margin-top:.25rem;font-size:.95rem}
-.tree-relationship-path{margin-top:.55rem;color:var(--ink-soft);font-size:.88rem;line-height:1.55}
-.tree-relationship-path-title{display:block;font-weight:600;color:var(--ink);margin-bottom:.15rem}
-.tree-relationship-graphic{display:flex;flex-direction:column;align-items:center;margin-top:.9rem;padding:.75rem .4rem;border-top:1px solid var(--line);gap:.15rem}
-.tree-relationship-node{min-width:180px;max-width:100%;padding:.55rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--card);text-align:center;box-shadow:0 1px 2px rgba(0,0,0,.05)}
-.tree-relationship-node strong{display:block;font-family:Georgia,serif;font-weight:600;font-size:.95rem}
-.tree-relationship-node small{display:block;margin-top:.15rem;color:var(--ink-soft);font-size:.75rem}
-.tree-relationship-arrow{display:flex;flex-direction:column;align-items:center;line-height:1.1;color:var(--ink-soft);font-size:.72rem;min-height:30px;justify-content:center}
-.tree-relationship-arrow span{font-weight:600;color:var(--ink);text-align:center}
-.tree-relationship-arrow b{font-size:1rem;font-weight:400}
-@media(max-width:700px){.tree-relationship-node{min-width:160px}.tree-relationship-graphic{padding-left:0;padding-right:0}}
+.tree-relationship-path{margin-top:.35rem;color:var(--ink-soft);font-size:.82rem;line-height:1.45}
 @media(max-width:700px){
  .tree-relationship-open{width:100%;margin-top:.45rem}
  .tree-relationship-fields{grid-template-columns:1fr}
@@ -413,156 +403,4 @@
 
 /* v127 Gruppenfoto-Zuordnung und Markierungen in Personendetails */
 .foto-person-change-wrap{display:flex;align-items:center;gap:.3rem;flex:1;min-width:0;flex-wrap:wrap}.foto-person-change-select{flex:1;min-width:10rem;padding:.4rem .45rem;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink);font:inherit}.foto-person-change-wrap .btn{padding:.4rem .55rem}
-.detail-group-photo-item{display:block!important;padding:.55rem!important}.detail-group-photo-wrap{position:relative;width:min(100%,520px);margin:0 auto;background:#222;border-radius:8px;overflow:hidden;cursor:zoom-in}.detail-group-photo-wrap>img{display:block;width:100%;height:auto;max-height:60vh;object-fit:contain}.detail-group-photo-markers{position:absolute;inset:0;pointer-events:none}.detail-group-photo-marker{position:absolute;transform:translate(-50%,-50%);width:1.5rem;height:1.5rem;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;color:#111;border:2px solid #111;font-weight:700;font-size:.72rem;box-shadow:0 1px 5px rgba(0,0,0,.45)}.detail-group-photo-info{width:min(100%,520px);margin:.45rem auto 0}.detail-group-photo-legend{display:flex;flex-wrap:wrap;gap:.25rem .45rem;margin:.25rem 0 .45rem}.detail-group-photo-legend-item{font-size:.76rem;color:var(--ink-soft);background:var(--accent-soft);border-radius:999px;padding:.18rem .42rem}.detail-group-photo-actions{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}.detail-group-photo-actions .beziehung-text{flex:1;min-width:10rem}.detail-group-photo-actions .del-btn{margin-left:auto}
-
-/* v128: Gruppenfoto-Großansicht mit Nummern und Legende */
-.detail-photo-viewer__content{display:flex;align-items:flex-start;justify-content:center;gap:1rem;width:min(1200px,94vw);max-height:92dvh;padding:1rem;box-sizing:border-box}
-.detail-photo-viewer__stage{position:relative;display:inline-block;max-width:min(78vw,1000px);max-height:88dvh;background:#111;border-radius:10px;overflow:hidden;line-height:0}
-.detail-photo-viewer__stage img{display:block;max-width:100%;max-height:88dvh;width:auto;height:auto;object-fit:contain}
-.detail-photo-viewer__markers{position:absolute;inset:0;pointer-events:none}
-.detail-photo-viewer__marker{position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;color:#111;border:2px solid #111;box-shadow:0 2px 7px rgba(0,0,0,.55);font-weight:700;font-size:1rem;line-height:1}
-.detail-photo-viewer__legend{width:220px;max-height:80dvh;overflow:auto;background:var(--paper);border-radius:10px;padding:.65rem;box-sizing:border-box;color:var(--ink);line-height:1.25}
-.detail-photo-viewer__legend-item{display:flex;align-items:center;gap:.55rem;padding:.4rem .2rem;border-bottom:1px solid var(--line);font-size:.92rem}
-.detail-photo-viewer__legend-item:last-child{border-bottom:0}
-.detail-photo-viewer__legend-num{flex:0 0 2rem;width:2rem;height:2rem;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;border:2px solid var(--ink);font-weight:700}
-@media(max-width:760px){.detail-photo-viewer__content{flex-direction:column;align-items:center;width:100vw;max-height:96dvh;padding:.5rem;gap:.5rem;overflow:auto}.detail-photo-viewer__stage{max-width:96vw;max-height:68dvh}.detail-photo-viewer__stage img{max-height:68dvh}.detail-photo-viewer__legend{width:min(96vw,520px);max-height:22dvh;display:grid;grid-template-columns:1fr 1fr;gap:0 .5rem}.detail-photo-viewer__legend-item{font-size:.82rem}.detail-photo-viewer__marker{width:30px;height:30px;font-size:.9rem}}
-/* v132: Positionen beziehen sich exakt auf das sichtbare Bild, nicht auf die gesamte Markierfläche */
-.foto-markierflaeche{display:flex;justify-content:center;align-items:center;background:#222;overflow:hidden}
-.foto-markierbild-wrap{position:relative;display:inline-block;max-width:100%;max-height:62vh;line-height:0}
-.foto-markierbild-wrap img{display:block;max-width:100%;max-height:62vh;width:auto;height:auto;user-select:none;-webkit-user-select:none}
-.foto-markierbild-wrap #foto-markierungen{position:absolute;inset:0;pointer-events:none}
-@media(max-width:700px){.foto-markierbild-wrap,.foto-markierbild-wrap img{max-height:52vh}.detail-group-photo-marker{width:1.35rem;height:1.35rem;font-size:.68rem;border-width:1.5px}}
-
-/* Gruppenfoto: Personensuche in der Zuordnung */
-.foto-person-suche {
-  margin-bottom: .4rem;
-}
-
-.detail-photo-viewer__legend-item{gap:.45rem}
-.detail-photo-viewer__legend-name.is-unknown{cursor:pointer;border-style:dashed}
-.detail-photo-viewer__assign{display:flex;flex-wrap:wrap;gap:.35rem;margin:.35rem 0 0 2rem;padding:.4rem;border:1px solid var(--line);border-radius:8px;background:var(--paper)}
-.detail-photo-viewer__assign input{min-width:12rem;flex:1 1 12rem}
-.detail-photo-viewer__assign select{min-width:14rem;flex:1 1 14rem}
-.detail-photo-viewer__assign button{flex:0 0 auto}
-@media(max-width:700px){.detail-photo-viewer__assign{margin-left:.2rem}.detail-photo-viewer__assign input,.detail-photo-viewer__assign select{min-width:100%;flex-basis:100%}}
-
-/* v142: eindeutige Nachbearbeitung der Personen-Zuordnung im Gruppenfoto */
-.foto-person-zeile{align-items:flex-start;flex-wrap:wrap}
-.foto-person-zeile__num{padding-top:.45rem}
-.foto-person-zeile__name{padding-top:.45rem}
-.foto-person-change-wrap{
-  flex:1 1 100%;
-  display:grid;
-  grid-template-columns:minmax(10rem,1fr) minmax(12rem,1.4fr) auto auto;
-  gap:.45rem;
-  margin-top:.35rem;
-  padding:.55rem;
-  background:var(--accent-soft);
-  border:1px solid var(--line);
-  border-radius:8px;
-}
-.foto-person-change-search,
-.foto-person-change-select{
-  min-width:0;
-  width:100%;
-  box-sizing:border-box;
-  padding:.6rem .65rem;
-  border:1px solid var(--line);
-  border-radius:7px;
-  background:#fff;
-  color:var(--ink);
-  font:inherit;
-}
-.foto-person-change-wrap .btn{
-  min-height:44px;
-  white-space:nowrap;
-}
-.foto-person-change-wrap .btn:disabled{opacity:.55;cursor:not-allowed}
-@media(max-width:760px){
-  .foto-person-change-wrap{
-    grid-template-columns:1fr;
-  }
-  .foto-person-zeile__name{
-    flex:1 1 calc(100% - 3rem);
-  }
-  .foto-person-zeile > .foto-person-aendern-btn,
-  .foto-person-zeile > .foto-position-btn,
-  .foto-person-zeile > .foto-nummer-btn,
-  .foto-person-zeile > .foto-person-loeschen-btn{
-    min-height:44px;
-  }
-}
-
-.familie-partner-link {
-  display:block;
-  width:100%;
-  margin:0 0 .55rem;
-  padding:.15rem 0;
-  border:0;
-  background:transparent;
-  color:var(--ink);
-  font:inherit;
-  font-weight:600;
-  text-align:left;
-  cursor:pointer;
-  text-decoration:underline;
-  text-decoration-color:var(--accent);
-  text-underline-offset:2px;
-}
-.familie-partner-link:active { opacity:.65; }
-
-/* v149: ausgewählte Personen in der Verwandtschaftsanzeige */
-.tree-node--relation-a{outline:3px solid var(--accent);outline-offset:3px;box-shadow:0 4px 14px rgba(43,42,40,.20)}
-.tree-node--relation-b{outline:3px solid var(--ink);outline-offset:3px;box-shadow:0 4px 14px rgba(43,42,40,.20)}
-.tree-relationship-arrow{font-size:.82rem;min-height:34px}
-.tree-relationship-arrow span{font-weight:700}
-
-/* v152: iPad Safari darf versteckte Platzhalter nicht neben Schlüsselfotos anzeigen. */
-.person-card__photo-placeholder[hidden]{display:none !important}
-
-.personen-cache-status {
-  font-size: 0.78rem;
-  opacity: 0.65;
-  white-space: nowrap;
-  align-self: center;
-}
-.personen-cache-status.is-loaded {
-  opacity: 0.8;
-}
-
-/* v157: Versteckte Suchtreffer auf iPad Safari sicher ausblenden */
-.person-card[hidden]{display:none !important}
-
-
-/* v164: temporäre Messanzeige für den Egress-Test */
-.egress-debug-panel{margin:.65rem 0 .8rem;border:1px dashed var(--line);border-radius:var(--radius);padding:.55rem .7rem;font-size:.76rem;color:var(--ink-soft);background:var(--card)}
-.egress-debug-panel summary{cursor:pointer;font-weight:600;color:var(--ink)}
-.egress-debug-status{white-space:pre-line;background:#f7f7f5;border:1px solid var(--line);border-radius:6px;padding:.55rem .65rem;margin:.55rem 0;line-height:1.5;font-variant-numeric:tabular-nums}
-.egress-debug-hint{margin:.55rem 0 0;font-size:.72rem;line-height:1.35}
-
-
-.queue-diagnostic {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid rgba(43,42,40,.15);
-}
-.queue-diagnostic-output {
-  margin-top: .75rem;
-  overflow-x: auto;
-}
-.queue-diagnostic-output table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: .9rem;
-}
-.queue-diagnostic-output th,
-.queue-diagnostic-output td {
-  padding: .45rem .35rem;
-  border-bottom: 1px solid rgba(43,42,40,.12);
-  text-align: left;
-  vertical-align: top;
-}
-.queue-diagnostic-output code {
-  font-size: .8rem;
-  word-break: break-all;
-}
+.detail-group-photo-item{display:block!important;padding:.55rem!important}.detail-group-photo-wrap{position:relative;width:min(100%,520px);margin:0 auto;background:#222;border-radius:8px;overflow:hidden;cursor:zoom-in}.detail-group-photo-wrap>img{display:block;width:100%;height:auto;max-height:60vh;object-fit:contain}.detail-group-photo-markers{position:absolute;inset:0;pointer-events:none}.detail-group-photo-marker{position:absolute;transform:translate(-50%,-50%);width:2rem;height:2rem;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#fff;color:#111;border:2px solid #111;font-weight:700;font-size:.9rem;box-shadow:0 1px 5px rgba(0,0,0,.45)}.detail-group-photo-info{width:min(100%,520px);margin:.45rem auto 0}.detail-group-photo-legend{display:flex;flex-wrap:wrap;gap:.25rem .45rem;margin:.25rem 0 .45rem}.detail-group-photo-legend-item{font-size:.76rem;color:var(--ink-soft);background:var(--accent-soft);border-radius:999px;padding:.18rem .42rem}.detail-group-photo-actions{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}.detail-group-photo-actions .beziehung-text{flex:1;min-width:10rem}.detail-group-photo-actions .del-btn{margin-left:auto}

@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=178">
+<link rel="stylesheet" href="style.css?v=120">
 </head>
 <body>
 
@@ -31,7 +31,6 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 178</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -40,7 +39,7 @@
   <button class="tab-btn is-active" data-tab="erfassen" role="tab" aria-selected="true">Neu erfassen</button>
   <button class="tab-btn" data-tab="liste" role="tab" aria-selected="false">Personen</button>
   <button class="tab-btn" data-tab="stammbaum" role="tab" aria-selected="false">Stammbaum</button>
-  <button class="tab-btn" data-tab="fotos" role="tab" aria-selected="false">Gruppenfoto</button>
+  <button class="tab-btn" data-tab="fotos" role="tab" aria-selected="false">Fotos</button>
   <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export</button>
 </nav>
 
@@ -70,8 +69,8 @@
         </label>
 
         <label class="field">
-          <span>Geschlecht *</span>
-          <select id="geschlecht" aria-required="true">
+          <span>Geschlecht</span>
+          <select id="geschlecht">
             <option value="">— unbekannt —</option>
             <option value="männlich">männlich</option>
             <option value="weiblich">weiblich</option>
@@ -168,11 +167,6 @@
       <summary>Technisches Protokoll (bei Problemen hier nachschauen)</summary>
       <pre id="debug-log"></pre>
       <button type="button" id="debug-clear" class="btn btn--ghost">Protokoll leeren</button>
-      <div class="queue-diagnostic">
-        <strong>Lokale Warteschlange</strong>
-        <button type="button" id="queue-diagnostic-btn" class="btn btn--ghost">Wartende Einträge anzeigen</button>
-        <div id="queue-diagnostic-output" class="queue-diagnostic-output" aria-live="polite"></div>
-      </div>
     </details>
 
   </section>
@@ -180,18 +174,10 @@
   <!-- ===================== TAB: PERSONEN-LISTE ===================== -->
   <section id="tab-liste" class="tab-panel">
     <div class="list-toolbar">
-      <input type="search" id="search-input" placeholder="Person suchen …" autocomplete="off" oninput="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)" onkeyup="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)">
-      <span id="personen-cache-status" class="personen-cache-status" aria-live="polite">Cache: wird geladen …</span><span id="personen-suchtreffer" class="personen-suchtreffer" aria-live="polite"></span>
+      <input type="search" id="search-input" placeholder="Person suchen …">
       <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
     </div>
     <div id="pending-banner" class="pending-banner" hidden></div>
-
-    <details class="egress-debug-panel" open>
-      <summary>Temporäre Egress-Messung</summary>
-      <div id="egress-debug-status" class="egress-debug-status" aria-live="polite"></div>
-      <button type="button" id="egress-debug-reset" class="btn btn--ghost">Messung zurücksetzen</button>
-      <p class="egress-debug-hint">Nur für den Test. Die Anzeige protokolliert Bildabrufe und einzelne Suchschritte. Den tatsächlichen Supabase-Egress vergleichen wir separat im Supabase-Dashboard.</p>
-    </details>
 
     <div class="personen-sortierung">
       <label class="field"><span>Sortieren nach</span>
@@ -213,14 +199,9 @@
   <!-- ===================== TAB: STAMMBAUM ===================== -->
   <section id="tab-stammbaum" class="tab-panel tree-panel">
     <div class="tree-toolbar">
-      <div class="tree-person-select">
-        <label class="field"><span>Person suchen</span>
-          <input type="search" id="tree-person-search" placeholder="Name eingeben …" autocomplete="off">
-        </label>
-        <label class="field"><span>Mittelpunkt</span>
-          <select id="tree-person-select"><option value="">— Person auswählen —</option></select>
-        </label>
-      </div>
+      <label class="field tree-person-select"><span>Mittelpunkt</span>
+        <select id="tree-person-select"><option value="">— Person auswählen —</option></select>
+      </label>
       <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft</button>
       <div class="tree-zoom-controls" aria-label="Stammbaum Zoom">
         <button type="button" id="tree-zoom-out" class="btn btn--ghost" aria-label="Verkleinern">−</button>
@@ -486,13 +467,7 @@
 
 <div id="detail-photo-viewer" class="detail-photo-viewer" hidden aria-label="Foto vergrößert">
   <button type="button" id="detail-photo-viewer-close" class="detail-photo-viewer__close" aria-label="Foto schließen">✕</button>
-  <div class="detail-photo-viewer__content">
-    <div id="detail-photo-viewer-stage" class="detail-photo-viewer__stage">
-      <img id="detail-photo-viewer-img" alt="Foto vergrößert">
-      <div id="detail-photo-viewer-markers" class="detail-photo-viewer__markers"></div>
-    </div>
-    <div id="detail-photo-viewer-legend" class="detail-photo-viewer__legend" hidden></div>
-  </div>
+  <img id="detail-photo-viewer-img" alt="Foto vergrößert">
 </div>
 
 
@@ -504,16 +479,11 @@
     </div>
     <div class="foto-personen-body">
       <div id="foto-markierflaeche" class="foto-markierflaeche">
-        <div id="foto-markierbild-wrap" class="foto-markierbild-wrap">
-          <img id="foto-markierbild" alt="Gruppenfoto">
-          <div id="foto-markierungen"></div>
-        </div>
+        <img id="foto-markierbild" alt="Gruppenfoto">
+        <div id="foto-markierungen"></div>
       </div>
       <div class="foto-personen-controls">
-        <label class="field"><span>Person hinzufügen</span>
-          <input type="search" id="foto-person-suche" class="foto-person-suche" placeholder="Name suchen …" autocomplete="off">
-          <select id="foto-person-auswahl"><option value="">— Person auswählen —</option></select>
-        </label>
+        <label class="field"><span>Person hinzufügen</span><select id="foto-person-auswahl"><option value="">— Person auswählen —</option></select></label>
         <button type="button" id="foto-person-hinzufuegen" class="btn btn--secondary">＋ Person hinzufügen</button>
         <button type="button" id="foto-unbekannt-hinzufuegen" class="btn btn--ghost">＋ Unbekannte Person</button>
         <p class="capture-status">Nummern und Positionen können jederzeit geändert werden.</p>
@@ -550,6 +520,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=178"></script>
+<script src="app.js?v=127"></script>
 </body>
 </html>
