@@ -1,4 +1,4 @@
-// v172 Diagnose der lokalen Offline-Warteschlange + persistenter Personen-/Bild-Cache + Egress-Test.
+// v174 Warteschlange bereinigt + Geschlecht als Pflichtfeld + persistenter Personen-/Bild-Cache + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -977,6 +977,15 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
+  const geschlechtFeld = document.getElementById("geschlecht");
+  if (!eintrag.geschlecht) {
+    formMessage.textContent = "Bitte Geschlecht auswählen.";
+    geschlechtFeld?.classList.add("feld-fehler");
+    geschlechtFeld?.focus();
+    return;
+  }
+  geschlechtFeld?.classList.remove("feld-fehler");
+
   if (navigator.onLine) {
     const result = await sendEintrag(eintrag, (msg) => { formMessage.textContent = msg; });
     if (result.ok) {
@@ -1173,6 +1182,30 @@ async function removeFromQueue(id) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
+}
+
+// Einmalige Bereinigung der acht bekannten, nie erfolgreich gespeicherten Test-/Fehlversuche.
+// Ausschließlich lokale IndexedDB-Warteschlange – Supabase wird dabei nicht verändert.
+const BEKANNTE_FEHLER_QUEUE_IDS_V174 = [
+  "0ff6f5ca-3011-4ee7-91f7-561c36001dfd",
+  "270958b4-a398-462b-8524-04fc0e986b6d",
+  "cc8439db-fb5f-40f0-87f5-1905165927cb",
+  "d0e233c9-8408-4dd1-9c6b-5f049ae88d03",
+  "ef71b0f8-72f7-4474-9a70-e5501223a9d8",
+  "f21b831c-cc9e-4196-b3bb-f3887036f42e",
+  "f4a3ab05-0578-4704-af35-ee7980c3c7aa",
+  "fdbb5a03-c089-4a05-94a6-dcd04064c429"
+];
+
+async function bereinigeBekannteFehlerQueueV174() {
+  const marker = "partezettel-v174-queue-bereinigung";
+  if (localStorage.getItem(marker) === "1") return;
+
+  for (const id of BEKANNTE_FEHLER_QUEUE_IDS_V174) {
+    await removeFromQueue(id);
+  }
+  localStorage.setItem(marker, "1");
+  debugLog("🧹 v174: 8 bekannte alte Warteschlangeneinträge lokal entfernt. Supabase unverändert.");
 }
 
 async function zeigeQueueDiagnose() {
@@ -2431,8 +2464,10 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
 (async function init() {
   try {
     await ensureSession();
-    // v172 Diagnose: Offline-Warteschlange bewusst nicht automatisch senden.
-    // So erzeugt die Diagnose keine weiteren 400er-POSTs.
+    // v174: Einmalig die acht bekannten alten Fehlversuche nur lokal entfernen.
+    await bereinigeBekannteFehlerQueueV174();
+    // Keine automatische Übermittlung der Warteschlange: so entstehen keine
+    // wiederkehrenden 400er-POSTs aus den alten Fehlversuchen.
     await zeigeQueueDiagnose();
     // Auch bei einer bereits bestehenden Anmeldung die Personenliste sofort
     // laden. So ist der lokale Such-Cache schon beim ersten Öffnen vorhanden.
