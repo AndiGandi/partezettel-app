@@ -1,4 +1,4 @@
-// v177 Warteschlange FINAL robust bereinigt + Geschlecht als Pflichtfeld + persistenter Personen-/Bild-Cache + Egress-Test.
+// v178 Fotooptimierung über Storage-Metadaten + robuste Warteschlangenbereinigung + Geschlecht als Pflichtfeld + persistenter Personen-/Bild-Cache + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -1262,7 +1262,7 @@ async function bereinigeBekannteFehlerQueueV177() {
   }
 
   localStorage.setItem("partezettel-v177-final-queue-bereinigung", "1");
-  debugLog("🧹 v177: alte Fehlversuche einschließlich Anonymous Test lokal entfernt. Supabase unverändert.");
+  debugLog("🧹 v178: alte Fehlversuche einschließlich Anonymous Test lokal entfernt. Supabase unverändert.");
 }
 
 async function zeigeQueueDiagnose() {
@@ -1323,7 +1323,7 @@ async function flushQueue() {
   }
 }
 
-// v177: Keine automatische Queue-Übermittlung. Dadurch kann kein paralleler online-
+// v178: Keine automatische Queue-Übermittlung. Dadurch kann kein paralleler online-
 // Handler die gerade bereinigten Alt-Einträge wieder in der Diagnose erscheinen lassen.
 // Die Queue bleibt für neue, ausdrücklich erzeugte Offline-Einträge verfügbar.
 
@@ -2523,7 +2523,7 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
 (async function init() {
   try {
     await ensureSession();
-    // v177: Alte lokale Fehlversuche robust und mit Endkontrolle bereinigen.
+    // v178: Alte lokale Fehlversuche robust und mit Endkontrolle bereinigen.
     await bereinigeBekannteFehlerQueueV177();
     // Keine automatische Übermittlung der Warteschlange: so entstehen keine
     // wiederkehrenden 400er-POSTs aus den alten Fehlversuchen.
@@ -4640,29 +4640,85 @@ async function optimiereBestehendeFotos() {
     const { data: fotos, error } = await sb.from("fotos").select("id, dateipfad");
     if (error) throw error;
     const eintraege = (fotos || []).filter(f => f.dateipfad);
+
+    // v178: Dateigrößen zuerst über Storage-Metadaten ermitteln.
+    // Dadurch werden passende Fotos NICHT heruntergeladen. Nur Kandidaten > 200 KB
+    // werden anschließend einmalig geladen und optimiert.
+    const ordner = new Map();
+    for (const foto of eintraege) {
+      const slash = foto.dateipfad.lastIndexOf("/");
+      const ordnerpfad = slash >= 0 ? foto.dateipfad.slice(0, slash) : "";
+      if (!ordner.has(ordnerpfad)) ordner.set(ordnerpfad, []);
+      ordner.get(ordnerpfad).push(foto);
+    }
+
+    const groessen = new Map();
+    let listenFehler = 0;
+    let listenFortschritt = 0;
+
+    for (const [ordnerpfad, ordnerFotos] of ordner) {
+      listenFortschritt++;
+      msg.textContent = `Foto-Metadaten prüfen … ${listenFortschritt}/${ordner.size}`;
+      let offset = 0;
+      const pageSize = 1000;
+      let erfolgreich = false;
+
+      while (true) {
+        const { data: dateien, error: listError } = await sb.storage
+          .from(BUCKET_FOTOS)
+          .list(ordnerpfad, { limit: pageSize, offset });
+
+        if (listError) {
+          listenFehler++;
+          debugLog(`⚠️ Storage-Metadaten ${ordnerpfad || "(Root)"}: ${listError.message || listError}`);
+          break;
+        }
+
+        erfolgreich = true;
+        const seite = dateien || [];
+        for (const datei of seite) {
+          if (!datei?.name) continue;
+          const pfad = ordnerpfad ? `${ordnerpfad}/${datei.name}` : datei.name;
+          const groesse = Number(datei.metadata?.size);
+          if (Number.isFinite(groesse)) groessen.set(pfad, groesse);
+        }
+
+        if (seite.length < pageSize) break;
+        offset += pageSize;
+      }
+
+      // Wenn ein Ordner nicht gelesen werden konnte, werden dessen Fotos bewusst
+      // nicht automatisch heruntergeladen. So erzeugen Listenfehler keinen Egress-Sturm.
+      if (!erfolgreich) {
+        for (const foto of ordnerFotos) groessen.delete(foto.dateipfad);
+      }
+    }
+
     let gesamtAlt = 0;
     let ueberLimit = 0;
     const kandidaten = [];
+    let ohneMetadaten = 0;
 
-    for (let i = 0; i < eintraege.length; i++) {
-      const foto = eintraege[i];
-      msg.textContent = `Fotos prüfen … ${i + 1}/${eintraege.length}`;
-      const { data: blob, error: downloadError } = await sb.storage.from(BUCKET_FOTOS).download(foto.dateipfad);
-      if (downloadError || !blob) continue;
-      gesamtAlt += blob.size;
-      if (blob.size > 200 * 1024) {
+    for (const foto of eintraege) {
+      const groesse = groessen.get(foto.dateipfad);
+      if (!Number.isFinite(groesse)) {
+        ohneMetadaten++;
+        continue;
+      }
+      gesamtAlt += groesse;
+      if (groesse > 200 * 1024) {
         ueberLimit++;
-        kandidaten.push(foto);
+        kandidaten.push({ ...foto, groesse });
       }
     }
 
     const altMB = gesamtAlt / 1024 / 1024;
     if (!kandidaten.length) {
-      msg.textContent = `Keine Optimierung nötig. ${eintraege.length} Fotos · ${altMB.toFixed(2)} MB.`;
+      msg.textContent = `Keine Optimierung nötig. ${eintraege.length} Fotos · ${altMB.toFixed(2)} MB.${ohneMetadaten ? ` ${ohneMetadaten} ohne Metadaten` : ""}`;
       return;
     }
 
-    const ok = confirm(`${eintraege.length} Fotos · ${altMB.toFixed(2)} MB\n\n${ueberLimit} Fotos sind größer als 200 KB und werden optimiert.\n\nDie Originale auf deinem Gerät bleiben unverändert. Nur die Dateien in Supabase werden ersetzt.\n\nOptimierung starten?`);
+    const ok = confirm(`${eintraege.length} Fotos · ${altMB.toFixed(2)} MB\n\n${ueberLimit} Fotos sind größer als 200 KB und werden optimiert.${ohneMetadaten ? `\n\n${ohneMetadaten} Fotos konnten nicht über Metadaten geprüft werden und werden übersprungen.` : ""}\n\nDie Originale auf deinem Gerät bleiben unverändert. Nur die Dateien in Supabase werden ersetzt.\n\nOptimierung starten?`);
     if (!ok) {
       msg.textContent = "Optimierung abgebrochen.";
       return;
@@ -4677,6 +4733,7 @@ async function optimiereBestehendeFotos() {
       const foto = kandidaten[i];
       msg.textContent = `Foto optimieren … ${i + 1}/${kandidaten.length}`;
       try {
+        // v178: genau EIN Download pro tatsächlich zu großem Foto.
         const { data: original, error: downloadError } = await sb.storage.from(BUCKET_FOTOS).download(foto.dateipfad);
         if (downloadError || !original) throw new Error(downloadError?.message || "Foto konnte nicht geladen werden");
         const optimiert = await blobZuJPEGUnter200KB(original);
@@ -4699,13 +4756,12 @@ async function optimiereBestehendeFotos() {
 
     const altMB2 = altKandidaten / 1024 / 1024;
     const neuMB2 = neuKandidaten / 1024 / 1024;
-    msg.textContent = `${verarbeitet} Fotos optimiert ✓ · ${altMB2.toFixed(2)} MB → ${neuMB2.toFixed(2)} MB${fehler ? ` · ${fehler} Fehler` : ""}`;
+    msg.textContent = `${verarbeitet} Fotos optimiert ✓ · ${altMB2.toFixed(2)} MB → ${neuMB2.toFixed(2)} MB${fehler ? ` · ${fehler} Fehler` : ""}${ohneMetadaten ? ` · ${ohneMetadaten} ohne Metadaten übersprungen` : ""}`;
   } catch (err) {
     msg.textContent = `Fehler: ${err.message || err}`;
     debugLog(`❌ Fotooptimierung: ${err.message || err}`);
   }
 }
-
 async function fetchAllExportData() {
   const [personen, familien, familien_kinder, fotos, foto_personen, sprachnotizen] = await Promise.all([
     fetchAllTableRows("personen", "nachname"),
