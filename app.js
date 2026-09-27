@@ -1,4 +1,4 @@
-// v176 Warteschlange FINAL robust bereinigt + Geschlecht als Pflichtfeld + persistenter Personen-/Bild-Cache + Egress-Test.
+// v177 Warteschlange FINAL robust bereinigt + Geschlecht als Pflichtfeld + persistenter Personen-/Bild-Cache + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -1197,20 +1197,72 @@ const BEKANNTE_FEHLER_QUEUE_IDS_V174 = [
   "fdbb5a03-c089-4a05-94a6-dcd04064c429"
 ];
 
-async function bereinigeBekannteFehlerQueueV174() {
-  const marker = "partezettel-v174-queue-bereinigung";
-  // Die bekannten Alt-Einträge werden bei jedem Start nochmals lokal gelöscht.
-  // Das ist absichtlich ohne Marker, damit kein alter/fehlerhafter Marker die
-  // Bereinigung verhindern kann. Supabase wird dabei niemals angesprochen.
-  for (const id of BEKANNTE_FEHLER_QUEUE_IDS_V174) {
-    await removeFromQueue(id);
-  }
-  localStorage.setItem(marker, "1");
+async function bereinigeBekannteFehlerQueueV177() {
+  const bekannteIds = new Set(BEKANNTE_FEHLER_QUEUE_IDS_V174);
+  const normalisiere = value => String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
 
-  const letzterAlterTestId = "fdbb5a03-c089-4a05-94a6-dcd04064c429";
-  await removeFromQueue(letzterAlterTestId);
-  localStorage.setItem("partezettel-v176-final-queue-bereinigung", "1");
-  debugLog("🧹 v176: bekannte Alt-Warteschlangeneinträge einschließlich Anonymous Test lokal entfernt. Supabase unverändert.");
+  const db = await openQueueDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const cursorReq = store.openCursor();
+
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (!cursor) return;
+
+      const eintrag = cursor.value || {};
+      const id = String(eintrag.id ?? "").trim();
+      const vorname = normalisiere(eintrag.vorname);
+      const nachname = normalisiere(eintrag.nachname);
+
+      // Neben den bekannten IDs wird der letzte Testeintrag zusätzlich
+      // über seinen Inhalt erkannt. Damit ist die Bereinigung unabhängig
+      // davon, ob Safari die ID intern anders zurückliefert.
+      const istBekannterFehler = bekannteIds.has(id);
+      const istAnonymousTest = vorname === "anonymous" && nachname === "test";
+
+      if (istBekannterFehler || istAnonymousTest) {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+
+    cursorReq.onerror = () => reject(cursorReq.error);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("IndexedDB-Transaktion abgebrochen"));
+  });
+
+  // Sicherheitsprüfung: falls ein passender Datensatz trotz der ersten
+  // Cursor-Runde noch vorhanden ist, wird genau dieser Datensatz nochmals
+  // über seinen tatsächlich gespeicherten Schlüssel gelöscht.
+  const verbliebene = await getQueue();
+  const erneutZuLoeschen = verbliebene.filter(eintrag => {
+    const id = String(eintrag?.id ?? "").trim();
+    const vorname = normalisiere(eintrag?.vorname);
+    const nachname = normalisiere(eintrag?.nachname);
+    return bekannteIds.has(id) || (vorname === "anonymous" && nachname === "test");
+  });
+
+  for (const eintrag of erneutZuLoeschen) {
+    await removeFromQueue(eintrag.id);
+  }
+
+  const endkontrolle = await getQueue();
+  const nochVorhanden = endkontrolle.some(eintrag => {
+    const id = String(eintrag?.id ?? "").trim();
+    const vorname = normalisiere(eintrag?.vorname);
+    const nachname = normalisiere(eintrag?.nachname);
+    return bekannteIds.has(id) || (vorname === "anonymous" && nachname === "test");
+  });
+
+  if (nochVorhanden) {
+    throw new Error("Die lokale Bereinigung konnte den Anonymous-Testeintrag nicht entfernen.");
+  }
+
+  localStorage.setItem("partezettel-v177-final-queue-bereinigung", "1");
+  debugLog("🧹 v177: alte Fehlversuche einschließlich Anonymous Test lokal entfernt. Supabase unverändert.");
 }
 
 async function zeigeQueueDiagnose() {
@@ -1271,7 +1323,7 @@ async function flushQueue() {
   }
 }
 
-// v176: Keine automatische Queue-Übermittlung. Dadurch kann kein paralleler online-
+// v177: Keine automatische Queue-Übermittlung. Dadurch kann kein paralleler online-
 // Handler die gerade bereinigten Alt-Einträge wieder in der Diagnose erscheinen lassen.
 // Die Queue bleibt für neue, ausdrücklich erzeugte Offline-Einträge verfügbar.
 
@@ -2471,8 +2523,8 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
 (async function init() {
   try {
     await ensureSession();
-    // v176: Alte lokale Fehlversuche final bereinigen.
-    await bereinigeBekannteFehlerQueueV174();
+    // v177: Alte lokale Fehlversuche robust und mit Endkontrolle bereinigen.
+    await bereinigeBekannteFehlerQueueV177();
     // Keine automatische Übermittlung der Warteschlange: so entstehen keine
     // wiederkehrenden 400er-POSTs aus den alten Fehlversuchen.
     await zeigeQueueDiagnose();
