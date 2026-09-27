@@ -1,4 +1,4 @@
-// v171 Persistenter Personen-Cache + Delta-Synchronisation + persistenter Bild-Cache + Egress-Test.
+// v172 Diagnose der lokalen Offline-Warteschlange + persistenter Personen-/Bild-Cache + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -20,7 +20,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v171";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v172";
 
 function neuesEgressMessObjekt() {
   return {
@@ -421,7 +421,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         loginPassword.value = "";
         loginMessage.textContent = "";
         await zeigeAppWennAngemeldet();
-        try { await flushQueue(); } catch (err) { debugLog(`⚠️ Warteschlange nach Anmeldung: ${err.message}`); }
+        // v172 Diagnose: Warteschlange bewusst nicht automatisch senden.
+        // Sie wird nur angezeigt, damit die 8 problematischen Einträge geprüft werden können.
         try { await loadPersonen(); } catch (err) { debugLog(`⚠️ Laden nach Anmeldung: ${err.message}`); }
       } catch (err) {
         loginMessage.textContent = `Anmeldung fehlgeschlagen: ${err.message}`;
@@ -1174,6 +1175,41 @@ async function removeFromQueue(id) {
   });
 }
 
+async function zeigeQueueDiagnose() {
+  const output = document.getElementById("queue-diagnostic-output");
+  if (!output) return;
+
+  try {
+    const queue = await getQueue();
+    if (queue.length === 0) {
+      output.innerHTML = "<p>Keine Einträge in der lokalen Warteschlange.</p>";
+      return;
+    }
+
+    const rows = queue.map((eintrag, index) => {
+      const vorname = String(eintrag.vorname ?? "");
+      const nachname = String(eintrag.nachname ?? "");
+      const geschlecht = eintrag.geschlecht == null || eintrag.geschlecht === "" ? "<strong>NULL / leer</strong>" : escapeHtml(String(eintrag.geschlecht));
+      const id = escapeHtml(String(eintrag.id ?? ""));
+      return `<tr><td>${index + 1}</td><td>${escapeHtml(vorname)}</td><td>${escapeHtml(nachname)}</td><td>${geschlecht}</td><td><code>${id}</code></td></tr>`;
+    }).join("");
+
+    output.innerHTML = `<p><strong>${queue.length} Einträge</strong> – nur Anzeige, keine Änderung.</p>
+      <table><thead><tr><th>#</th><th>Vorname</th><th>Nachname</th><th>Geschlecht</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (err) {
+    output.textContent = `Fehler beim Lesen der lokalen Warteschlange: ${err.message || err}`;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 async function flushQueue() {
   const queue = await getQueue();
   const banner = document.getElementById("pending-banner");
@@ -1198,6 +1234,11 @@ async function flushQueue() {
 }
 
 window.addEventListener("online", flushQueue);
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("queue-diagnostic-btn");
+  if (btn) btn.addEventListener("click", zeigeQueueDiagnose);
+});
 
 
 let personenSortierung = "name";
@@ -2390,7 +2431,9 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
 (async function init() {
   try {
     await ensureSession();
-    await flushQueue();
+    // v172 Diagnose: Offline-Warteschlange bewusst nicht automatisch senden.
+    // So erzeugt die Diagnose keine weiteren 400er-POSTs.
+    await zeigeQueueDiagnose();
     // Auch bei einer bereits bestehenden Anmeldung die Personenliste sofort
     // laden. So ist der lokale Such-Cache schon beim ersten Öffnen vorhanden.
     await loadPersonen();

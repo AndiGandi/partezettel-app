@@ -539,3 +539,30 @@
 .egress-debug-panel summary{cursor:pointer;font-weight:600;color:var(--ink)}
 .egress-debug-status{white-space:pre-line;background:#f7f7f5;border:1px solid var(--line);border-radius:6px;padding:.55rem .65rem;margin:.55rem 0;line-height:1.5;font-variant-numeric:tabular-nums}
 .egress-debug-hint{margin:.55rem 0 0;font-size:.72rem;line-height:1.35}
+
+
+.queue-diagnostic {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(43,42,40,.15);
+}
+.queue-diagnostic-output {
+  margin-top: .75rem;
+  overflow-x: auto;
+}
+.queue-diagnostic-output table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: .9rem;
+}
+.queue-diagnostic-output th,
+.queue-diagnostic-output td {
+  padding: .45rem .35rem;
+  border-bottom: 1px solid rgba(43,42,40,.12);
+  text-align: left;
+  vertical-align: top;
+}
+.queue-diagnostic-output code {
+  font-size: .8rem;
+  word-break: break-all;
+}

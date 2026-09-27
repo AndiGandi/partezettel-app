@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=171">
+<link rel="stylesheet" href="style.css?v=172">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 171</p>
+  <p id="app-version" class="app-header__version">Version 172</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -168,6 +168,11 @@
       <summary>Technisches Protokoll (bei Problemen hier nachschauen)</summary>
       <pre id="debug-log"></pre>
       <button type="button" id="debug-clear" class="btn btn--ghost">Protokoll leeren</button>
+      <div class="queue-diagnostic">
+        <strong>Lokale Warteschlange</strong>
+        <button type="button" id="queue-diagnostic-btn" class="btn btn--ghost">Wartende Einträge anzeigen</button>
+        <div id="queue-diagnostic-output" class="queue-diagnostic-output" aria-live="polite"></div>
+      </div>
     </details>
 
   </section>
@@ -545,6 +550,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=171"></script>
+<script src="app.js?v=172"></script>
 </body>
 </html>
