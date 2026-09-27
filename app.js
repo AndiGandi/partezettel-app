@@ -1,4 +1,5 @@
-// v95 Kinderliste: Kinderdatensätze werden separat nachgeladen.
+// v179: Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+// v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
@@ -13,6 +14,300 @@ function debugLog(msg) {
     el.scrollTop = el.scrollHeight;
   }
 }
+
+// ---------- Temporäre Egress-Messung (v165) ----------
+// Nur für den kontrollierten Egress-Test. Die eigentliche Bild- und Suchlogik
+// bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
+// ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
+// auf 0 zurücksetzt.
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v172";
+
+function neuesEgressMessObjekt() {
+  return {
+    start: Date.now(),
+    urlSetzungen: 0,
+    eindeutigeURLSetzungen: 0,
+    loadEvents: 0,
+    eindeutigeLoadURLs: 0,
+    signierteURLAnfragen: 0,
+    personenSupabaseAbrufe: 0,
+    signierteURLPfade: 0,
+    transferBytes: 0,
+    timingNullBytes: 0,
+    timingNichtMessbar: 0,
+    transferMessungen: 0,
+    syncPruefungen: 0,
+    syncLetzteAenderungen: 0,
+    syncLetzteSeq: 0,
+    syncPersonenAktualisiert: 0,
+    syncPersonenGeloescht: 0,
+    syncBeziehungenAktualisiert: 0,
+    syncLetzterErfolgreicherLaufAenderungen: 0,
+    syncLetzterErfolgreicherLaufSeq: 0,
+    syncLetzterErfolgreicherLaufAktualisiert: 0,
+    syncLetzterErfolgreicherLaufGeloescht: 0,
+    syncFehler: "",
+    syncLetzteZeit: 0,
+    uniqueAssignedUrls: [],
+    uniqueLoadedUrls: [],
+    schritte: []
+  };
+}
+
+function ladeEgressMessung() {
+  try {
+    const raw = sessionStorage.getItem(EGRESS_DEBUG_KEY);
+    if (!raw) return neuesEgressMessObjekt();
+    const parsed = JSON.parse(raw);
+    const basis = neuesEgressMessObjekt();
+    return {
+      ...basis,
+      ...parsed,
+      uniqueAssignedUrls: Array.isArray(parsed.uniqueAssignedUrls) ? parsed.uniqueAssignedUrls : [],
+      uniqueLoadedUrls: Array.isArray(parsed.uniqueLoadedUrls) ? parsed.uniqueLoadedUrls : [],
+      schritte: Array.isArray(parsed.schritte) ? parsed.schritte : []
+    };
+  } catch (_) {
+    return neuesEgressMessObjekt();
+  }
+}
+
+const egressMessung = ladeEgressMessung();
+
+
+// ---------- Persistenter Bild-Cache (v171) ----------
+// Bilder werden anhand ihres stabilen Storage-Pfades im Browser Cache Storage
+// abgelegt. Die signierte Supabase-URL dient nur zum erstmaligen Abruf. Nach
+// einem Safari-/App-Neustart wird das Bild aus dem lokalen Cache gelesen, ohne
+// erneuten Storage-Download und ohne neue signierte URL.
+const FOTO_CACHE_NAME = "partezettel-fotos-v171";
+const fotoBildMemoryCache = new Map(); // dateipfad -> objectURL
+const fotoBildLadePromises = new Map(); // dateipfad -> Promise<objectURL|null>
+
+function fotoCacheSchluessel(dateipfad) {
+  return new Request(`${location.origin}/__partezettel_foto_cache__/${encodeURIComponent(dateipfad)}`);
+}
+
+async function leseFotoAusBrowserCache(dateipfad) {
+  if (!dateipfad || !window.caches) return null;
+  try {
+    const cache = await caches.open(FOTO_CACHE_NAME);
+    const response = await cache.match(fotoCacheSchluessel(dateipfad));
+    if (!response) return null;
+    const blob = await response.blob();
+    if (!blob || !blob.size) return null;
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    debugLog(`⚠️ Bild-Cache lesen: ${err.message || err}`);
+    return null;
+  }
+}
+
+async function speichereFotoImBrowserCache(dateipfad, response) {
+  if (!dateipfad || !response || !response.ok || !window.caches) return;
+  try {
+    const cache = await caches.open(FOTO_CACHE_NAME);
+    await cache.put(fotoCacheSchluessel(dateipfad), response.clone());
+  } catch (err) {
+    debugLog(`⚠️ Bild-Cache speichern: ${err.message || err}`);
+  }
+}
+
+async function loescheFotoAusBrowserCache(dateipfad) {
+  if (!dateipfad) return;
+  const memoryUrl = fotoBildMemoryCache.get(dateipfad);
+  if (memoryUrl) {
+    try { URL.revokeObjectURL(memoryUrl); } catch (_) {}
+    fotoBildMemoryCache.delete(dateipfad);
+  }
+  if (!window.caches) return;
+  try {
+    const cache = await caches.open(FOTO_CACHE_NAME);
+    await cache.delete(fotoCacheSchluessel(dateipfad));
+  } catch (_) {}
+}
+
+async function ladeFotoBilder(dateipfade) {
+  const pfade = [...new Set((dateipfade || []).filter(Boolean))];
+  const ergebnis = new Map();
+  if (!pfade.length) return ergebnis;
+
+  const fehlende = [];
+  for (const pfad of pfade) {
+    const memoryUrl = fotoBildMemoryCache.get(pfad);
+    if (memoryUrl) {
+      ergebnis.set(pfad, memoryUrl);
+      continue;
+    }
+    const cachedUrl = await leseFotoAusBrowserCache(pfad);
+    if (cachedUrl) {
+      fotoBildMemoryCache.set(pfad, cachedUrl);
+      ergebnis.set(pfad, cachedUrl);
+    } else {
+      fehlende.push(pfad);
+    }
+  }
+
+  if (!fehlende.length) return ergebnis;
+
+  // Nur für tatsächlich noch nicht lokal vorhandene Bilder eine signierte URL
+  // anfordern. Mehrere Bilder werden weiterhin mit EINEM createSignedUrls-
+  // Aufruf geholt.
+  egressMessung.signierteURLAnfragen++;
+  egressMessung.signierteURLPfade += fehlende.length;
+  speichereEgressMessung();
+  aktualisiereEgressMessung();
+
+  const { data: signedList, error } = await sb.storage
+    .from(BUCKET_FOTOS)
+    .createSignedUrls(fehlende, 3600);
+  if (error) {
+    debugLog(`❌ Bild-URLs laden: ${error.message}`);
+    return ergebnis;
+  }
+
+  const signedByPath = new Map();
+  for (const item of signedList || []) {
+    if (item?.path && item?.signedUrl) signedByPath.set(item.path, item.signedUrl);
+  }
+
+  await Promise.all(fehlende.map(async (pfad) => {
+    const signedUrl = signedByPath.get(pfad);
+    if (!signedUrl) return;
+    try {
+      const response = await fetch(signedUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await speichereFotoImBrowserCache(pfad, response);
+      const blob = await response.clone().blob();
+      if (!blob.size) throw new Error("leere Bildantwort");
+      const objectUrl = URL.createObjectURL(blob);
+      fotoBildMemoryCache.set(pfad, objectUrl);
+      ergebnis.set(pfad, objectUrl);
+    } catch (err) {
+      // Fallback: bestehendes Verhalten beibehalten, falls Cache Storage oder
+      // CORS auf dem Gerät nicht verfügbar ist.
+      ergebnis.set(pfad, signedUrl);
+      debugLog(`⚠️ Bild-Cache Fallback für ${pfad}: ${err.message || err}`);
+    }
+  }));
+
+  return ergebnis;
+}
+
+async function ladeFotoBild(dateipfad) {
+  if (!dateipfad) return null;
+  const bestehend = fotoBildLadePromises.get(dateipfad);
+  if (bestehend) return bestehend;
+  const promise = ladeFotoBilder([dateipfad]).then(map => map.get(dateipfad) || null);
+  fotoBildLadePromises.set(dateipfad, promise);
+  try { return await promise; }
+  finally { fotoBildLadePromises.delete(dateipfad); }
+}
+
+function speichereEgressMessung() {
+  try {
+    sessionStorage.setItem(EGRESS_DEBUG_KEY, JSON.stringify(egressMessung));
+  } catch (_) {}
+}
+
+try {
+  if (typeof performance !== "undefined" && performance.setResourceTimingBufferSize) {
+    performance.setResourceTimingBufferSize(1000);
+  }
+} catch (_) {}
+
+function formatBytesDebug(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function findeResourceTiming(url) {
+  try {
+    const entries = performance.getEntriesByType("resource");
+    for (let i = entries.length - 1; i >= 0; i--) {
+      if (entries[i]?.name === url) return entries[i];
+    }
+  } catch (_) {}
+  return null;
+}
+
+function registriereEgressBildLoad(url) {
+  egressMessung.loadEvents++;
+  if (url && !egressMessung.uniqueLoadedUrls.includes(url)) {
+    egressMessung.uniqueLoadedUrls.push(url);
+    egressMessung.eindeutigeLoadURLs++;
+  }
+
+  const timing = findeResourceTiming(url);
+  if (!timing) {
+    egressMessung.timingNichtMessbar++;
+  } else if (Number.isFinite(timing.transferSize)) {
+    egressMessung.transferMessungen++;
+    if (timing.transferSize > 0) egressMessung.transferBytes += timing.transferSize;
+    else egressMessung.timingNullBytes++;
+  } else {
+    egressMessung.timingNichtMessbar++;
+  }
+  speichereEgressMessung();
+  aktualisiereEgressMessung();
+}
+
+function registriereEgressSchritt(label) {
+  const step = {
+    zeit: new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+    label: String(label || "(ohne Suche)"),
+    urlSetzungen: egressMessung.urlSetzungen,
+    eindeutigeURLSetzungen: egressMessung.eindeutigeURLSetzungen,
+    loadEvents: egressMessung.loadEvents,
+    eindeutigeLoadURLs: egressMessung.eindeutigeLoadURLs,
+    signierteURLAnfragen: egressMessung.signierteURLAnfragen,
+    personenSupabaseAbrufe: egressMessung.personenSupabaseAbrufe,
+    transferBytes: egressMessung.transferBytes,
+    timingNullBytes: egressMessung.timingNullBytes,
+    timingNichtMessbar: egressMessung.timingNichtMessbar
+  };
+  egressMessung.schritte.push(step);
+  if (egressMessung.schritte.length > 12) egressMessung.schritte.shift();
+  speichereEgressMessung();
+  aktualisiereEgressMessung();
+}
+
+function aktualisiereEgressMessung() {
+  const el = document.getElementById("egress-debug-status");
+  if (!el) return;
+  const seit = new Date(egressMessung.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const schritte = egressMessung.schritte.length
+    ? "\n\nLetzte Messschritte:\n" + egressMessung.schritte.map((s, i) =>
+        `${i + 1}. ${s.zeit} „${s.label}“ → URLs ${s.urlSetzungen} (+${s.eindeutigeURLSetzungen} eindeutig), Loads ${s.loadEvents} (+${s.eindeutigeLoadURLs} eindeutig), Timing ${formatBytesDebug(s.transferBytes)}, 0 B ${s.timingNullBytes}, n.m. ${s.timingNichtMessbar}`
+      ).join("\n")
+    : "";
+  el.textContent =
+    `Messung seit: ${seit}\n` +
+    `Personen-Supabase-Abfragen: ${egressMessung.personenSupabaseAbrufe}\n` +
+    `Delta-Sync: ${egressMessung.syncPruefungen || 0} Prüfung(en) · letzter Lauf: ${egressMessung.syncLetzterErfolgreicherLaufAenderungen || 0} Änderung(en) · seq: ${egressMessung.syncLetzterErfolgreicherLaufSeq || 0}\n` +
+    `Delta verarbeitet: ${egressMessung.syncLetzterErfolgreicherLaufAktualisiert || 0} Person(en) aktualisiert · ${egressMessung.syncLetzterErfolgreicherLaufGeloescht || 0} gelöscht${egressMessung.syncBeziehungenAktualisiert ? ` · Beziehungen/Familien neu geladen: ${egressMessung.syncBeziehungenAktualisiert}` : ""}\n` +
+    (egressMessung.syncFehler ? `Delta-Sync Fehler: ${egressMessung.syncFehler}\n` : "") +
+    `Signierte URL-Anfragen: ${egressMessung.signierteURLAnfragen} · Pfade: ${egressMessung.signierteURLPfade}\n` +
+    `Bild-URL-Zuweisungen gesamt: ${egressMessung.urlSetzungen} · eindeutig: ${egressMessung.eindeutigeURLSetzungen}\n` +
+    `Bild-Ladevorgänge gesamt: ${egressMessung.loadEvents} · eindeutige URLs: ${egressMessung.eindeutigeLoadURLs}\n` +
+    `ResourceTiming > 0 B: ${formatBytesDebug(egressMessung.transferBytes)}\n` +
+    `ResourceTiming 0 B: ${egressMessung.timingNullBytes} · nicht messbar: ${egressMessung.timingNichtMessbar}` + schritte;
+}
+
+function resetEgressMessung() {
+  const neu = neuesEgressMessObjekt();
+  Object.keys(neu).forEach(key => { egressMessung[key] = neu[key]; });
+  speichereEgressMessung();
+  aktualisiereEgressMessung();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const reset = document.getElementById("egress-debug-reset");
+  if (reset) reset.addEventListener("click", resetEgressMessung);
+  aktualisiereEgressMessung();
+});
 
 window.addEventListener("error", (e) => {
   debugLog(`❌ JS-FEHLER: ${e.message} (${e.filename}:${e.lineno})`);
@@ -53,11 +348,23 @@ let audioChunks = [];
 let recordStartTime = null;
 let isRecording = false;
 let personenCache = []; // {id, vorname, nachname, ...}
+let personenCacheGeladen = false;
+let personenLadePromise = null;
+let personenCacheZeitpunkt = 0;
+let personenCacheQuelle = "";
 // Nur für die Auswahlfilter. Diese Daten werden ausschließlich gelesen und
 // verändern keine bestehenden Familien- oder Kinderverknüpfungen.
 let familienAuswahlCache = [];
 let personenVerwandtschaftCache = new Map();
 let partnerIdsAuswahlCache = new Set();
+let familienKinderAuswahlCache = [];
+let beziehungenAuswahlCache = [];
+let personenCacheSyncSeq = 0;
+let personenCacheSyncInitialisiert = false;
+let syncLadePromise = null;
+// Pro Cache-Laden genau eine Delta-Prüfung. Weitere loadPersonen-Aufrufe
+// innerhalb derselben Sitzung dürfen die Prüfung nicht mehrfach auslösen.
+let syncPruefungSeitCacheLaden = false;
 
 // ---------- Anmeldung ----------
 async function ensureSession() {
@@ -114,7 +421,8 @@ document.addEventListener("DOMContentLoaded", async () => {
         loginPassword.value = "";
         loginMessage.textContent = "";
         await zeigeAppWennAngemeldet();
-        try { await flushQueue(); } catch (err) { debugLog(`⚠️ Warteschlange nach Anmeldung: ${err.message}`); }
+        // v172 Diagnose: Warteschlange bewusst nicht automatisch senden.
+        // Sie wird nur angezeigt, damit die 8 problematischen Einträge geprüft werden können.
         try { await loadPersonen(); } catch (err) { debugLog(`⚠️ Laden nach Anmeldung: ${err.message}`); }
       } catch (err) {
         loginMessage.textContent = `Anmeldung fehlgeschlagen: ${err.message}`;
@@ -669,6 +977,15 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
+  const geschlechtFeld = document.getElementById("geschlecht");
+  if (!eintrag.geschlecht) {
+    formMessage.textContent = "Bitte Geschlecht auswählen.";
+    geschlechtFeld?.classList.add("feld-fehler");
+    geschlechtFeld?.focus();
+    return;
+  }
+  geschlechtFeld?.classList.remove("feld-fehler");
+
   if (navigator.onLine) {
     const result = await sendEintrag(eintrag, (msg) => { formMessage.textContent = msg; });
     if (result.ok) {
@@ -867,6 +1184,122 @@ async function removeFromQueue(id) {
   });
 }
 
+// Einmalige Bereinigung der acht bekannten, nie erfolgreich gespeicherten Test-/Fehlversuche.
+// Ausschließlich lokale IndexedDB-Warteschlange – Supabase wird dabei nicht verändert.
+const BEKANNTE_FEHLER_QUEUE_IDS_V174 = [
+  "0ff6f5ca-3011-4ee7-91f7-561c36001dfd",
+  "270958b4-a398-462b-8524-04fc0e986b6d",
+  "cc8439db-fb5f-40f0-87f5-1905165927cb",
+  "d0e233c9-8408-4dd1-9c6b-5f049ae88d03",
+  "ef71b0f8-72f7-4474-9a70-e5501223a9d8",
+  "f21b831c-cc9e-4196-b3bb-f3887036f42e",
+  "f4a3ab05-0578-4704-af35-ee7980c3c7aa",
+  "fdbb5a03-c089-4a05-94a6-dcd04064c429"
+];
+
+async function bereinigeBekannteFehlerQueueV177() {
+  const bekannteIds = new Set(BEKANNTE_FEHLER_QUEUE_IDS_V174);
+  const normalisiere = value => String(value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+
+  const db = await openQueueDB();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    const cursorReq = store.openCursor();
+
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result;
+      if (!cursor) return;
+
+      const eintrag = cursor.value || {};
+      const id = String(eintrag.id ?? "").trim();
+      const vorname = normalisiere(eintrag.vorname);
+      const nachname = normalisiere(eintrag.nachname);
+
+      // Neben den bekannten IDs wird der letzte Testeintrag zusätzlich
+      // über seinen Inhalt erkannt. Damit ist die Bereinigung unabhängig
+      // davon, ob Safari die ID intern anders zurückliefert.
+      const istBekannterFehler = bekannteIds.has(id);
+      const istAnonymousTest = vorname === "anonymous" && nachname === "test";
+
+      if (istBekannterFehler || istAnonymousTest) {
+        cursor.delete();
+      }
+      cursor.continue();
+    };
+
+    cursorReq.onerror = () => reject(cursorReq.error);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error || new Error("IndexedDB-Transaktion abgebrochen"));
+  });
+
+  // Sicherheitsprüfung: falls ein passender Datensatz trotz der ersten
+  // Cursor-Runde noch vorhanden ist, wird genau dieser Datensatz nochmals
+  // über seinen tatsächlich gespeicherten Schlüssel gelöscht.
+  const verbliebene = await getQueue();
+  const erneutZuLoeschen = verbliebene.filter(eintrag => {
+    const id = String(eintrag?.id ?? "").trim();
+    const vorname = normalisiere(eintrag?.vorname);
+    const nachname = normalisiere(eintrag?.nachname);
+    return bekannteIds.has(id) || (vorname === "anonymous" && nachname === "test");
+  });
+
+  for (const eintrag of erneutZuLoeschen) {
+    await removeFromQueue(eintrag.id);
+  }
+
+  const endkontrolle = await getQueue();
+  const nochVorhanden = endkontrolle.some(eintrag => {
+    const id = String(eintrag?.id ?? "").trim();
+    const vorname = normalisiere(eintrag?.vorname);
+    const nachname = normalisiere(eintrag?.nachname);
+    return bekannteIds.has(id) || (vorname === "anonymous" && nachname === "test");
+  });
+
+  if (nochVorhanden) {
+    throw new Error("Die lokale Bereinigung konnte den Anonymous-Testeintrag nicht entfernen.");
+  }
+
+  localStorage.setItem("partezettel-v177-final-queue-bereinigung", "1");
+  debugLog("🧹 v178: alte Fehlversuche einschließlich Anonymous Test lokal entfernt. Supabase unverändert.");
+}
+
+async function zeigeQueueDiagnose() {
+  const output = document.getElementById("queue-diagnostic-output");
+  if (!output) return;
+
+  try {
+    const queue = await getQueue();
+    if (queue.length === 0) {
+      output.innerHTML = "<p>Keine Einträge in der lokalen Warteschlange.</p>";
+      return;
+    }
+
+    const rows = queue.map((eintrag, index) => {
+      const vorname = String(eintrag.vorname ?? "");
+      const nachname = String(eintrag.nachname ?? "");
+      const geschlecht = eintrag.geschlecht == null || eintrag.geschlecht === "" ? "<strong>NULL / leer</strong>" : escapeHtml(String(eintrag.geschlecht));
+      const id = escapeHtml(String(eintrag.id ?? ""));
+      return `<tr><td>${index + 1}</td><td>${escapeHtml(vorname)}</td><td>${escapeHtml(nachname)}</td><td>${geschlecht}</td><td><code>${id}</code></td></tr>`;
+    }).join("");
+
+    output.innerHTML = `<p><strong>${queue.length} Einträge</strong> – nur Anzeige, keine Änderung.</p>
+      <table><thead><tr><th>#</th><th>Vorname</th><th>Nachname</th><th>Geschlecht</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table>`;
+  } catch (err) {
+    output.textContent = `Fehler beim Lesen der lokalen Warteschlange: ${err.message || err}`;
+  }
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 async function flushQueue() {
   const queue = await getQueue();
   const banner = document.getElementById("pending-banner");
@@ -890,7 +1323,14 @@ async function flushQueue() {
   }
 }
 
-window.addEventListener("online", flushQueue);
+// v178: Keine automatische Queue-Übermittlung. Dadurch kann kein paralleler online-
+// Handler die gerade bereinigten Alt-Einträge wieder in der Diagnose erscheinen lassen.
+// Die Queue bleibt für neue, ausdrücklich erzeugte Offline-Einträge verfügbar.
+
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("queue-diagnostic-btn");
+  if (btn) btn.addEventListener("click", zeigeQueueDiagnose);
+});
 
 
 let personenSortierung = "name";
@@ -952,17 +1392,36 @@ function personenVergleich(a,b) {
 function sortierePersonen(personen) { return [...personen].sort((a,b)=>personenVergleich(a,b)*personenSortRichtung); }
 function personenAuswahlText(person) {
   if (!person) return "(unbekannte Person)";
-  const name = `${person.vorname || ""} ${person.nachname || ""}`.trim() || "(unbekannte Person)";
-  const ledigenname = (person.Ledigenname || "").trim();
-  let text = name;
-  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== (person.nachname || "").trim().toLocaleLowerCase("de")) {
-    text += ` (geb. ${ledigenname})`;
-  }
+  const nachname = String(person.nachname || "").trim();
+  const vorname = String(person.vorname || "").trim();
+  const name = [nachname, vorname].filter(Boolean).join(", ") || "(unbekannte Person)";
+  const ledigenname = String(person.Ledigenname || "").trim();
   const geburtsjahr = person.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : (person.geburtsjahr ? String(person.geburtsjahr) : "");
   const sterbejahr = person.sterbedatum ? String(person.sterbedatum).slice(0, 4) : (person.sterbejahr ? String(person.sterbejahr) : "");
-  if (/^\d{4}$/.test(geburtsjahr)) text += ` — geb. ${geburtsjahr}`;
-  if (/^\d{4}$/.test(sterbejahr)) text += ` — gest. ${sterbejahr}`;
+  let text = name;
+  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")) {
+    text += ` (geb. ${ledigenname})`;
+  }
+  if (/^\d{4}$/.test(geburtsjahr)) text += ` (geb. ${geburtsjahr})`;
+  if (/^\d{4}$/.test(sterbejahr)) text += ` (gest. ${sterbejahr})`;
   return text;
+}
+
+function personenAuswahlSortierung(a, b) {
+  const an = String(a?.nachname || "").trim();
+  const bn = String(b?.nachname || "").trim();
+  const n = an.localeCompare(bn, "de", { sensitivity: "base" });
+  if (n) return n;
+  const av = String(a?.vorname || "").trim();
+  const bv = String(b?.vorname || "").trim();
+  const v = av.localeCompare(bv, "de", { sensitivity: "base" });
+  if (v) return v;
+  const ay = Number(a?.geburtsjahr || (a?.geburtsdatum ? String(a.geburtsdatum).slice(0,4) : 0)) || 0;
+  const by = Number(b?.geburtsjahr || (b?.geburtsdatum ? String(b.geburtsdatum).slice(0,4) : 0)) || 0;
+  if (ay && by) return ay - by;
+  if (ay) return -1;
+  if (by) return 1;
+  return String(a?.id || "").localeCompare(String(b?.id || ""));
 }
 
 function berechneFamilienSortKeys(personen,familien) {
@@ -1100,8 +1559,416 @@ function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
   return tod.exakt ? `Ende: ${datumAnzeige(tod.datum)} · Tod` : `Ende: Tod ${tod.jahr}`;
 }
 
+// ---------- Persistenter Personen-Cache (IndexedDB) ----------
+// v170: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
+// Die zentrale Tabelle sync_aenderungen hält den letzten Synchronisationsstand.
+const PERSONEN_DB_NAME = "partezettel-cache-v167";
+const PERSONEN_DB_VERSION = 1;
+const PERSONEN_STORE = "personen_bundle";
+const PERSONEN_LOCAL_KEY = "partezettel-personen-cache-v167";
+
+function oeffnePersonenCacheDB() {
+  return new Promise((resolve, reject) => {
+    if (!window.indexedDB) {
+      reject(new Error("IndexedDB wird von diesem Browser nicht unterstützt."));
+      return;
+    }
+    const request = indexedDB.open(PERSONEN_DB_NAME, PERSONEN_DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(PERSONEN_STORE)) {
+        db.createObjectStore(PERSONEN_STORE, { keyPath: "id" });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("IndexedDB konnte nicht geöffnet werden."));
+  });
+}
+
+async function lesePersonenAusPersistentemCache() {
+  try {
+    const db = await oeffnePersonenCacheDB();
+    return await new Promise((resolve, reject) => {
+      const tx = db.transaction(PERSONEN_STORE, "readonly");
+      const req = tx.objectStore(PERSONEN_STORE).get("aktuell");
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error || new Error("Personen-Cache konnte nicht gelesen werden."));
+      tx.oncomplete = () => db.close();
+      tx.onerror = () => reject(tx.error || new Error("Personen-Cache konnte nicht gelesen werden."));
+    });
+  } catch (err) {
+    debugLog(`⚠️ Persistenter Personen-Cache nicht lesbar: ${err.message || err}`);
+    return null;
+  }
+}
+
+async function speicherePersonenImPersistentenCache(bundle) {
+  const gespeichertAm = new Date().toISOString();
+  const cacheBundle = {
+    id: "aktuell",
+    gespeichertAm,
+    ...bundle
+  };
+
+  // v166: localStorage und IndexedDB sind zwei unabhängige Speicherwege.
+  // Ein Fehler in IndexedDB darf NICHT verhindern, dass der Safari-Fallback
+  // gespeichert wird.
+  let localGespeichert = false;
+  try {
+    localStorage.setItem(PERSONEN_LOCAL_KEY, JSON.stringify(cacheBundle));
+    localGespeichert = true;
+    debugLog(`💾 Personen-Cache in localStorage gespeichert: ${bundle.personen?.length || 0} Personen.`);
+  } catch (storageErr) {
+    debugLog(`⚠️ localStorage-Cache nicht speicherbar: ${storageErr.message || storageErr}`);
+  }
+
+  let indexedGespeichert = false;
+  try {
+    const db = await oeffnePersonenCacheDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(PERSONEN_STORE, "readwrite");
+      tx.objectStore(PERSONEN_STORE).put(cacheBundle);
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error || new Error("Personen-Cache konnte nicht gespeichert werden."));
+      tx.onabort = () => reject(tx.error || new Error("Personen-Cache wurde abgebrochen."));
+    });
+    db.close();
+    indexedGespeichert = true;
+    debugLog(`💾 Personen-Cache in IndexedDB gespeichert: ${bundle.personen?.length || 0} Personen.`);
+  } catch (err) {
+    debugLog(`⚠️ IndexedDB-Cache nicht speicherbar: ${err.message || err}`);
+  }
+
+  return localGespeichert || indexedGespeichert;
+}
+
+async function ladePersonenAusPersistentemCache() {
+  // v166: Safari zuerst aus localStorage bedienen. IndexedDB bleibt als
+  // zusätzlicher dauerhafter Speicherweg erhalten.
+  let bundle = null;
+  let quelle = "";
+  try {
+    const raw = localStorage.getItem(PERSONEN_LOCAL_KEY);
+    if (raw) {
+      const fallback = JSON.parse(raw);
+      if (Array.isArray(fallback?.personen) && fallback.personen.length > 0) {
+        bundle = fallback;
+        quelle = "localStorage";
+      }
+    }
+  } catch (storageErr) {
+    debugLog(`⚠️ localStorage-Cache nicht lesbar: ${storageErr.message || storageErr}`);
+  }
+
+  if (!bundle) {
+    bundle = await lesePersonenAusPersistentemCache();
+    if (bundle && Array.isArray(bundle.personen) && bundle.personen.length > 0) {
+      quelle = "IndexedDB";
+    }
+  }
+
+  if (!bundle || !Array.isArray(bundle.personen) || bundle.personen.length === 0) return false;
+
+  personenCache = bundle.personen;
+  familienAuswahlCache = Array.isArray(bundle.familien) ? bundle.familien : [];
+  const familienKinder = Array.isArray(bundle.familienKinder) ? bundle.familienKinder : [];
+  const beziehungen = Array.isArray(bundle.beziehungen) ? bundle.beziehungen : [];
+  familienKinderAuswahlCache = familienKinder;
+  beziehungenAuswahlCache = beziehungen;
+  personenCacheSyncSeq = Number.isFinite(Number(bundle.syncSeq)) ? Number(bundle.syncSeq) : 0;
+  personenCacheSyncInitialisiert = bundle.syncInitialisiert === true;
+  syncPruefungSeitCacheLaden = false;
+
+  partnerIdsAuswahlCache = new Set();
+  for (const f of familienAuswahlCache) {
+    const typ = String(f.familientyp || "").toLowerCase();
+    if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
+      if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+      if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+    }
+  }
+  for (const b of beziehungen) {
+    if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+      if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+      if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+    }
+  }
+
+  const kinderByFamilie = new Map();
+  for (const k of familienKinder) {
+    if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []);
+    kinderByFamilie.get(k.familie_id).push(k.kind_id);
+  }
+  for (const f of familienAuswahlCache) f._kinder = kinderByFamilie.get(f.id) || [];
+
+  personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+    eltern: new Set(),
+    ehePartnerschaften: new Set(),
+    kinder: new Set(),
+  }]));
+  for (const fk of familienKinder) {
+    const familie = familienAuswahlCache.find((f) => f.id === fk.familie_id);
+    if (!familie || !fk.kind_id) continue;
+    const info = personenVerwandtschaftCache.get(fk.kind_id);
+    if (!info) continue;
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+    }
+  }
+  for (const familie of familienAuswahlCache) {
+    const typ = String(familie.familientyp || "").trim().toLocaleLowerCase("de");
+    const istEheOderPartnerschaft = typ === "ehe" || typ === "partnerschaft";
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (!partnerId || !istEheOderPartnerschaft) continue;
+      const info = personenVerwandtschaftCache.get(partnerId);
+      if (!info) continue;
+      info.ehePartnerschaften.add(familie.id);
+      for (const kindId of familie._kinder || []) {
+        if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+      }
+    }
+  }
+
+  try { berechneFamilienSortKeys(personenCache, familienAuswahlCache); } catch (_) {}
+  personenCacheGeladen = true;
+  personenCacheQuelle = quelle;
+  personenCacheZeitpunkt = bundle.gespeichertAm ? Date.parse(bundle.gespeichertAm) || Date.now() : Date.now();
+  aktualisierePersonenCacheStatus();
+  debugLog(`📦 Personen aus dauerhaftem Cache geladen: ${personenCache.length} Personen.`);
+
+  const banner = document.getElementById("pending-banner");
+  const empty = document.getElementById("list-empty");
+  if (banner) banner.hidden = true;
+  await renderPersonenList(personenCache);
+  if (empty) empty.hidden = personenCache.length > 0;
+  const suchfeldNachLaden = document.getElementById("search-input");
+  if (suchfeldNachLaden?.value) window.partezettelPersonenSuche?.(suchfeldNachLaden.value);
+  return true;
+}
+
+// ---------- Delta-Synchronisation ----------
+async function holeSyncMaxSeq() {
+  const { data, error } = await sb
+    .from("sync_aenderungen")
+    .select("seq")
+    .order("seq", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  return Number(data?.[0]?.seq || 0);
+}
+
+async function holeSyncAenderungenSeit(seq) {
+  const startSeq = Number(seq || 0);
+  const { data, error } = await sb
+    .from("sync_aenderungen")
+    .select("seq, tabelle, datensatz_id, aktion")
+    .gt("seq", startSeq)
+    .order("seq", { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+function baueAuswahlCachesAusSyncDaten() {
+  partnerIdsAuswahlCache = new Set();
+  for (const f of familienAuswahlCache) {
+    const typ = String(f.familientyp || "").toLowerCase();
+    if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
+      if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+      if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+    }
+  }
+  for (const b of beziehungenAuswahlCache) {
+    if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+      if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+      if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+    }
+  }
+
+  const kinderByFamilie = new Map();
+  for (const k of familienKinderAuswahlCache) {
+    if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []);
+    kinderByFamilie.get(k.familie_id).push(k.kind_id);
+  }
+  for (const f of familienAuswahlCache) f._kinder = kinderByFamilie.get(f.id) || [];
+
+  personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+    eltern: new Set(),
+    ehePartnerschaften: new Set(),
+    kinder: new Set(),
+  }]));
+  for (const fk of familienKinderAuswahlCache) {
+    const familie = familienAuswahlCache.find((f) => f.id === fk.familie_id);
+    if (!familie || !fk.kind_id) continue;
+    const info = personenVerwandtschaftCache.get(fk.kind_id);
+    if (!info) continue;
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+    }
+  }
+  for (const familie of familienAuswahlCache) {
+    const typ = String(familie.familientyp || "").trim().toLocaleLowerCase("de");
+    const istEheOderPartnerschaft = typ === "ehe" || typ === "partnerschaft";
+    for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+      if (!partnerId || !istEheOderPartnerschaft) continue;
+      const info = personenVerwandtschaftCache.get(partnerId);
+      if (!info) continue;
+      info.ehePartnerschaften.add(familie.id);
+      for (const kindId of familie._kinder || []) {
+        if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+      }
+    }
+  }
+  try { berechneFamilienSortKeys(personenCache, familienAuswahlCache); } catch (_) {}
+}
+
+async function ladeFamilienAusSupabaseFuerSync() {
+  const [{ data: familien, error: familienError }, { data: familienKinder, error: kinderError }, { data: beziehungen, error: beziehungsError }] = await Promise.all([
+    sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
+    sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp"),
+    sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp")
+  ]);
+  if (familienError) throw familienError;
+  if (kinderError) throw kinderError;
+  if (beziehungsError) throw beziehungsError;
+  familienAuswahlCache = familien || [];
+  familienKinderAuswahlCache = familienKinder || [];
+  beziehungenAuswahlCache = beziehungen || [];
+  baueAuswahlCachesAusSyncDaten();
+}
+
+async function synchronisierePersonenDelta() {
+  if (!personenCacheGeladen || !personenCacheSyncInitialisiert) return false;
+  if (syncPruefungSeitCacheLaden) return false;
+  if (syncLadePromise) return syncLadePromise;
+
+  syncLadePromise = (async () => {
+    egressMessung.syncPruefungen = Number(egressMessung.syncPruefungen || 0) + 1;
+    egressMessung.syncFehler = "";
+    egressMessung.syncLetzteZeit = Date.now();
+    egressMessung.syncLetzteSeq = Number(personenCacheSyncSeq || 0);
+    const aenderungen = await holeSyncAenderungenSeit(personenCacheSyncSeq);
+    egressMessung.syncLetzteAenderungen = aenderungen.length;
+    egressMessung.syncPersonenAktualisiert = 0;
+    egressMessung.syncPersonenGeloescht = 0;
+    egressMessung.syncBeziehungenAktualisiert = 0;
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
+    if (!aenderungen.length) {
+      const aktuellerStand = await holeSyncMaxSeq();
+      egressMessung.syncLetzteSeq = aktuellerStand;
+      egressMessung.syncLetzterErfolgreicherLaufAenderungen = 0;
+      egressMessung.syncLetzterErfolgreicherLaufSeq = aktuellerStand;
+      egressMessung.syncLetzterErfolgreicherLaufAktualisiert = 0;
+      egressMessung.syncLetzterErfolgreicherLaufGeloescht = 0;
+      syncPruefungSeitCacheLaden = true;
+      speichereEgressMessung();
+      aktualisiereEgressMessung();
+      return false;
+    }
+
+    const letzteAenderung = new Map();
+    for (const a of aenderungen) {
+      const key = `${a.tabelle}:${a.datensatz_id}`;
+      letzteAenderung.set(key, a);
+    }
+
+    const personenAenderungen = [...letzteAenderung.values()].filter(a => a.tabelle === "personen");
+    const zuLoeschendePersonen = new Set(personenAenderungen.filter(a => a.aktion === "DELETE").map(a => a.datensatz_id));
+    const zuLadendePersonen = personenAenderungen.filter(a => a.aktion !== "DELETE").map(a => a.datensatz_id);
+
+    if (zuLoeschendePersonen.size) {
+      personenCache = personenCache.filter(p => !zuLoeschendePersonen.has(p.id));
+      egressMessung.syncPersonenGeloescht = zuLoeschendePersonen.size;
+      for (const id of zuLoeschendePersonen) {
+        const karte = personenKartenCache.get(id);
+        if (karte) karte.li.remove();
+        personenKartenCache.delete(id);
+      }
+    }
+
+    if (zuLadendePersonen.length) {
+      const { data, error } = await sb.from("personen")
+        .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
+        .in("id", [...new Set(zuLadendePersonen)]);
+      if (error) throw error;
+      const byId = new Map(personenCache.map(p => [p.id, p]));
+      for (const person of data || []) byId.set(person.id, person);
+      personenCache = [...byId.values()];
+      egressMessung.syncPersonenAktualisiert = (data || []).length;
+    }
+
+    const familienGeaendert = [...letzteAenderung.values()].some(a =>
+      a.tabelle === "familien" || a.tabelle === "familien_kinder" || a.tabelle === "beziehung"
+    );
+    if (familienGeaendert) {
+      await ladeFamilienAusSupabaseFuerSync();
+      egressMessung.syncBeziehungenAktualisiert = 1;
+    }
+
+    const fotosGeaendert = [...letzteAenderung.values()].some(a =>
+      a.tabelle === "fotos" || a.tabelle === "foto_personen"
+    );
+    if (fotosGeaendert) {
+      schluesselfotoCache.clear();
+      schluesselfotoMetaCache.clear();
+      schluesselfotoMetaGeladen = false;
+    }
+
+    baueAuswahlCachesAusSyncDaten();
+
+    const neuerStand = await holeSyncMaxSeq();
+    personenCacheSyncSeq = neuerStand;
+    egressMessung.syncLetzteSeq = neuerStand;
+    egressMessung.syncLetzterErfolgreicherLaufAenderungen = aenderungen.length;
+    egressMessung.syncLetzterErfolgreicherLaufSeq = neuerStand;
+    egressMessung.syncLetzterErfolgreicherLaufAktualisiert = egressMessung.syncPersonenAktualisiert;
+    egressMessung.syncLetzterErfolgreicherLaufGeloescht = egressMessung.syncPersonenGeloescht;
+    syncPruefungSeitCacheLaden = true;
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
+    await speicherePersonenImPersistentenCache({
+      personen: personenCache,
+      familien: familienAuswahlCache,
+      familienKinder: familienKinderAuswahlCache,
+      beziehungen: beziehungenAuswahlCache,
+      syncSeq: personenCacheSyncSeq,
+      syncInitialisiert: true
+    });
+
+    personenCacheZeitpunkt = Date.now();
+    personenCacheQuelle = "localStorage";
+    personenKartenCache.forEach((karte, id) => {
+      const person = personenCache.find(p => p.id === id);
+      if (person) aktualisierePersonenKarte(karte, person);
+    });
+    await renderPersonenList(personenCache);
+    const suchfeld = document.getElementById("search-input");
+    if (suchfeld?.value) window.partezettelPersonenSuche?.(suchfeld.value);
+    aktualisierePersonenCacheStatus();
+    debugLog(`🔄 Delta-Sync: ${aenderungen.length} Änderungen verarbeitet, neuer Stand seq ${personenCacheSyncSeq}.`);
+    return true;
+  })();
+
+  try {
+    return await syncLadePromise;
+  } catch (err) {
+    egressMessung.syncFehler = String(err?.message || err || "Unbekannter Fehler");
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
+    throw err;
+  } finally {
+    syncLadePromise = null;
+  }
+}
+
 // ---------- Personenliste laden ----------
-async function loadPersonen() {
+async function loadPersonen(force = false) {
+  if (force) {
+    syncPruefungSeitCacheLaden = false;
+    schluesselfotoCache.clear();
+    schluesselfotoMetaCache.clear();
+    schluesselfotoMetaGeladen = false;
+  }
   const banner = document.getElementById("pending-banner");
   try {
     await ensureSession();
@@ -1111,158 +1978,559 @@ async function loadPersonen() {
     debugLog(`❌ Personen laden: ${msg}`);
     return;
   }
-  const list = document.getElementById("personen-list");
-  const empty = document.getElementById("list-empty");
-  const { data, error } = await sb
-    .from("personen")
-    .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
-    .order("nachname", { ascending: true });
 
-  if (error) {
-    console.error(error);
+  // Innerhalb derselben Sitzung zuerst nur den Änderungsstand prüfen.
+  if (!force && personenCacheGeladen) {
+    if (personenCacheSyncInitialisiert) {
+      try {
+        await synchronisierePersonenDelta();
+      } catch (syncErr) {
+        debugLog(`⚠️ Delta-Sync: ${syncErr.message || syncErr}`);
+      }
+    }
+    aktualisierePersonenCacheStatus();
+    await renderPersonenList(personenCache);
+    const empty = document.getElementById("list-empty");
+    if (empty) empty.hidden = personenCache.length > 0;
+    return;
+  }
+  // Nach einem Safari-Neustart zuerst den dauerhaften Cache laden.
+  // Ein älterer Cache ohne syncSeq wird einmalig vollständig aktualisiert,
+  // damit der erste Synchronisationsstand sicher gesetzt wird.
+  if (!force) {
+    const lokalGeladen = await ladePersonenAusPersistentemCache();
+    if (lokalGeladen && personenCacheSyncInitialisiert) {
+      try {
+        await synchronisierePersonenDelta();
+      } catch (syncErr) {
+        debugLog(`⚠️ Delta-Sync nach Cache-Laden: ${syncErr.message || syncErr}`);
+      }
+      return;
+    }
+    if (lokalGeladen && !personenCacheSyncInitialisiert) {
+      debugLog("ℹ️ Alter Cache ohne Sync-Stand: einmalige Aktualisierung wird durchgeführt.");
+    }
+  }
+
+  if (personenLadePromise) return personenLadePromise;
+
+  personenLadePromise = (async () => {
+    const list = document.getElementById("personen-list");
+    const empty = document.getElementById("list-empty");
+    egressMessung.personenSupabaseAbrufe++;
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
+    const { data, error } = await sb
+      .from("personen")
+      .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
+      .order("nachname", { ascending: true });
+
+    if (error) throw error;
+
+    personenCache = data || [];
+    try {
+      const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
+        sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
+        sb.from("familien_kinder").select("familie_id, kind_id"),
+        sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
+      ]);
+      familienAuswahlCache = familien || [];
+      partnerIdsAuswahlCache = new Set();
+      for (const f of familienAuswahlCache) {
+        const typ = String(f.familientyp || "").toLowerCase();
+        if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
+          if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
+          if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
+        }
+      }
+      for (const b of beziehungen || []) {
+        if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
+          if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
+          if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
+        }
+      }
+      const kinderByFamilie = new Map();
+      for (const k of familienKinder || []) {
+        if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []);
+        kinderByFamilie.get(k.familie_id).push(k.kind_id);
+      }
+      for (const f of familien || []) f._kinder = kinderByFamilie.get(f.id) || [];
+
+      personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
+        eltern: new Set(),
+        ehePartnerschaften: new Set(),
+        kinder: new Set(),
+      }]));
+      for (const fk of familienKinder || []) {
+        const familie = (familien || []).find((f) => f.id === fk.familie_id);
+        if (!familie || !fk.kind_id) continue;
+        const info = personenVerwandtschaftCache.get(fk.kind_id);
+        if (!info) continue;
+        for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+          if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
+        }
+      }
+      for (const familie of familien || []) {
+        const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
+        const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
+        for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
+          if (!partnerId || !istEheOderPartnerschaft) continue;
+          const info = personenVerwandtschaftCache.get(partnerId);
+          if (!info) continue;
+          info.ehePartnerschaften.add(familie.id);
+          for (const kindId of familie._kinder || []) {
+            if (kindId && kindId !== partnerId) info.kinder.add(kindId);
+          }
+        }
+      }
+      berechneFamilienSortKeys(personenCache, familien || []);
+
+      // Den vollständigen, funktional nötigen Personen-/Auswahlcache dauerhaft sichern.
+      familienKinderAuswahlCache = familienKinder || [];
+      beziehungenAuswahlCache = beziehungen || [];
+      let syncSeqNachLaden = 0;
+      try { syncSeqNachLaden = await holeSyncMaxSeq(); } catch (syncErr) { debugLog(`⚠️ Sync-Stand konnte nicht gelesen werden: ${syncErr.message || syncErr}`); }
+      personenCacheSyncSeq = syncSeqNachLaden;
+      personenCacheSyncInitialisiert = true;
+      await speicherePersonenImPersistentenCache({
+        personen: personenCache,
+        familien: familienAuswahlCache,
+        familienKinder: familienKinderAuswahlCache,
+        beziehungen: beziehungenAuswahlCache,
+        syncSeq: personenCacheSyncSeq,
+        syncInitialisiert: true
+      });
+      personenCacheQuelle = "Supabase";
+    } catch (familyErr) {
+      debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`);
+    }
+    personenCacheQuelle = "Supabase";
+    personenCacheGeladen = true;
+    personenCacheZeitpunkt = Date.now();
+    aktualisierePersonenCacheStatus();
+    debugLog(`✅ Personen-Cache geladen: ${personenCache.length} Personen.`);
+    if (banner) banner.hidden = true;
+    await renderPersonenList(personenCache);
+    if (empty) empty.hidden = personenCache.length > 0;
+    // Falls der Nutzer schon während des Ladevorgangs in das Suchfeld
+    // geschrieben hat, die aktuelle Eingabe nach dem Cache-Aufbau sofort
+    // anwenden. Dadurch geht kein erster Buchstabe verloren.
+    const suchfeldNachLaden = document.getElementById("search-input");
+    if (suchfeldNachLaden?.value) {
+      window.partezettelPersonenSuche?.(suchfeldNachLaden.value);
+    }
+  })();
+
+  try {
+    await personenLadePromise;
+  } catch (err) {
+    console.error(err);
+    if (banner) { banner.hidden = false; banner.textContent = `Fehler beim Laden: ${err.message || err}`; }
+    debugLog(`❌ Personen laden: ${err.message || err}`);
+  } finally {
+    personenLadePromise = null;
+  }
+}
+
+function invalidierePersonenCache() {
+  personenCacheGeladen = false;
+  personenCacheZeitpunkt = 0;
+  personenCacheQuelle = "";
+  aktualisierePersonenCacheStatus();
+}
+
+function aktualisierePersonenCacheStatus() {
+  const el = document.getElementById("personen-cache-status");
+  if (!el) return;
+  if (personenCacheGeladen) {
+    const zeit = personenCacheZeitpunkt ? new Date(personenCacheZeitpunkt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
+    const lokal = personenCacheQuelle === "localStorage" || personenCacheQuelle === "IndexedDB";
+    const quelleText = lokal ? "lokal" : "Supabase";
+    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""} · ${quelleText}`;
+    el.classList.add("is-loaded");
+  } else {
+    el.textContent = "Cache: wird geladen …";
+    el.classList.remove("is-loaded");
+  }
+}
+
+const schluesselfotoCache = new Map(); // personenId -> { url, gueltigBis }
+const schluesselfotoMetaCache = new Map(); // personenId -> dateipfad | null
+let schluesselfotoMetaGeladen = false;
+const schluesselfotoLadePromise = { value: null };
+const schluesselfotoMetaPromise = { value: null };
+const personenKartenCache = new Map(); // personenId -> { li, img, placeholder, name, years, relations, note }
+let schluesselfotoObserver = null;
+
+async function ladeSchluesselfotoMetadaten(force = false) {
+  if (!force && schluesselfotoMetaGeladen) return;
+  if (schluesselfotoMetaPromise.value) {
+    await schluesselfotoMetaPromise.value;
     return;
   }
 
-  personenCache = data || [];
-  try {
-    const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
-      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
-      sb.from("familien_kinder").select("familie_id, kind_id"),
-      sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
-    ]);
-    familienAuswahlCache = familien || [];
-    partnerIdsAuswahlCache = new Set();
-    for (const f of familienAuswahlCache) {
-      const typ = String(f.familientyp || "").toLowerCase();
-      // Nur laufende Ehe/Partnerschaft sperrt die Person in der Auswahl.
-      // Beendete Beziehungen bleiben für eine spätere Ehe/Partnerschaft auswählbar.
-      if ((typ === "ehe" || typ === "partnerschaft") && !partnerschaftIstBeendet(f, personenCache)) {
-        if (f.partner_a_id) partnerIdsAuswahlCache.add(f.partner_a_id);
-        if (f.partner_b_id) partnerIdsAuswahlCache.add(f.partner_b_id);
-      }
+  schluesselfotoMetaPromise.value = (async () => {
+    const { data, error } = await sb.from("fotos")
+      .select("personen_id, dateipfad")
+      .eq("ist_schluesselfoto", true);
+    if (error) {
+      debugLog(`❌ Schlüsselfoto-Metadaten laden: ${error.message}`);
+      return;
     }
-    // Ältere Daten können noch ausschließlich in "beziehung" stehen.
-    // Diese werden ebenfalls nur dann als belegte Partnerschaft behandelt,
-    // wenn sie ausdrücklich Ehe oder Partnerschaft sind.
-    for (const b of beziehungen || []) {
-      if (b.beziehungstyp === "Ehe" || b.beziehungstyp === "Partnerschaft") {
-        if (b.personen_a_id) partnerIdsAuswahlCache.add(b.personen_a_id);
-        if (b.personen_b_id) partnerIdsAuswahlCache.add(b.personen_b_id);
-      }
-    }
-    const kinderByFamilie = new Map();
-    for (const k of familienKinder || []) { if (!kinderByFamilie.has(k.familie_id)) kinderByFamilie.set(k.familie_id, []); kinderByFamilie.get(k.familie_id).push(k.kind_id); }
-    for (const f of familien || []) f._kinder=kinderByFamilie.get(f.id)||[];
 
-    // Kleine Verwandtschaftszusammenfassung für die Personenliste.
-    // Die Werte werden ausschließlich aus den bestehenden Familien- und
-    // Kinderverknüpfungen berechnet; es werden keine neuen Daten gespeichert.
-    personenVerwandtschaftCache = new Map(personenCache.map((p) => [p.id, {
-      eltern: new Set(),
-      ehePartnerschaften: new Set(),
-      kinder: new Set(),
-    }]));
-    for (const fk of familienKinder || []) {
-      const familie = (familien || []).find((f) => f.id === fk.familie_id);
-      if (!familie || !fk.kind_id) continue;
-      const info = personenVerwandtschaftCache.get(fk.kind_id);
-      if (!info) continue;
-      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-        if (partnerId && partnerId !== fk.kind_id) info.eltern.add(partnerId);
-      }
+    schluesselfotoMetaCache.clear();
+    for (const foto of data || []) {
+      if (foto?.personen_id) schluesselfotoMetaCache.set(foto.personen_id, foto.dateipfad || null);
     }
-    for (const familie of familien || []) {
-      const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
-      const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
-      for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-        if (!partnerId || !istEheOderPartnerschaft) continue;
-        const info = personenVerwandtschaftCache.get(partnerId);
-        if (!info) continue;
-        info.ehePartnerschaften.add(familie.id);
-        for (const kindId of familie._kinder || []) {
-          if (kindId && kindId !== partnerId) info.kinder.add(kindId);
-        }
-      }
-    }
-    berechneFamilienSortKeys(personenCache,familien||[]);
-  } catch (familyErr) { debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`); }
-  if (banner) banner.hidden = true;
-  renderPersonenList(personenCache);
-  empty.hidden = personenCache.length > 0;
+    schluesselfotoMetaGeladen = true;
+  })();
+
+  try { await schluesselfotoMetaPromise.value; }
+  finally { schluesselfotoMetaPromise.value = null; }
 }
 
-const schluesselfotoCache = new Map();
-
-async function ladeSchluesselfotos(personen) {
-  schluesselfotoCache.clear();
+async function ladeSchluesselfotos(personen, force = false) {
   if (!personen.length) return;
-  const ids = personen.map(p => p.id);
-  const { data, error } = await sb.from("fotos").select("id, personen_id, dateipfad, ist_schluesselfoto").in("personen_id", ids).eq("ist_schluesselfoto", true);
-  if (error) { debugLog(`❌ Schlüsselfotos laden: ${error.message}`); return; }
-  for (const foto of data || []) {
-    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
-    if (signed?.signedUrl) schluesselfotoCache.set(foto.personen_id, signed.signedUrl);
+  await ladeSchluesselfotoMetadaten(force);
+
+  const jetzt = Date.now();
+  const fehlende = personen.filter((p) => {
+    const pfad = schluesselfotoMetaCache.get(p.id);
+    const eintrag = schluesselfotoCache.get(p.id);
+    if (!pfad) {
+      schluesselfotoCache.delete(p.id);
+      return false;
+    }
+    return force || !eintrag || eintrag.gueltigBis <= jetzt || eintrag.pfad !== pfad;
+  });
+  if (!fehlende.length) return;
+  if (schluesselfotoLadePromise.value) {
+    await schluesselfotoLadePromise.value;
+    return;
+  }
+
+  schluesselfotoLadePromise.value = (async () => {
+    const fotos = fehlende
+      .map(p => ({ personenId: p.id, dateipfad: schluesselfotoMetaCache.get(p.id) }))
+      .filter(f => f.dateipfad);
+    if (!fotos.length) return;
+
+    const pfade = [...new Set(fotos.map(f => f.dateipfad))];
+    const urlByPath = await ladeFotoBilder(pfade);
+    const gueltigBis = Date.now() + (55 * 60 * 60 * 1000);
+    for (const foto of fotos) {
+      const url = urlByPath.get(foto.dateipfad);
+      if (url) schluesselfotoCache.set(foto.personenId, { url, pfad: foto.dateipfad, gueltigBis });
+    }
+  })();
+
+  try { await schluesselfotoLadePromise.value; }
+  finally { schluesselfotoLadePromise.value = null; }
+}
+
+function setzeSchluesselfotoInKarte(personenId) {
+  const karte = personenKartenCache.get(personenId);
+  if (!karte || !karte.img) return;
+  const fotoEintrag = schluesselfotoCache.get(personenId);
+  const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
+  if (fotoUrl) {
+    if (karte.img.src !== fotoUrl) {
+      egressMessung.urlSetzungen++;
+      if (!egressMessung.uniqueAssignedUrls.includes(fotoUrl)) {
+        egressMessung.uniqueAssignedUrls.push(fotoUrl);
+        egressMessung.eindeutigeURLSetzungen++;
+      }
+      speichereEgressMessung();
+      karte.img.dataset.egressDebugUrl = fotoUrl;
+      karte.img.src = fotoUrl;
+      aktualisiereEgressMessung();
+    }
+    karte.img.hidden = false;
+    karte.placeholder.hidden = true;
+  } else {
+    karte.img.removeAttribute("src");
+    karte.img.hidden = true;
+    karte.placeholder.hidden = false;
   }
 }
 
-async function renderPersonenList(personen) {
-  personen = sortierePersonen(personen);
+function beobachteSchluesselfotos() {
   const list = document.getElementById("personen-list");
-  list.innerHTML = "";
-  await ladeSchluesselfotos(personen);
-  personen.forEach((p) => {
-    const li = document.createElement("li");
-    li.className = "person-card";
-    const sterbeJahrAnzeige = p.sterbedatum
-      ? p.sterbedatum.split("-")[0]
-      : (p.sterbejahr ? String(p.sterbejahr) : "");
-    const jahre = [p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""), sterbeJahrAnzeige]
-      .filter(Boolean)
-      .join(" – ");
-    const alterAnzeige = lebensalterAnzeige(p);
-    const fotoUrl = schluesselfotoCache.get(p.id);
-    const verwandtschaft = personenVerwandtschaftCache.get(p.id);
-    const elternAnzahl = verwandtschaft?.eltern?.size || 0;
-    const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
-    const kinderAnzahl = verwandtschaft?.kinder?.size || 0;
-    li.innerHTML = `
-      ${fotoUrl ? `<img class="person-card__photo" src="${fotoUrl}" alt="Schlüsselfoto von ${p.vorname} ${p.nachname}">` : `<div class="person-card__photo-placeholder" aria-hidden="true">👤</div>`}
-      <div class="person-card__content">
-        <div class="person-card__name">${p.vorname} ${p.nachname}</div>
-        ${jahre || alterAnzeige ? `<div class="person-card__years">${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}</div>` : ""}
-        <div class="person-card__relations" aria-label="Verwandtschaft: Eltern ${elternAnzahl}, Ehe oder Partnerschaften ${ehePartnerschaftenAnzahl}, Kinder ${kinderAnzahl}">👥 Eltern: ${elternAnzahl} · 💍 Ehe/Partn.: ${ehePartnerschaftenAnzahl} · 👶 Kinder: ${kinderAnzahl}</div>
-        ${p.Notiz ? `<div class="person-card__note">${p.Notiz}</div>` : ""}
-      </div>
-    `;
-    li.addEventListener("click", () => openPersonDetail(p.id));
-    list.appendChild(li);
-  });
+  if (!list) return;
+
+  if (schluesselfotoObserver) schluesselfotoObserver.disconnect();
+  if (!("IntersectionObserver" in window)) {
+    const personen = [...personenKartenCache.values()]
+      .filter(k => !k.li.hidden)
+      .map(k => k.person)
+      .filter(Boolean);
+    ladeSchluesselfotos(personen).then(() => {
+      personen.forEach(p => setzeSchluesselfotoInKarte(p.id));
+    });
+    return;
+  }
+
+  schluesselfotoObserver = new IntersectionObserver((entries) => {
+    const sichtbar = entries
+      .filter(entry => entry.isIntersecting)
+      .map(entry => personenKartenCache.get(entry.target.dataset.personId)?.person)
+      .filter(Boolean);
+    if (!sichtbar.length) return;
+    ladeSchluesselfotos(sichtbar).then(() => {
+      sichtbar.forEach(p => setzeSchluesselfotoInKarte(p.id));
+    });
+  }, { root: list, rootMargin: "400px 0px", threshold: 0.01 });
+
+  for (const karte of personenKartenCache.values()) {
+    if (!karte.li.hidden) schluesselfotoObserver.observe(karte.li);
+  }
 }
 
+function erstellePersonenKarte(p) {
+  const li = document.createElement("li");
+  li.className = "person-card";
+  li.dataset.personId = p.id;
 
+  const fotoEintrag = schluesselfotoCache.get(p.id);
+  const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
+  const img = document.createElement("img");
+  img.className = "person-card__photo";
+  img.alt = `Schlüsselfoto von ${p.vorname} ${p.nachname}`;
+  img.loading = "lazy";
+  img.decoding = "async";
+  img.hidden = !fotoUrl;
+  if (fotoUrl) img.src = fotoUrl;
 
-document.getElementById("search-input").addEventListener("input", (e) => {
-  const q = e.target.value.toLowerCase();
-  const filtered = personenCache.filter((p) =>
-    `${p.vorname} ${p.nachname}`.toLowerCase().includes(q)
-  );
-  renderPersonenList(filtered);
-});
+  const placeholder = document.createElement("div");
+  placeholder.className = "person-card__photo-placeholder";
+  placeholder.setAttribute("aria-hidden", "true");
+  placeholder.textContent = "👤";
+  placeholder.hidden = !!fotoUrl;
+
+  const content = document.createElement("div");
+  content.className = "person-card__content";
+  const name = document.createElement("div");
+  name.className = "person-card__name";
+  const years = document.createElement("div");
+  years.className = "person-card__years";
+  const relations = document.createElement("div");
+  relations.className = "person-card__relations";
+  const note = document.createElement("div");
+  note.className = "person-card__note";
+
+  content.append(name, years, relations, note);
+  li.append(img, placeholder, content);
+  li.addEventListener("click", () => openPersonDetail(p.id));
+
+  img.addEventListener("load", () => {
+    registriereEgressBildLoad(img.dataset.egressDebugUrl || img.currentSrc || img.src || "");
+  });
+
+  const karte = { li, img, placeholder, name, years, relations, note, person: p };
+  personenKartenCache.set(p.id, karte);
+  aktualisierePersonenKarte(karte, p);
+  return karte;
+}
+
+function aktualisierePersonenKarte(karte, p) {
+  karte.person = p;
+  karte.li.dataset.personId = p.id;
+  karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
+
+  const sterbeJahrAnzeige = p.sterbedatum
+    ? p.sterbedatum.split("-")[0]
+    : (p.sterbejahr ? String(p.sterbejahr) : "");
+  const jahre = [
+    p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""),
+    sterbeJahrAnzeige
+  ].filter(Boolean).join(" – ");
+  const alterAnzeige = lebensalterAnzeige(p);
+  karte.years.textContent = `${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}`;
+  karte.years.hidden = !karte.years.textContent;
+
+  const verwandtschaft = personenVerwandtschaftCache.get(p.id);
+  const elternAnzahl = verwandtschaft?.eltern?.size || 0;
+  const ehePartnerschaftenAnzahl = verwandtschaft?.ehePartnerschaften?.size || 0;
+  const kinderAnzahl = verwandtschaft?.kinder?.size || 0;
+  karte.relations.textContent = `👥 Eltern: ${elternAnzahl} · 💍 Ehe/Partn.: ${ehePartnerschaftenAnzahl} · 👶 Kinder: ${kinderAnzahl}`;
+  karte.relations.setAttribute("aria-label", `Verwandtschaft: Eltern ${elternAnzahl}, Ehe oder Partnerschaften ${ehePartnerschaftenAnzahl}, Kinder ${kinderAnzahl}`);
+
+  karte.note.textContent = p.Notiz || "";
+  karte.note.hidden = !p.Notiz;
+  setzeSchluesselfotoInKarte(p.id);
+}
+
+async function renderPersonenList(personen) {
+  const list = document.getElementById("personen-list");
+  if (!list) return;
+  const sortiertePersonen = sortierePersonen(personen);
+  const sichtbarIds = new Set(sortiertePersonen.map(p => p.id));
+
+  // Karten werden nur einmal erzeugt und danach wiederverwendet. Beim Tippen in
+  // der Suche werden dadurch weder <img>-Elemente noch deren src neu erzeugt.
+  for (const p of personenCache) {
+    if (!personenKartenCache.has(p.id)) erstellePersonenKarte(p);
+    const karte = personenKartenCache.get(p.id);
+    aktualisierePersonenKarte(karte, p);
+    karte.li.hidden = !sichtbarIds.has(p.id);
+  }
+
+  // Sortierung durch Verschieben der bestehenden DOM-Knoten, nicht durch Neuanlage.
+  const fragment = document.createDocumentFragment();
+  for (const p of sortiertePersonen) {
+    const karte = personenKartenCache.get(p.id);
+    if (karte) fragment.appendChild(karte.li);
+  }
+  list.appendChild(fragment);
+  beobachteSchluesselfotos();
+}
 
 
 const personenSortSelect=document.getElementById("personen-sortierung");
 const personenSortButton=document.getElementById("personen-sort-richtung");
-function aktualisierePersonenSortierung(){const q=(document.getElementById("search-input")?.value||"").toLowerCase();renderPersonenList(personenCache.filter(p=>`${p.vorname} ${p.nachname}`.toLowerCase().includes(q)));}
+
+// ---------- Robuste lokale Namenssuche ----------
+// Die Suche arbeitet ausschließlich auf dem bereits geladenen personenCache.
+// Der direkte Handler wird zusätzlich vom <input>-Element aufgerufen. Damit
+// hängt die Suche nicht davon ab, ob iPadOS einen zuvor registrierten
+// Event-Listener nach einem View-/PWA-Wechsel noch korrekt ausführt.
+let personenSucheLauf = 0;
+
+function normalizePersonenSuchtext(value) {
+  return String(value ?? "")
+    .toLocaleLowerCase("de-DE")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function personenSuchtext(p) {
+  return normalizePersonenSuchtext(
+    [p?.vorname, p?.nachname, p?.Ledigenname]
+      .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
+      .join(" ")
+  );
+}
+
+function wendePersonenSucheAn(suchwert) {
+  const q = normalizePersonenSuchtext(suchwert);
+  const tokens = q ? q.split(" ").filter(Boolean) : [];
+  const list = document.getElementById("personen-list");
+  const empty = document.getElementById("list-empty");
+
+  if (!personenCacheGeladen || !Array.isArray(personenCache) || !personenCache.length) {
+    if (empty) {
+      empty.hidden = false;
+      empty.textContent = "Personen werden noch geladen …";
+    }
+    return false;
+  }
+
+  // Alle Karten sind nach loadPersonen bereits vorhanden. Falls die Suche
+  // außergewöhnlich früh kommt, werden fehlende Karten einmalig erzeugt.
+  // Beim Filtern werden weder Karten noch Bilder neu erzeugt.
+  for (const p of personenCache) {
+    if (!personenKartenCache.has(p.id)) erstellePersonenKarte(p);
+  }
+
+  let treffer = 0;
+  for (const p of personenCache) {
+    const karte = personenKartenCache.get(p.id);
+    if (!karte) continue;
+
+    // Mehrwortsuche: Jeder Suchbegriff muss als Teilstring im gemeinsamen
+    // Namens-Suchraum vorkommen. Dadurch ist die Reihenfolge egal:
+    // "Ganahl Alois" findet "Alois Ganahl" und umgekehrt.
+    const haystack = personenSuchtext(p);
+    const sichtbar = tokens.length === 0 || tokens.every(token => haystack.includes(token));
+    karte.li.hidden = !sichtbar;
+    if (sichtbar) treffer++;
+  }
+
+  if (empty) {
+    empty.textContent = treffer
+      ? ""
+      : `Keine Person für „${suchwert || q}“ gefunden.`;
+    empty.hidden = treffer > 0;
+  }
+  if (list) list.setAttribute("data-suchtreffer", String(treffer));
+
+  const status = document.getElementById("personen-suchtreffer");
+  if (status) status.textContent = q ? `${treffer} Treffer` : `${treffer} Personen`;
+  return true;
+}
+
+// Öffentliche Funktion für den direkten oninput/onkeyup-Handler im HTML.
+window.partezettelPersonenSuche = function (suchwert) {
+  personenSucheLauf++;
+  return wendePersonenSucheAn(suchwert);
+};
+
+// Fallback für programmatische Änderungen und ältere Ansichten.
+function filterePersonenListeLokal() {
+  const feld = document.getElementById("search-input");
+  return window.partezettelPersonenSuche(feld?.value || "");
+}
+
+function aktualisierePersonenSortierung() {
+  aktualisierePersonenCacheStatus();
+  const feld = document.getElementById("search-input");
+  const q = (feld?.value || "").trim();
+  if (q) {
+    window.partezettelPersonenSuche(q);
+    return;
+  }
+  renderPersonenList(personenCache);
+}
+
+let egressSuchSchrittTimer = null;
+function registriereEgressSuchSchrittNachSuche(suchwert) {
+  clearTimeout(egressSuchSchrittTimer);
+  egressSuchSchrittTimer = setTimeout(() => {
+    registriereEgressSchritt(suchwert ? `Suche: ${suchwert}` : "Suche: leer");
+  }, 800);
+}
+
+const personenSuchfeld = document.getElementById("search-input");
+if (personenSuchfeld) {
+  personenSuchfeld.addEventListener("input", () => {
+    window.partezettelPersonenSuche(personenSuchfeld.value);
+    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
+  });
+  personenSuchfeld.addEventListener("search", () => {
+    window.partezettelPersonenSuche(personenSuchfeld.value);
+    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
+  });
+  personenSuchfeld.addEventListener("keyup", () => {
+    window.partezettelPersonenSuche(personenSuchfeld.value);
+    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
+  });
+}
+
+document.addEventListener("input", (event) => {
+  if (event.target?.id === "search-input") {
+    window.partezettelPersonenSuche(event.target.value);
+    registriereEgressSuchSchrittNachSuche(event.target.value);
+  }
+});
+
 if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});
 if(personenSortButton)personenSortButton.addEventListener("click",()=>{personenSortRichtung*=-1;personenSortButton.textContent=personenSortRichtung===1?"↑":"↓";aktualisierePersonenSortierung();});
 
-document.getElementById("refresh-btn").addEventListener("click", loadPersonen);
+document.getElementById("refresh-btn").addEventListener("click", () => loadPersonen(true));
 
 // ---------- Init ----------
 (async function init() {
   try {
     await ensureSession();
-    await flushQueue();
+    // v178: Alte lokale Fehlversuche robust und mit Endkontrolle bereinigen.
+    await bereinigeBekannteFehlerQueueV177();
+    // Keine automatische Übermittlung der Warteschlange: so entstehen keine
+    // wiederkehrenden 400er-POSTs aus den alten Fehlversuchen.
+    await zeigeQueueDiagnose();
+    // Auch bei einer bereits bestehenden Anmeldung die Personenliste sofort
+    // laden. So ist der lokale Such-Cache schon beim ersten Öffnen vorhanden.
+    await loadPersonen();
   } catch (err) {
     const msg = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";
     debugLog(`⚠️ ${msg}`);
@@ -1552,10 +2820,11 @@ async function loadDetailFotos(personId) {
     verknuepfte = data || [];
   }
   const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+  const fotoUrls = await ladeFotoBilder(fotos.map(f => f.dateipfad));
   for (const foto of fotos) {
-    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    const fotoUrl = fotoUrls.get(foto.dateipfad) || "";
     const { data: markierungen } = await sb.from("foto_personen")
-      .select("id, personen_id, nummer, position_x, position_y")
+      .select("id, personen_id, nummer, position_x, position_y, position_format")
       .eq("foto_id", foto.id)
       .order("nummer", { ascending: true });
     const istGruppenfoto = !!foto.gruppenfoto || (markierungen || []).length > 0;
@@ -1565,7 +2834,7 @@ async function loadDetailFotos(personId) {
     if (istGruppenfoto) {
       div.innerHTML = `
         <div class="detail-group-photo-wrap">
-          <img src="${signed ? signed.signedUrl : ""}" alt="Gruppenfoto">
+          <img src="${fotoUrl}" alt="Gruppenfoto">
           <div class="detail-group-photo-markers"></div>
         </div>
         <div class="detail-group-photo-info">
@@ -1595,12 +2864,10 @@ async function loadDetailFotos(personId) {
       });
       wrap.addEventListener("click", (event) => {
         event.stopPropagation();
-        const viewer = document.getElementById("detail-photo-viewer");
-        const viewerImg = document.getElementById("detail-photo-viewer-img");
-        if (viewer && viewerImg && signed?.signedUrl) { viewerImg.src = signed.signedUrl; viewer.hidden = false; }
+        openGruppenfotoViewer(fotoUrl, markierungen || [], foto);
       });
     } else {
-      div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
+      div.innerHTML = `<img src="${fotoUrl}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
       const fotoImg = div.querySelector("img");
       const openFoto = (event) => {
         if (event) event.stopPropagation();
@@ -1623,7 +2890,8 @@ async function loadDetailFotos(personId) {
       if (keyError) { msg.textContent = `Fehler: ${keyError.message}`; return; }
       msg.textContent = "Schlüsselfoto gesetzt ✓";
       await loadDetailFotos(personId);
-      await loadPersonen();
+      invalidierePersonenCache();
+      await loadPersonen(true);
     });
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm(istGruppenfoto ? "Diese Person vom Gruppenfoto entfernen?" : "Foto bzw. Verknüpfung wirklich entfernen?")) return;
@@ -1633,15 +2901,16 @@ async function loadDetailFotos(personId) {
         const verbleibend = (links || []).filter(x => x.personen_id !== personId);
         const istEigentuemer = foto.personen_id === personId;
         if (!verbleibend.length && istEigentuemer) {
-          await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
+          await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
           await sb.from("fotos").delete().eq("id", foto.id);
         }
       } else {
-        await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
+        await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
         await sb.from("fotos").delete().eq("id", foto.id);
       }
       await loadDetailFotos(personId);
-      loadPersonen();
+      invalidierePersonenCache();
+      loadPersonen(true);
     });
     container.appendChild(div);
   }
@@ -1750,10 +3019,10 @@ async function ladeGruppenfotoListe() {
   gruppenfotoListe.innerHTML = "";
   gruppenfotoLeer.hidden = !!(data && data.length);
   for (const foto of (data || [])) {
-    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    const fotoUrl = await ladeFotoBild(foto.dateipfad);
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<img src="${signed?.signedUrl || ""}" alt="Foto"><span class="beziehung-text">Foto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">👥 Personen</button>`;
+    div.innerHTML = `<img src="${fotoUrl || ""}" alt="Foto"><span class="beziehung-text">Foto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">👥 Personen</button>`;
     div.querySelector("img")?.addEventListener("click", () => openFotoPersonenModal(foto));
     div.querySelector(".gruppenfoto-personen-btn").addEventListener("click", () => openFotoPersonenModal(foto));
     gruppenfotoListe.appendChild(div);
@@ -1809,10 +3078,12 @@ let fotoAktiveMarkierungId = null;
 
 const fotoPersonenModal = document.getElementById("foto-personen-modal");
 const fotoMarkierbild = document.getElementById("foto-markierbild");
+const fotoMarkierbildWrap = document.getElementById("foto-markierbild-wrap");
 const fotoMarkierflaeche = document.getElementById("foto-markierflaeche");
 const fotoMarkierungenEl = document.getElementById("foto-markierungen");
 const fotoPersonenListe = document.getElementById("foto-personen-liste");
 const fotoPersonAuswahl = document.getElementById("foto-person-auswahl");
+const fotoPersonSuche = document.getElementById("foto-person-suche");
 const fotoPersonenMessage = document.getElementById("foto-personen-message");
 
 function fotoPersonName(id) {
@@ -1833,29 +3104,79 @@ async function openFotoPersonenModal(foto) {
   fotoPersonenAktuell = foto;
   fotoAktiveMarkierungId = null;
   fotoPersonenMessage.textContent = "Lade …";
-  const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y").eq("foto_id", foto.id).order("nummer", { ascending: true });
+  const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", foto.id).order("nummer", { ascending: true });
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen = rows || [];
-  const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
-  fotoMarkierbild.src = signed?.signedUrl || "";
-  const verfuegbarePersonen = (personenCache || [])
-    .filter(p => !fotoMarkierungen.some(r => r.personen_id === p.id))
+  const fotoUrl = await ladeFotoBild(foto.dateipfad);
+  fotoMarkierbild.src = fotoUrl || "";
+  // Für die nachträgliche Zuordnung alle Personen anzeigen. Bereits zugeordnete
+  // Personen bleiben sichtbar und werden mit ihrer vorhandenen Nummer markiert.
+  // So ist auch bei einem großen Gruppenfoto sofort erkennbar, wer schon zugeordnet ist.
+  fotoPersonAuswahl._alleVerfuegbarenPersonen = (personenCache || [])
     .slice()
     .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
-  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + verfuegbarePersonen.map(p => {
-    const anzeige = fotoPersonAnzeige(p);
-    return `<option value="${p.id}">${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
-  }).join("");
-  fotoPersonAuswahl.disabled = verfuegbarePersonen.length === 0;
+  if (fotoPersonSuche) fotoPersonSuche.value = "";
+  renderFotoPersonAuswahl();
+  fotoPersonAuswahl.disabled = !(fotoPersonAuswahl._alleVerfuegbarenPersonen || []).some(p =>
+    !fotoMarkierungen.some(r => r.personen_id === p.id)
+  );
   fotoPersonenModal.hidden = false;
-  renderFotoMarkierungen();
-  fotoPersonenMessage.textContent = "";
+  const renderAfterLoad = async () => {
+    await migriereAlteFotoPositionen();
+    renderFotoMarkierungen();
+    fotoPersonenMessage.textContent = "";
+  };
+  if (fotoMarkierbild.complete && fotoMarkierbild.naturalWidth) renderAfterLoad();
+  else fotoMarkierbild.addEventListener("load", renderAfterLoad, { once: true });
+}
+
+
+function renderFotoPersonAuswahl() {
+  if (!fotoPersonAuswahl) return;
+  const alle = fotoPersonAuswahl._alleVerfuegbarenPersonen || [];
+  const suchtext = (fotoPersonSuche?.value || "").trim().toLocaleLowerCase("de");
+  const gefiltert = suchtext ? alle.filter(p => {
+    const a = fotoPersonAnzeige(p);
+    return `${a.name} ${a.daten || ""}`.toLocaleLowerCase("de").includes(suchtext);
+  }) : alle;
+  const belegteNummern = new Map(
+    fotoMarkierungen
+      .filter(r => r.personen_id)
+      .map(r => [r.personen_id, r.nummer])
+  );
+  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + gefiltert.map(p => {
+    const anzeige = fotoPersonAnzeige(p);
+    const nr = belegteNummern.get(p.id);
+    return `<option value="${p.id}" ${nr ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${nr ? ` — bereits Nr. ${nr}` : ""}</option>`;
+  }).join("");
+}
+
+fotoPersonSuche?.addEventListener("input", renderFotoPersonAuswahl);
+
+async function migriereAlteFotoPositionen() {
+  if (!fotoMarkierbildWrap || !fotoMarkierbild.naturalWidth) return;
+  const legacy = fotoMarkierungen.filter(r => (r.position_format || "flaeche") !== "bild");
+  if (!legacy.length) return;
+
+  const bildRect = fotoMarkierbild.getBoundingClientRect();
+  const flaechenRect = fotoMarkierflaeche.getBoundingClientRect();
+  if (!bildRect.width || !bildRect.height || !flaechenRect.width || !flaechenRect.height) return;
+
+  for (const row of legacy) {
+    const oldXpx = flaechenRect.left + (Number(row.position_x ?? 50) / 100) * flaechenRect.width;
+    const oldYpx = flaechenRect.top + (Number(row.position_y ?? 50) / 100) * flaechenRect.height;
+    const x = Math.max(0, Math.min(100, ((oldXpx - bildRect.left) / bildRect.width) * 100));
+    const y = Math.max(0, Math.min(100, ((oldYpx - bildRect.top) / bildRect.height) * 100));
+    const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y, position_format: "bild" }).eq("id", row.id);
+    if (!error) { row.position_x = x; row.position_y = y; row.position_format = "bild"; }
+  }
 }
 
 function renderFotoMarkierungen() {
   fotoMarkierungenEl.innerHTML = "";
   fotoPersonenListe.innerHTML = "";
   const sorted = [...fotoMarkierungen].sort((a,b) => Number(a.nummer)-Number(b.nummer));
+
   for (const row of sorted) {
     const m = document.createElement("div");
     m.className = "foto-markierung" + (row.id === fotoAktiveMarkierungId ? " is-active" : "");
@@ -1863,86 +3184,214 @@ function renderFotoMarkierungen() {
     m.style.left = `${Number(row.position_x ?? 50)}%`;
     m.style.top = `${Number(row.position_y ?? 50)}%`;
     m.title = `${row.nummer}: ${fotoPersonName(row.personen_id)}`;
-    m.addEventListener("click", (e) => { e.stopPropagation(); fotoAktiveMarkierungId = row.id; renderFotoMarkierungen(); });
+    m.addEventListener("click", (e) => {
+      e.stopPropagation();
+      fotoAktiveMarkierungId = row.id;
+      renderFotoMarkierungen();
+    });
     fotoMarkierungenEl.appendChild(m);
 
     const line = document.createElement("div");
     line.className = "foto-person-zeile";
-    line.innerHTML = `
-      <span class="foto-person-zeile__num">#${row.nummer}</span>
-      <span class="foto-person-zeile__name">${escapeHtml(fotoPersonName(row.personen_id))}</span>
-      <button type="button" class="btn btn--ghost foto-person-aendern-btn">Ändern</button>
-      <button type="button" class="btn btn--ghost foto-position-btn">Position</button>
-      <button type="button" class="btn btn--ghost foto-nummer-btn">Nr.</button>
-      <button type="button" class="btn btn--ghost foto-person-loeschen-btn">✕</button>`;
 
-    line.querySelector(".foto-person-aendern-btn").addEventListener("click", () => {
-      const nameEl = line.querySelector(".foto-person-zeile__name");
-      const changeBtn = line.querySelector(".foto-person-aendern-btn");
+    const name = document.createElement("span");
+    name.className = "foto-person-zeile__name";
+    name.textContent = fotoPersonName(row.personen_id);
+
+    const num = document.createElement("span");
+    num.className = "foto-person-zeile__num";
+    num.textContent = `#${row.nummer}`;
+
+    const assignBtn = document.createElement("button");
+    assignBtn.type = "button";
+    assignBtn.className = "btn btn--secondary foto-person-aendern-btn";
+    assignBtn.textContent = row.personen_id ? "Person ändern" : "Person zuordnen";
+
+    const positionBtn = document.createElement("button");
+    positionBtn.type = "button";
+    positionBtn.className = "btn btn--ghost foto-position-btn";
+    positionBtn.textContent = "Position";
+
+    const numberBtn = document.createElement("button");
+    numberBtn.type = "button";
+    numberBtn.className = "btn btn--ghost foto-nummer-btn";
+    numberBtn.textContent = "Nr.";
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "btn btn--ghost foto-person-loeschen-btn";
+    deleteBtn.textContent = "✕";
+    deleteBtn.setAttribute("aria-label", `Nr. ${row.nummer} entfernen`);
+
+    line.append(num, name, assignBtn, positionBtn, numberBtn, deleteBtn);
+
+    assignBtn.addEventListener("click", () => {
       if (line.querySelector(".foto-person-change-wrap")) return;
+
       const verfuegbar = (personenCache || [])
-        .filter(p => p.id === row.personen_id || !fotoMarkierungen.some(x => x.id !== row.id && x.personen_id === p.id))
         .slice()
-        .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
-      const wrap = document.createElement("span");
+        .sort((a,b) =>
+          `${a.nachname || ""} ${a.vorname || ""}`.localeCompare(
+            `${b.nachname || ""} ${b.vorname || ""}`, "de"
+          )
+        );
+
+      const wrap = document.createElement("div");
       wrap.className = "foto-person-change-wrap";
+
+      const search = document.createElement("input");
+      search.type = "search";
+      search.className = "foto-person-change-search";
+      search.placeholder = "Name oder Geburtsjahr suchen …";
+      search.autocomplete = "off";
+      search.setAttribute("aria-label", "Person suchen");
+
       const select = document.createElement("select");
       select.className = "foto-person-change-select";
-      select.innerHTML = `<option value="">— unbekannt —</option>` + verfuegbar.map(p => {
-        const anzeige = fotoPersonAnzeige(p);
-        return `<option value="${p.id}" ${p.id === row.personen_id ? "selected" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}</option>`;
-      }).join("");
+      select.setAttribute("aria-label", "Person für diesen Marker auswählen");
+
       const save = document.createElement("button");
-      save.type = "button"; save.className = "btn btn--secondary"; save.textContent = "Speichern";
+      save.type = "button";
+      save.className = "btn btn--primary";
+      save.textContent = "Zuordnung speichern";
+
       const cancel = document.createElement("button");
-      cancel.type = "button"; cancel.className = "btn btn--ghost"; cancel.textContent = "Abbrechen";
-      wrap.append(select, save, cancel);
-      nameEl.replaceWith(wrap);
-      changeBtn.hidden = true;
+      cancel.type = "button";
+      cancel.className = "btn btn--ghost";
+      cancel.textContent = "Abbrechen";
+
+      function fillSelect() {
+        const q = treeNormalizeName(search.value);
+        const filtered = q
+          ? verfuegbar.filter(p => {
+              const a = fotoPersonAnzeige(p);
+              return treeNormalizeName(`${a.name} ${a.daten || ""}`).includes(q);
+            })
+          : verfuegbar;
+
+        select.innerHTML = '<option value="">— Person auswählen —</option>' +
+          filtered.map(p => {
+            const anzeige = fotoPersonAnzeige(p);
+            const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === p.id);
+            const istAktuell = p.id === row.personen_id;
+            const status = belegung && !istAktuell ? ` — bereits Nr. ${belegung.nummer}` : "";
+            return `<option value="${escapeHtml(p.id)}" ${istAktuell ? "selected" : ""} ${belegung && !istAktuell ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${status}</option>`;
+          }).join("");
+
+        save.disabled = !select.value;
+      }
+
+      search.addEventListener("input", fillSelect);
+      select.addEventListener("change", () => {
+        save.disabled = !select.value;
+      });
+
+      wrap.append(search, select, save, cancel);
+
+      // Die bestehende Zeile bleibt sichtbar; die Zuordnung wird darunter
+      // geöffnet, damit die Bedienelemente auf iPhone/iPad eindeutig sind.
+      line.classList.add("is-editing");
+      line.appendChild(wrap);
+      assignBtn.hidden = true;
+      positionBtn.hidden = true;
+      numberBtn.hidden = true;
+      deleteBtn.hidden = true;
+
+      fillSelect();
+      search.focus();
+
       save.addEventListener("click", async () => {
         const neueId = select.value || null;
-        if (neueId && fotoMarkierungen.some(x => x.id !== row.id && x.personen_id === neueId)) {
-          fotoPersonenMessage.textContent = "Diese Person ist bereits auf dem Foto zugeordnet.";
+        if (!neueId) {
+          fotoPersonenMessage.textContent = "Bitte zuerst eine Person auswählen.";
           return;
         }
-        const { error } = await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", row.id);
-        if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
+
+        const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === neueId);
+        if (belegung) {
+          fotoPersonenMessage.textContent = `Diese Person ist bereits Nr. ${belegung.nummer} zugeordnet.`;
+          return;
+        }
+
+        save.disabled = true;
+        save.textContent = "Speichere …";
+
+        const { error } = await sb.from("foto_personen")
+          .update({ personen_id: neueId })
+          .eq("id", row.id);
+
+        if (error) {
+          save.disabled = false;
+          save.textContent = "Zuordnung speichern";
+          fotoPersonenMessage.textContent = `Fehler beim Speichern: ${error.message}`;
+          return;
+        }
+
         row.personen_id = neueId;
-        fotoPersonenMessage.textContent = "Personenzuordnung gespeichert ✓";
+        fotoPersonenMessage.textContent = `Nr. ${row.nummer}: ${fotoPersonName(neueId)} gespeichert ✓`;
         renderFotoMarkierungen();
       });
-      cancel.addEventListener("click", () => renderFotoMarkierungen());
+
+      cancel.addEventListener("click", () => {
+        fotoPersonenMessage.textContent = "";
+        renderFotoMarkierungen();
+      });
     });
 
-    line.querySelector(".foto-position-btn").addEventListener("click", () => { fotoAktiveMarkierungId = row.id; fotoPersonenMessage.textContent = `Tippe jetzt auf die Position von Nr. ${row.nummer}.`; renderFotoMarkierungen(); });
-    line.querySelector(".foto-nummer-btn").addEventListener("click", async () => {
+    positionBtn.addEventListener("click", () => {
+      fotoAktiveMarkierungId = row.id;
+      fotoPersonenMessage.textContent = `Tippe jetzt auf die Position von Nr. ${row.nummer}.`;
+      renderFotoMarkierungen();
+    });
+
+    numberBtn.addEventListener("click", async () => {
       const wert = Number(prompt(`Neue Nummer für ${fotoPersonName(row.personen_id)}:`, row.nummer));
       if (!Number.isInteger(wert) || wert < 1) return;
-      if (fotoMarkierungen.some(x => x.id !== row.id && Number(x.nummer) === wert)) { fotoPersonenMessage.textContent = `Nr. ${wert} ist bereits vergeben.`; return; }
+      if (fotoMarkierungen.some(x => x.id !== row.id && Number(x.nummer) === wert)) {
+        fotoPersonenMessage.textContent = `Nr. ${wert} ist bereits vergeben.`;
+        return;
+      }
       const { error } = await sb.from("foto_personen").update({ nummer: wert }).eq("id", row.id);
-      if (!error) { row.nummer = wert; fotoAktiveMarkierungId = null; renderFotoMarkierungen(); }
-      else fotoPersonenMessage.textContent = `Fehler: ${error.message}`;
+      if (!error) {
+        row.nummer = wert;
+        fotoAktiveMarkierungId = null;
+        renderFotoMarkierungen();
+      } else {
+        fotoPersonenMessage.textContent = `Fehler beim Speichern der Nummer: ${error.message}`;
+      }
     });
-    line.querySelector(".foto-person-loeschen-btn").addEventListener("click", async () => {
+
+    deleteBtn.addEventListener("click", async () => {
       if (!confirm(`Nr. ${row.nummer} wirklich vom Foto entfernen?`)) return;
       const { error } = await sb.from("foto_personen").delete().eq("id", row.id);
-      if (!error) { fotoMarkierungen = fotoMarkierungen.filter(x => x.id !== row.id); fotoAktiveMarkierungId = null; renderFotoMarkierungen(); }
-      else fotoPersonenMessage.textContent = `Fehler: ${error.message}`;
+      if (!error) {
+        fotoMarkierungen = fotoMarkierungen.filter(x => x.id !== row.id);
+        fotoAktiveMarkierungId = null;
+        renderFotoMarkierungen();
+      } else {
+        fotoPersonenMessage.textContent = `Fehler beim Entfernen: ${error.message}`;
+      }
     });
+
     fotoPersonenListe.appendChild(line);
   }
 }
 
-
-fotoMarkierflaeche?.addEventListener("click", async (event) => {
+fotoMarkierbildWrap?.addEventListener("click", async (event) => {
   if (!fotoAktiveMarkierungId || !fotoMarkierbild.naturalWidth) return;
-  const rect = fotoMarkierbild.getBoundingClientRect();
-  const x = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
-  const y = Math.max(0, Math.min(100, ((event.clientY - rect.top) / rect.height) * 100));
+
+  const bildRect = fotoMarkierbild.getBoundingClientRect();
+  if (!bildRect.width || !bildRect.height) return;
+
+  // Position wird ausschließlich relativ zum tatsächlich dargestellten Bild
+  // gespeichert. Dadurch bleibt sie bei jeder späteren Darstellung exakt gleich.
+  const x = Math.max(0, Math.min(100, ((event.clientX - bildRect.left) / bildRect.width) * 100));
+  const y = Math.max(0, Math.min(100, ((event.clientY - bildRect.top) / bildRect.height) * 100));
+
   const row = fotoMarkierungen.find(r => r.id === fotoAktiveMarkierungId);
   if (!row) return;
-  const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y }).eq("id", row.id);
-  if (!error) { row.position_x = x; row.position_y = y; fotoAktiveMarkierungId = null; fotoPersonenMessage.textContent = "Position gespeichert ✓"; renderFotoMarkierungen(); }
+  const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y, position_format: "bild" }).eq("id", row.id);
+  if (!error) { row.position_x = x; row.position_y = y; row.position_format = "bild"; fotoAktiveMarkierungId = null; fotoPersonenMessage.textContent = "Position gespeichert ✓"; renderFotoMarkierungen(); }
   else fotoPersonenMessage.textContent = `Fehler: ${error.message}`;
 });
 
@@ -1950,7 +3399,7 @@ document.getElementById("foto-person-hinzufuegen")?.addEventListener("click", as
   const personenId = fotoPersonAuswahl.value;
   if (!personenId || !fotoPersonenAktuell) return;
   const maxNr = Math.max(0, ...fotoMarkierungen.map(r => Number(r.nummer) || 0));
-  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: personenId, nummer: maxNr + 1, position_x: 50, position_y: 50 }).select().single();
+  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: personenId, nummer: maxNr + 1, position_x: 50, position_y: 50, position_format: "bild" }).select().single();
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen.push(data); fotoPersonAuswahl.value = ""; renderFotoMarkierungen();
 });
@@ -1958,7 +3407,7 @@ document.getElementById("foto-person-hinzufuegen")?.addEventListener("click", as
 document.getElementById("foto-unbekannt-hinzufuegen")?.addEventListener("click", async () => {
   if (!fotoPersonenAktuell) return;
   const maxNr = Math.max(0, ...fotoMarkierungen.map(r => Number(r.nummer) || 0));
-  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: null, nummer: maxNr + 1, position_x: 50, position_y: 50 }).select().single();
+  const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: null, nummer: maxNr + 1, position_x: 50, position_y: 50, position_format: "bild" }).select().single();
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen.push(data); renderFotoMarkierungen();
 });
@@ -1969,16 +3418,156 @@ fotoPersonenModal?.addEventListener("click", e => { if (e.target === fotoPersone
 const detailPhotoViewer = document.getElementById("detail-photo-viewer");
 const detailPhotoViewerImg = document.getElementById("detail-photo-viewer-img");
 const detailPhotoViewerClose = document.getElementById("detail-photo-viewer-close");
+const detailPhotoViewerMarkers = document.getElementById("detail-photo-viewer-markers");
+const detailPhotoViewerLegend = document.getElementById("detail-photo-viewer-legend");
 
 function closeDetailPhotoViewer() {
   if (!detailPhotoViewer) return;
   detailPhotoViewer.hidden = true;
   if (detailPhotoViewerImg) detailPhotoViewerImg.src = "";
+  if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+  if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+}
+
+let detailViewerFoto = null;
+let detailViewerMarkierungen = [];
+let detailViewerUrl = "";
+
+function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
+  if (!detailPhotoViewer || !detailPhotoViewerImg || !url) return;
+  detailViewerFoto = foto || null;
+  detailViewerMarkierungen = markierungen || [];
+  detailViewerUrl = url;
+  detailPhotoViewerImg.src = url;
+  if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+  if (detailPhotoViewerLegend) detailPhotoViewerLegend.innerHTML = "";
+
+  const rows = [...(markierungen || [])].sort((a,b) => Number(a.nummer) - Number(b.nummer));
+  rows.forEach(row => {
+    const marker = document.createElement("span");
+    marker.className = "detail-photo-viewer__marker";
+    marker.textContent = row.nummer;
+    marker.style.left = `${Number(row.position_x ?? 50)}%`;
+    marker.style.top = `${Number(row.position_y ?? 50)}%`;
+    marker.title = `${row.nummer}: ${fotoPersonName(row.personen_id)}`;
+    detailPhotoViewerMarkers?.appendChild(marker);
+
+    const legend = document.createElement("div");
+    legend.className = "detail-photo-viewer__legend-item";
+    const badge = document.createElement("span");
+    badge.className = "detail-photo-viewer__legend-num";
+    badge.textContent = row.nummer;
+    const name = document.createElement("button");
+    name.type = "button";
+    name.className = "detail-photo-viewer__legend-name";
+    name.textContent = fotoPersonName(row.personen_id);
+    name.disabled = false;
+    if (row.personen_id) {
+      name.dataset.personId = row.personen_id;
+    } else {
+      name.classList.add("is-unknown");
+      name.title = "Tippen, um eine Person zuzuordnen";
+    }
+
+    // Auf dem iPad zuverlässig über Touch/Pointer reagieren.
+    // Der gesamte Legenden-Eintrag ist anklickbar, nicht nur der Text.
+    if (!row.personen_id) {
+      const openChooser = (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (legend.querySelector(".detail-photo-viewer__assign")) return;
+        name.hidden = true;
+        const wrap = document.createElement("div");
+        wrap.className = "detail-photo-viewer__assign";
+        const search = document.createElement("input");
+        search.type = "search";
+        search.placeholder = "Name suchen …";
+        search.autocomplete = "off";
+        const select = document.createElement("select");
+        select.innerHTML = '<option value="">— Person auswählen —</option>';
+        const save = document.createElement("button");
+        save.type = "button"; save.className = "btn btn--secondary"; save.textContent = "Zuordnen";
+        const cancel = document.createElement("button");
+        cancel.type = "button"; cancel.className = "btn btn--ghost"; cancel.textContent = "Abbrechen";
+
+        const verfuegbar = (personenCache || [])
+          .filter(p => !detailViewerMarkierungen.some(x => x.id !== row.id && x.personen_id === p.id))
+          .slice()
+          .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
+        const fill = () => {
+          const q = search.value.trim().toLocaleLowerCase("de");
+          const list = q ? verfuegbar.filter(p => {
+            const a = fotoPersonAnzeige(p);
+            return `${a.name} ${a.daten||""}`.toLocaleLowerCase("de").includes(q);
+          }) : verfuegbar;
+          select.innerHTML = '<option value="">— Person auswählen —</option>' + list.map(p => {
+            const a = fotoPersonAnzeige(p);
+            return `<option value="${p.id}">${escapeHtml(a.name)}${a.daten ? ` — ${escapeHtml(a.daten)}` : ""}</option>`;
+          }).join("");
+        };
+        fill();
+        search.addEventListener("input", fill);
+        save.addEventListener("click", async () => {
+          const neueId = select.value;
+          if (!neueId) return;
+          if (detailViewerMarkierungen.some(x => x.id !== row.id && x.personen_id === neueId)) return;
+          const { error } = await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", row.id);
+          if (error) {
+            const msg = document.createElement("div");
+            msg.className = "form-message"; msg.textContent = `Fehler: ${error.message}`;
+            wrap.appendChild(msg);
+            return;
+          }
+          row.personen_id = neueId;
+          renderGruppenfotoViewer(detailViewerUrl, detailViewerMarkierungen, detailViewerFoto);
+        });
+        cancel.addEventListener("click", () => renderGruppenfotoViewer(detailViewerUrl, detailViewerMarkierungen, detailViewerFoto));
+        wrap.append(search, select, save, cancel);
+        legend.appendChild(wrap);
+        search.focus();
+      };
+      name.addEventListener("click", openChooser);
+      name.addEventListener("pointerup", (event) => { if (event.pointerType === "touch") openChooser(event); });
+      legend.style.cursor = "pointer";
+    } else {
+      const openPerson = async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const personId = row.personen_id;
+        closeDetailPhotoViewer();
+        // Personen-Tab aktivieren, damit die darunterliegende Ansicht
+        // ebenfalls auf dem richtigen Bereich steht.
+        document.querySelector('.tab-btn[data-tab="liste"]')?.click();
+        try {
+          await openPersonDetail(personId);
+        } catch (err) {
+          debugLog(`❌ Person aus Gruppenfoto öffnen: ${err.message || err}`);
+        }
+      };
+      name.addEventListener("click", openPerson);
+      name.addEventListener("pointerup", (event) => {
+        if (event.pointerType === "touch") openPerson(event);
+      });
+      legend.addEventListener("click", (event) => {
+        if (event.target === name) return;
+        openPerson(event);
+      });
+      legend.style.cursor = "pointer";
+    }
+    legend.append(badge, name);
+    detailPhotoViewerLegend?.appendChild(legend);
+  });
+  if (detailPhotoViewerLegend) detailPhotoViewerLegend.hidden = rows.length === 0;
+  detailPhotoViewer.hidden = false;
+}
+
+function openGruppenfotoViewer(url, markierungen = [], foto = null) {
+  renderGruppenfotoViewer(url, markierungen, foto);
 }
 
 detailPhotoViewerClose?.addEventListener("click", closeDetailPhotoViewer);
 detailPhotoViewer?.addEventListener("click", (event) => {
-  if (event.target === detailPhotoViewer || event.target === detailPhotoViewerImg) closeDetailPhotoViewer();
+  if (event.target === detailPhotoViewer) closeDetailPhotoViewer();
 });
 
 // Auch das gerade ausgewählte Foto bei „Neu erfassen“ kann vergrößert werden.
@@ -2013,7 +3602,7 @@ async function loadDetailAudio(personId) {
     const { data: signed } = await sb.storage.from(BUCKET_AUDIO).createSignedUrl(note.dateipfad, 3600);
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<audio controls src="${signed ? signed.signedUrl : ""}"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.innerHTML = `<audio controls src="${fotoUrl}"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
       await sb.from("sprachnotizen").delete().eq("id", note.id);
@@ -2177,7 +3766,7 @@ async function loadDetailFamilie(personId) {
 
   [parentSelectVater, parentSelectMutter].forEach((select) => {
     select.innerHTML = '<option value="">— nicht angegeben —</option>';
-    personenCache.filter((p) => p.id !== personId).forEach((p) => {
+    personenCache.filter((p) => p.id !== personId).sort(personenAuswahlSortierung).forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.id;
       opt.textContent = personenAuswahlText(p);
@@ -2198,7 +3787,7 @@ async function loadDetailFamilie(personId) {
     const tod = partnerschaftTodesende(f, detailPersonMap, personId);
     div.innerHTML = `
       <div class="beziehung-text familie-edit-block">
-        <strong>${personenAuswahlText(detailPerson(otherId))}</strong>
+        <button type="button" class="familie-partner-link" title="Person bearbeiten">${personenAuswahlText(detailPerson(otherId))}</button>
         <div class="familie-edit-fields">
           <label class="field"><span>Art</span>
             <select class="familie-typ-edit">
@@ -2288,6 +3877,12 @@ async function loadDetailFamilie(personId) {
     [endeTag, endeMonat, endeJahr].forEach((el) => el.addEventListener("change", () => {
       endeManuellGeaendert = true;
     }));
+
+    div.querySelector(".familie-partner-link").addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      await openPersonDetail(otherId);
+    });
 
     div.querySelector(".familie-save-btn").addEventListener("click", async () => {
       let eingegebenesEnde = getDatum(endePrefix);
@@ -2652,12 +4247,11 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
       .in("id", familyIds);
     if (error) throw error;
-    // Eine vorhandene Familie kann gleichzeitig Partnerschaft/Ehe und Elternfamilie sein.
     families = data || [];
   }
 
   const oldParentLinks = (links || []).filter((l) =>
-    families.some((f) => f.id === l.familie_id)
+    families.some((f) => f.id === l.familie_id && f.familientyp === "Eltern")
   );
 
   // Ziel-Familie: A=Vater (oder einziger Elternteil), B=Mutter.
@@ -2674,27 +4268,39 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
     return;
   }
 
-  // Eine vorhandene Familie mit genau diesen Eltern wiederverwenden.
-  // Wichtig: Bei zwei Eltern muss auch die umgekehrte Reihenfolge gefunden werden,
-  // weil der Unique-Index die beiden Personen unabhängig von der Reihenfolge behandelt.
+  // Wichtig:
+  // Die Elternfamilie wird NICHT nur bei den Familien dieses Kindes gesucht.
+  // Eine Elternfamilie gehört zu den Eltern und wird von mehreren Geschwistern
+  // gemeinsam verwendet. Früher konnte deshalb beim Speichern eines weiteren
+  // Kindes eine zweite identische Elternfamilie entstehen.
   let zielFamilie = null;
+
   if (zielB) {
     const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-      .or(`and(partner_a_id.eq.${zielA},partner_b_id.eq.${zielB}),and(partner_a_id.eq.${zielB},partner_b_id.eq.${zielA})`)
+      .eq("familientyp", "Eltern")
+      .or(
+        `and(partner_a_id.eq.${zielA},partner_b_id.eq.${zielB}),` +
+        `and(partner_a_id.eq.${zielB},partner_b_id.eq.${zielA})`
+      )
+      .order("created_at", { ascending: true })
       .limit(1);
     if (error) throw error;
     zielFamilie = (data || [])[0] || null;
   } else {
     const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
+      .eq("familientyp", "Eltern")
       .eq("partner_a_id", zielA)
       .is("partner_b_id", null)
+      .order("created_at", { ascending: true })
       .limit(1);
     if (error) throw error;
     zielFamilie = (data || [])[0] || null;
   }
 
+  // Nur wenn wirklich noch keine passende Elternfamilie existiert,
+  // wird eine neue angelegt.
   if (!zielFamilie) {
     const { data, error } = await sb.from("familien")
       .insert({
@@ -2708,8 +4314,8 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
     zielFamilie = data;
   }
 
-  // Alle bisherigen Elternlinks dieses Kindes entfernen. Das ist wichtig:
-  // dadurch können alte falsche Vater/Mutter-Kombinationen nicht bestehen bleiben.
+  // Alle bisherigen Elternlinks dieses Kindes entfernen.
+  // Dadurch bleiben keine alten falschen Vater/Mutter-Kombinationen bestehen.
   for (const link of oldParentLinks) {
     if (link.familie_id === zielFamilie.id) continue;
     const { error } = await sb.from("familien_kinder").delete().eq("id", link.id);
@@ -2963,7 +4569,7 @@ document.getElementById("d-delete-person-btn").addEventListener("click", async (
     if (fotoFetchError) throw fotoFetchError;
 
     for (const f of fotos || []) {
-      if (f.dateipfad) await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]);
+      if (f.dateipfad) { await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]); await loescheFotoAusBrowserCache(f.dateipfad); }
       const { error } = await sb.from("fotos").delete().eq("id", f.id);
       if (error) throw error;
     }
@@ -3023,80 +4629,6 @@ async function fetchAllTableRows(table, orderColumn = "id") {
     from += pageSize;
   }
   return rows;
-}
-
-async function optimiereBestehendeFotos() {
-  const msg = document.getElementById("foto-optimieren-message");
-  if (!msg) return;
-  msg.textContent = "Fotos werden geprüft …";
-  try {
-    await ensureSession();
-    const { data: fotos, error } = await sb.from("fotos").select("id, dateipfad");
-    if (error) throw error;
-    const eintraege = (fotos || []).filter(f => f.dateipfad);
-    let gesamtAlt = 0;
-    let ueberLimit = 0;
-    const kandidaten = [];
-
-    for (let i = 0; i < eintraege.length; i++) {
-      const foto = eintraege[i];
-      msg.textContent = `Fotos prüfen … ${i + 1}/${eintraege.length}`;
-      const { data: blob, error: downloadError } = await sb.storage.from(BUCKET_FOTOS).download(foto.dateipfad);
-      if (downloadError || !blob) continue;
-      gesamtAlt += blob.size;
-      if (blob.size > 200 * 1024) {
-        ueberLimit++;
-        kandidaten.push(foto);
-      }
-    }
-
-    const altMB = gesamtAlt / 1024 / 1024;
-    if (!kandidaten.length) {
-      msg.textContent = `Keine Optimierung nötig. ${eintraege.length} Fotos · ${altMB.toFixed(2)} MB.`;
-      return;
-    }
-
-    const ok = confirm(`${eintraege.length} Fotos · ${altMB.toFixed(2)} MB\n\n${ueberLimit} Fotos sind größer als 200 KB und werden optimiert.\n\nDie Originale auf deinem Gerät bleiben unverändert. Nur die Dateien in Supabase werden ersetzt.\n\nOptimierung starten?`);
-    if (!ok) {
-      msg.textContent = "Optimierung abgebrochen.";
-      return;
-    }
-
-    let verarbeitet = 0;
-    let altKandidaten = 0;
-    let neuKandidaten = 0;
-    let fehler = 0;
-
-    for (let i = 0; i < kandidaten.length; i++) {
-      const foto = kandidaten[i];
-      msg.textContent = `Foto optimieren … ${i + 1}/${kandidaten.length}`;
-      try {
-        const { data: original, error: downloadError } = await sb.storage.from(BUCKET_FOTOS).download(foto.dateipfad);
-        if (downloadError || !original) throw new Error(downloadError?.message || "Foto konnte nicht geladen werden");
-        const optimiert = await blobZuJPEGUnter200KB(original);
-        if (!optimiert) throw new Error("Optimierung fehlgeschlagen");
-        altKandidaten += original.size;
-        neuKandidaten += optimiert.size;
-
-        const { error: updateError } = await sb.storage.from(BUCKET_FOTOS).update(foto.dateipfad, optimiert, {
-          contentType: "image/jpeg",
-          cacheControl: "3600",
-        });
-        if (updateError) throw updateError;
-        verarbeitet++;
-      } catch (err) {
-        fehler++;
-        debugLog(`❌ Fotooptimierung ${foto.dateipfad}: ${err.message || err}`);
-      }
-    }
-
-    const altMB2 = altKandidaten / 1024 / 1024;
-    const neuMB2 = neuKandidaten / 1024 / 1024;
-    msg.textContent = `${verarbeitet} Fotos optimiert ✓ · ${altMB2.toFixed(2)} MB → ${neuMB2.toFixed(2)} MB${fehler ? ` · ${fehler} Fehler` : ""}`;
-  } catch (err) {
-    msg.textContent = `Fehler: ${err.message || err}`;
-    debugLog(`❌ Fotooptimierung: ${err.message || err}`);
-  }
 }
 
 async function fetchAllExportData() {
@@ -3448,9 +4980,6 @@ async function stelleBackupWiederHer(file) {
   }
 }
 
-const fotoOptimierenBtn = document.getElementById("foto-optimieren-btn");
-if (fotoOptimierenBtn) fotoOptimierenBtn.addEventListener("click", optimiereBestehendeFotos);
-
 const backupBtn = document.getElementById("backup-icloud-btn");
 if (backupBtn) backupBtn.addEventListener("click", erstelleICloudBackup);
 const backupInput = document.getElementById("backup-restore-input");
@@ -3670,7 +5199,12 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
   const foto = treeData.photos.get(person.id);
   const isLinePerson = lineSurname && treeNormalizeName(person.nachname) === treeNormalizeName(lineSurname);
   const lineClass = isLinePerson ? `tree-node--line ${treeLineColorClass(lineSurname)}` : "";
-  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
+  const relationClass = treeRelationshipSelection.personAId === person.id
+    ? "tree-node--relation-a"
+    : treeRelationshipSelection.personBId === person.id
+      ? "tree-node--relation-b"
+      : "";
+  return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
     <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
@@ -3731,9 +5265,10 @@ async function loadStammbaumData() {
       .in("personen_id", ids)
       .eq("ist_schluesselfoto", true);
     if (fotoError) debugLog(`❌ Stammbaum-Schlüsselfotos: ${fotoError.message}`);
+    const fotoUrls = await ladeFotoBilder((fotos || []).map(f => f.dateipfad));
     for (const foto of fotos || []) {
-      const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
-      if (signed?.signedUrl) treeData.photos.set(foto.personen_id, signed.signedUrl);
+      const fotoUrl = fotoUrls.get(foto.dateipfad);
+      if (fotoUrl) treeData.photos.set(foto.personen_id, fotoUrl);
     }
   }
 }
@@ -3979,12 +5514,192 @@ function treePersonGender(person) {
   return "u";
 }
 
+let treeRelationshipSelection = { personAId: null, personBId: null };
+
 function treePersonLabel(id) {
   const p = treePerson(id);
   return p ? `${p.vorname || ""} ${p.nachname || ""}`.trim() : "Unbekannt";
 }
 
+function treeRelationshipModel() {
+  const parentMap = new Map();
+  const childMap = new Map();
+  const add = (map, key, value) => {
+    if (!key || !value || key === value) return;
+    if (!map.has(key)) map.set(key, new Set());
+    map.get(key).add(value);
+  };
+
+  // Das Verwandtschaftsmodell arbeitet ausschließlich mit echten
+  // Eltern-Kind-Verbindungen. Ehe/Partnerschaft wird separat behandelt.
+  for (const family of treeData.familien || []) {
+    const parents = [family.partner_a_id, family.partner_b_id].filter(Boolean);
+    if (!parents.length) continue;
+    for (const childLink of treeData.kinder.filter((k) => k.familie_id === family.id)) {
+      const childId = childLink.kind_id;
+      if (!childId || !treePerson(childId)) continue;
+      for (const parentId of parents) {
+        if (!treePerson(parentId)) continue;
+        add(parentMap, childId, parentId);
+        add(childMap, parentId, childId);
+      }
+    }
+  }
+  return { parentMap, childMap };
+}
+
+function treeAncestorDistances(startId, model) {
+  const distances = new Map([[startId, 0]]);
+  const queue = [startId];
+  while (queue.length) {
+    const id = queue.shift();
+    const distance = distances.get(id) || 0;
+    for (const parentId of model.parentMap.get(id) || []) {
+      if (distances.has(parentId)) continue;
+      distances.set(parentId, distance + 1);
+      queue.push(parentId);
+    }
+  }
+  return distances;
+}
+
+function treeChooseCommonAncestor(aId, bId, model) {
+  const aAncestors = treeAncestorDistances(aId, model);
+  const bAncestors = treeAncestorDistances(bId, model);
+  const candidates = [];
+  for (const [ancestorId, aDistance] of aAncestors) {
+    if (ancestorId === aId || ancestorId === bId) continue;
+    const bDistance = bAncestors.get(ancestorId);
+    if (bDistance == null) continue;
+    candidates.push({ ancestorId, aDistance, bDistance });
+  }
+  candidates.sort((x, y) =>
+    (x.aDistance + x.bDistance) - (y.aDistance + y.bDistance) ||
+    Math.max(x.aDistance, x.bDistance) - Math.max(y.aDistance, y.bDistance)
+  );
+  return candidates[0] || null;
+}
+
+function treeParentPathToAncestor(startId, ancestorId, model) {
+  if (startId === ancestorId) return [];
+  const queue = [startId];
+  const visited = new Set([startId]);
+  const prev = new Map();
+  while (queue.length) {
+    const id = queue.shift();
+    for (const parentId of model.parentMap.get(id) || []) {
+      if (visited.has(parentId)) continue;
+      visited.add(parentId);
+      prev.set(parentId, id);
+      if (parentId === ancestorId) {
+        const ids = [];
+        let cur = ancestorId;
+        while (cur !== startId) {
+          ids.unshift(cur);
+          cur = prev.get(cur);
+          if (!cur) return null;
+        }
+        return ids;
+      }
+      queue.push(parentId);
+    }
+  }
+  return null;
+}
+
+function treeSiblingPath(aId, bId, model) {
+  const aParents = model.parentMap.get(aId) || new Set();
+  const bParents = model.parentMap.get(bId) || new Set();
+  for (const parentId of aParents) {
+    if (bParents.has(parentId)) return { parentId };
+  }
+  return null;
+}
+
+function treeBloodRelationFromDistances(aId, bId, aDistance, bDistance) {
+  const target = treePerson(bId);
+  const targetGender = treePersonGender(target);
+  const source = treePerson(aId);
+  const sourceGender = treePersonGender(source);
+  const word = (male, female) => targetGender === "m" ? male : targetGender === "w" ? female : male;
+  const sourceWord = (male, female) => sourceGender === "m" ? male : sourceGender === "w" ? female : male;
+
+  if (aDistance === 1 && bDistance === 1) return sourceWord("Bruder", "Schwester");
+
+  // A ist direkter Vorfahr von B.
+  if (aDistance === 0) {
+    if (bDistance === 1) return sourceWord("Vater", "Mutter");
+    if (bDistance === 2) return sourceWord("Großvater", "Großmutter");
+    return `${"Ur".repeat(bDistance - 2)}groß${sourceWord("vater", "mutter")}`;
+  }
+
+  // A ist direkter Nachkomme von B.
+  if (bDistance === 0) {
+    if (aDistance === 1) return sourceWord("Sohn", "Tochter");
+    if (aDistance === 2) return sourceWord("Enkel", "Enkelin");
+    return `${"Ur".repeat(aDistance - 2)}enkel${sourceGender === "w" ? "in" : ""}`;
+  }
+
+  // Seitenlinie: gleicher gemeinsamer Vorfahr.
+  if (aDistance === 1 && bDistance >= 2) {
+    const grade = bDistance - 2;
+    if (grade === 0) return sourceWord("Onkel", "Tante");
+    if (grade === 1) return sourceWord("Großonkel (1. Grades)", "Großtante (1. Grades)");
+    return sourceWord(`${"Ur".repeat(grade - 1)}großonkel (${grade}. Grades)`, `${"Ur".repeat(grade - 1)}großtante (${grade}. Grades)`);
+  }
+
+  if (bDistance === 1 && aDistance >= 2) {
+    const grade = aDistance - 2;
+    if (grade === 0) return sourceWord("Neffe", "Nichte");
+    if (grade === 1) return sourceWord("Großneffe (1. Grades)", "Großnichte (1. Grades)");
+    return sourceWord(`${"Ur".repeat(grade - 1)}großneffe (${grade}. Grades)`, `${"Ur".repeat(grade - 1)}großnichte (${grade}. Grades)`);
+  }
+
+  if (aDistance >= 2 && bDistance >= 2) {
+    const cousinDegree = Math.min(aDistance, bDistance) - 1;
+    const removed = Math.abs(aDistance - bDistance);
+    const base = `Cousin/Cousine ${cousinDegree}. Grades`;
+    return removed ? `${base}, ${removed} Generation${removed === 1 ? "" : "en"} entfernt` : base;
+  }
+  return null;
+}
+
+function treeBloodRelationship(aId, bId, model) {
+  const sibling = treeSiblingPath(aId, bId, model);
+  if (sibling) {
+    return {
+      relation: treeGenderWord(aId, "Bruder", "Schwester"),
+      commonAncestor: sibling.parentId,
+      aDistance: 1,
+      bDistance: 1
+    };
+  }
+
+  const aAncestors = treeAncestorDistances(aId, model);
+  const bAncestors = treeAncestorDistances(bId, model);
+
+  // Direkte Vorfahren/Nachkommen müssen vor dem gemeinsamen Vorfahren geprüft werden.
+  if (aAncestors.has(bId)) {
+    const distance = aAncestors.get(bId);
+    return { relation: treeBloodRelationFromDistances(aId, bId, distance, 0), commonAncestor: bId, aDistance: distance, bDistance: 0 };
+  }
+  if (bAncestors.has(aId)) {
+    const distance = bAncestors.get(aId);
+    return { relation: treeBloodRelationFromDistances(aId, bId, 0, distance), commonAncestor: aId, aDistance: 0, bDistance: distance };
+  }
+
+  const common = treeChooseCommonAncestor(aId, bId, model);
+  if (!common) return null;
+  return {
+    relation: treeBloodRelationFromDistances(aId, bId, common.aDistance, common.bDistance),
+    commonAncestor: common.ancestorId,
+    aDistance: common.aDistance,
+    bDistance: common.bDistance
+  };
+}
+
 function treeRelationshipGraph() {
+  // Kompatibilität für die bestehende UI und für angeheiratete Beziehungen.
   const graph = new Map();
   const add = (a, b, type) => {
     if (!a || !b || a === b) return;
@@ -3993,10 +5708,7 @@ function treeRelationshipGraph() {
   };
   for (const f of treeData.familien || []) {
     const a = f.partner_a_id, b = f.partner_b_id;
-    if (a && b) {
-      add(a, b, "spouse");
-      add(b, a, "spouse");
-    }
+    if (a && b) { add(a, b, "spouse"); add(b, a, "spouse"); }
     for (const k of treeChildrenForFamily(f.id)) {
       const child = k.person?.id || k.kind_id;
       if (!child) continue;
@@ -4042,39 +5754,6 @@ function treeGenderWord(id, male, female, neutral = "Person") {
   return g === "m" ? male : g === "w" ? female : neutral;
 }
 
-function treeBloodRelation(path) {
-  const up = path.filter((e) => e.type === "parent").length;
-  const down = path.filter((e) => e.type === "child").length;
-  if (path.every((e) => e.type === "parent") && up > 0) {
-    if (up === 1) return treeGenderWord(path[path.length - 1].to, "Vater", "Mutter");
-    if (up === 2) return treeGenderWord(path[path.length - 1].to, "Großvater", "Großmutter");
-    return treeGenderWord(path[path.length - 1].to, "Ur".repeat(up - 2) + "großvater", "Ur".repeat(up - 2) + "großmutter");
-  }
-  if (path.every((e) => e.type === "child") && down > 0) {
-    if (down === 1) return treeGenderWord(path[path.length - 1].to, "Sohn", "Tochter");
-    if (down === 2) return treeGenderWord(path[path.length - 1].to, "Enkel", "Enkelin");
-    return treeGenderWord(path[path.length - 1].to, "Ur".repeat(down - 2) + "enkel", "Ur".repeat(down - 2) + "enkelin");
-  }
-  if (up === 1 && down === 1) return treeGenderWord(path[path.length - 1].to, "Bruder", "Schwester");
-  if (up >= 2 && down >= 1) {
-    if (down === 1) {
-      if (up === 2) return treeGenderWord(path[path.length - 1].to, "Onkel", "Tante");
-      if (up === 3) return treeGenderWord(path[path.length - 1].to, "Großonkel", "Großtante");
-      return `${"Ur".repeat(up - 3)}groß${treeGenderWord(path[path.length - 1].to, "onkel", "tante")}`;
-    }
-    const degree = Math.min(up, down) - 1;
-    const removed = Math.abs(up - down);
-    const base = degree === 1 ? "Cousin/Cousine 1. Grades" : `Cousin/Cousine ${degree}. Grades`;
-    return removed ? `${base}, ${removed} Generation${removed === 1 ? "" : "en"} entfernt` : base;
-  }
-  if (down >= 2 && up === 1) {
-    if (down === 2) return treeGenderWord(path[path.length - 1].to, "Neffe", "Nichte");
-    if (down === 3) return treeGenderWord(path[path.length - 1].to, "Großneffe", "Großnichte");
-    return `${"Ur".repeat(down - 3)}groß${treeGenderWord(path[path.length - 1].to, "neffe", "nichte")}`;
-  }
-  return null;
-}
-
 function treeInLawRelation(path) {
   const spouseIndexes = path.map((e, i) => e.type === "spouse" ? i : -1).filter(i => i >= 0);
   if (!spouseIndexes.length) return null;
@@ -4085,7 +5764,6 @@ function treeInLawRelation(path) {
     if (other?.type === "parent") return treeGenderWord(path[path.length - 1].to, "Schwiegersohn", "Schwiegertochter");
     if (other?.type === "child") return treeGenderWord(path[path.length - 1].to, "Schwiegervater", "Schwiegermutter");
   }
-  // Geschwister des Ehepartners bzw. Ehepartner eines Geschwisters.
   const bloodOnly = path.filter(e => e.type !== "spouse");
   if (bloodOnly.length === 2 && bloodOnly.some(e => e.type === "parent") && bloodOnly.some(e => e.type === "child")) {
     return treeGenderWord(path[path.length - 1].to, "Schwager", "Schwägerin");
@@ -4098,26 +5776,215 @@ function treeInLawRelation(path) {
   return "angeheiratet verwandt";
 }
 
+function treeRelationshipStepWord(fromId, edgeType, toId) {
+  if (edgeType === "sibling") {
+    return treeGenderWord(fromId, "Bruder", "Schwester") + " von";
+  }
+
+  if (edgeType === "spouse") {
+    return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
+  }
+
+  // parent: from = Kind, to = Elternteil
+  if (edgeType === "parent") {
+    return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+  }
+
+  // child: from = Elternteil, to = Kind
+  // Die Bezeichnung beschreibt die Beziehung der oberen Person zur
+  // darunterliegenden Person. Deshalb entscheidet das Geschlecht
+  // des Elternteils (fromId):
+  // Vater -> Tochter/Sohn = "Vater von"
+  // Mutter -> Tochter/Sohn = "Mutter von"
+  const fromGender = treePersonGender(treePerson(fromId));
+  if (fromGender === "m") return "Vater von";
+  if (fromGender === "w") return "Mutter von";
+  return "Elternteil von";
+}
+
+function treeBuildBloodPath(aId, bId, model, blood) {
+  if (!blood) return null;
+  if (blood.aDistance === 1 && blood.bDistance === 1) {
+    return [{ from: aId, to: bId, type: "sibling" }];
+  }
+
+  const aToAncestor = treeParentPathToAncestor(aId, blood.commonAncestor, model) || [];
+  const bToAncestor = treeParentPathToAncestor(bId, blood.commonAncestor, model) || [];
+
+  // Der Pfad soll aus Sicht der gewählten Startperson verlaufen.
+  // Bei einer Seitenlinie wird deshalb nicht über den gemeinsamen Vorfahren
+  // „hinweg“ gezeichnet. Stattdessen verbinden wir die beiden Äste über
+  // deren Geschwister auf der Ebene direkt unterhalb des gemeinsamen
+  // Vorfahren. Dadurch entsteht z. B.:
+  //
+  // Oskar → Paula → Hubert → Andreas
+  //
+  // und nicht eine technisch richtige, aber für den Benutzer verwirrende
+  // Darstellung über den gemeinsamen Großeltern-Knoten.
+  const path = [];
+  let current = aId;
+
+  // Direkter Vorfahren-/Nachkommenpfad.
+  // Der gemeinsame Knoten ist bei einem direkten Vorfahren bereits
+  // die Startperson und darf deshalb niemals nochmals als Pfadknoten
+  // eingefügt werden.
+  if (blood.aDistance === 0 || blood.bDistance === 0) {
+    if (blood.aDistance === 0) {
+      const childPath = [...bToAncestor]
+        .filter((id) => id !== blood.commonAncestor)
+        .reverse();
+
+      for (const childId of childPath) {
+        if (childId === current) continue;
+        path.push({ from: current, to: childId, type: "child" });
+        current = childId;
+      }
+
+      if (current !== bId) {
+        path.push({ from: current, to: bId, type: "child" });
+      }
+    } else {
+      for (const parentId of aToAncestor) {
+        if (parentId === blood.commonAncestor && parentId === current) continue;
+        path.push({ from: current, to: parentId, type: "parent" });
+        current = parentId;
+      }
+    }
+    return path;
+  }
+
+  // Beide Personen liegen in unterschiedlichen Ästen desselben Vorfahren.
+  // Zuerst von A bis zum Geschwisterknoten des B-Zweigs.
+  const aBranch = aToAncestor.length >= 2 ? aToAncestor[aToAncestor.length - 2] : aId;
+  const bBranch = bToAncestor.length >= 2 ? bToAncestor[bToAncestor.length - 2] : bId;
+
+  if (aBranch && bBranch && aBranch !== bBranch) {
+    // Von A nur bis zum ersten Knoten unterhalb des gemeinsamen Vorfahren.
+    // Wichtig: Der gemeinsame Vorfahr selbst darf NICHT in den sichtbaren
+    // Verwandtschaftspfad aufgenommen werden. Beispiel:
+    // Oskar -> Paula -> Hubert -> Andreas, nicht Oskar -> Christian -> ...
+    for (const parentId of aToAncestor) {
+      if (parentId === blood.commonAncestor) break;
+      path.push({ from: current, to: parentId, type: "parent" });
+      current = parentId;
+    }
+
+    // Die beiden Knoten direkt unterhalb des gemeinsamen Vorfahren sind
+    // Geschwister. Bei einem direkten Geschwisterfall ist A selbst aBranch.
+    if (current === aBranch) {
+      path.push({ from: current, to: bBranch, type: "sibling" });
+      current = bBranch;
+    } else {
+      return null;
+    }
+
+    // Vom Geschwisterknoten des B-Zweigs nach unten bis zu B.
+    const bDown = [...bToAncestor].reverse().filter(
+      (id) => id !== blood.commonAncestor && id !== bBranch
+    );
+    for (const childId of bDown) {
+      path.push({ from: current, to: childId, type: "child" });
+      current = childId;
+    }
+
+    // Nur anhängen, wenn B nicht bereits erreicht wurde. Dadurch kann ein
+    // Knoten niemals doppelt im sichtbaren Pfad erscheinen.
+    if (current !== bId) {
+      path.push({ from: current, to: bId, type: "child" });
+    }
+    return path;
+  }
+
+  // Fallback für ungewöhnliche Graphen: sauberer gerichteter Pfad.
+  for (const parentId of aToAncestor) {
+    path.push({ from: current, to: parentId, type: "parent" });
+    current = parentId;
+  }
+  const down = [...bToAncestor].reverse();
+  for (const childId of down) {
+    if (childId === blood.commonAncestor || childId === current) continue;
+    path.push({ from: current, to: childId, type: "child" });
+    current = childId;
+  }
+  path.push({ from: current, to: bId, type: "child" });
+  return path;
+}
+
+function treeHumanRelationshipPath(aId, path) {
+  if (!path || !path.length) return "";
+  const steps = [];
+  let currentId = aId;
+  for (const e of path) {
+    steps.push(`${treeRelationshipStepWord(currentId, e.type, e.to)} ${treePersonLabel(e.to)}`);
+    currentId = e.to;
+  }
+  return steps.join(" → ");
+}
+
+function treeRelationshipPathGraphic(aId, path) {
+  if (!path || !path.length) return "";
+  const items = [{ id: aId, label: treePersonLabel(aId) }];
+  let currentId = aId;
+  for (const edge of path) {
+    const relationLabel = treeRelationshipStepWord(currentId, edge.type, edge.to);
+    items.push({ id: edge.to, label: treePersonLabel(edge.to), relationLabel });
+    currentId = edge.to;
+  }
+  return `<div class="tree-relationship-graphic" aria-label="Grafischer Verwandtschaftspfad">${items.map((item, index) => {
+    const person = treePerson(item.id);
+    const dates = person ? [person.geburtsjahr, person.sterbejahr].filter(Boolean).join("–") : "";
+    const card = `<div class="tree-relationship-node" data-tree-relation-node="${escTree(item.id)}"><strong>${escTree(item.label)}</strong>${dates ? `<small>${escTree(String(dates))}</small>` : ""}</div>`;
+    if (index === 0) return card;
+    return `<div class="tree-relationship-arrow" aria-hidden="true"><span>${escTree(item.relationLabel)}</span><b>↓</b></div>${card}`;
+  }).join("")}</div>`;
+}
+
+function treeRelationshipSentence(aId, bId, relation) {
+  const a = treePersonLabel(aId);
+  const b = treePersonLabel(bId);
+  if (!relation || relation === "dieselbe Person") return relation ? `${a} und ${b} sind dieselbe Person.` : "";
+  return `${a} ist ${relation.toLowerCase()} von ${b}.`;
+}
+
 function treeRelationshipResult(aId, bId) {
   if (!aId || !bId) return null;
   if (aId === bId) return { relation: "dieselbe Person", path: [] };
+
+  const model = treeRelationshipModel();
+  const blood = treeBloodRelationship(aId, bId, model);
+  if (blood?.relation) {
+    const path = treeBuildBloodPath(aId, bId, model, blood);
+    return {
+      relation: blood.relation,
+      path: path || [],
+      sentence: treeRelationshipSentence(aId, bId, blood.relation),
+      pathText: treeHumanRelationshipPath(aId, path || [])
+    };
+  }
+
+  // Falls keine Blutsverwandtschaft existiert, bleibt die bisherige
+  // angeheiratete Ermittlung erhalten.
   const path = treeFindRelationshipPath(aId, bId);
   if (!path) return { relation: "Keine gespeicherte Verwandtschaft gefunden", path: null };
-  const relation = treeInLawRelation(path) || treeBloodRelation(path) || "verwandt (genauer Verwandtschaftsgrad nicht eindeutig bestimmbar)";
-  const labels = [treePersonLabel(aId)];
-  for (const e of path) labels.push(`${e.type === "spouse" ? "Ehe/Partnerschaft mit" : e.type === "parent" ? "Elternteil von" : "Kind von"} ${treePersonLabel(e.to)}`);
-  return { relation, path, pathText: labels.join(" → ") };
+  const relation = treeInLawRelation(path) || "verwandt (genauer Verwandtschaftsgrad nicht eindeutig bestimmbar)";
+  return {
+    relation,
+    path,
+    sentence: treeRelationshipSentence(aId, bId, relation),
+    pathText: treeHumanRelationshipPath(aId, path)
+  };
 }
 
 function fillTreeRelationshipSelects() {
   const selects = [document.getElementById("tree-relation-person-a"), document.getElementById("tree-relation-person-b")].filter(Boolean);
   const current = selects.map(s => s.value);
+  const personen = [...(treeData.personen || [])].sort(personenAuswahlSortierung);
   for (const select of selects) {
     select.innerHTML = '<option value="">— Person auswählen —</option>';
-    for (const p of treeData.personen || []) {
+    for (const p of personen) {
       const opt = document.createElement("option");
       opt.value = p.id;
-      opt.textContent = `${p.nachname}, ${p.vorname}`;
+      opt.textContent = treePersonSearchText(p);
       select.appendChild(opt);
     }
   }
@@ -4140,18 +6007,64 @@ function initTreeRelationshipUI() {
     if (!a.value && treeSelect?.value) a.value = treeSelect.value;
   });
   close?.addEventListener("click", () => { panel.hidden = true; });
-  reset.addEventListener("click", () => { a.value = ""; b.value = ""; result.innerHTML = ""; });
-  calc.addEventListener("click", () => {
-    const found = treeRelationshipResult(a.value, b.value);
-    if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
-    if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
-    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.pathText ? `<div class="tree-relationship-path">${escTree(found.pathText)}</div>` : ""}`;
+  reset.addEventListener("click", () => {
+    a.value = "";
+    b.value = "";
+    result.innerHTML = "";
+    treeRelationshipSelection = { personAId: null, personBId: null };
+    const treeSelectElement = document.getElementById("tree-person-select");
+    if (treeSelectElement?.value) renderStammbaum(treeSelectElement.value);
   });
+  calc.addEventListener("click", () => {
+    const personAId = a.value;
+    const personBId = b.value;
+    const found = treeRelationshipResult(personAId, personBId);
+    if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
+
+    treeRelationshipSelection = { personAId, personBId };
+    const treeSelectElement = document.getElementById("tree-person-select");
+    if (treeSelectElement && personAId && treePerson(personAId)) {
+      treeSelectElement.value = personAId;
+      renderStammbaum(personAId);
+    }
+    if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
+    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}${found.path?.length ? treeRelationshipPathGraphic(a.value, found.path) : ""}`;
+  });
+}
+
+function treePersonSearchText(person) {
+  return personenAuswahlText(person);
+}
+
+function fillTreePersonSelect(searchValue = "", preferredId = "") {
+  const select = document.getElementById("tree-person-select");
+  if (!select) return "";
+  const query = treeNormalizeName(searchValue);
+  const previous = preferredId || select.value;
+  const matches = (treeData.personen || []).filter((p) => {
+    if (!query) return true;
+    const haystack = treeNormalizeName(`${p.vorname || ""} ${p.nachname || ""} ${p.geburtsjahr || ""} ${p.geburtsdatum || ""}`);
+    return haystack.includes(query);
+  });
+  select.innerHTML = `<option value="">— Person auswählen —</option>`;
+  for (const p of matches) {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = treePersonSearchText(p);
+    select.appendChild(opt);
+  }
+  if (previous && matches.some((p) => p.id === previous)) {
+    select.value = previous;
+  } else if (matches.length === 1) {
+    select.value = matches[0].id;
+  }
+  return select.value;
 }
 
 async function loadStammbaum() {
   const message = document.getElementById("tree-message");
   const select = document.getElementById("tree-person-select");
+  const search = document.getElementById("tree-person-search");
   try {
     message.textContent = "Stammbaum wird geladen …";
     await loadStammbaumData();
@@ -4162,15 +6075,11 @@ async function loadStammbaum() {
       return;
     }
     const current = select.value && treePerson(select.value) ? select.value : treeData.personen[0].id;
-    select.innerHTML = '<option value="">— Person auswählen —</option>';
-    treeData.personen.forEach((p) => {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = `${p.nachname}, ${p.vorname}`;
-      select.appendChild(opt);
-    });
-    select.value = current;
-    renderStammbaum(current);
+    fillTreePersonSelect(search?.value || "", current);
+    if (!select.value) {
+      select.value = current;
+    }
+    renderStammbaum(select.value);
     fillTreeRelationshipSelects();
     message.textContent = "";
   } catch (err) {
@@ -4187,7 +6096,12 @@ function updateTreeZoom() {
 }
 
 const treeSelect = document.getElementById("tree-person-select");
+const treePersonSearch = document.getElementById("tree-person-search");
 if (treeSelect) treeSelect.addEventListener("change", () => renderStammbaum(treeSelect.value));
+if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
+  const selected = fillTreePersonSelect(treePersonSearch.value, treeSelect?.value || "");
+  if (selected) renderStammbaum(selected);
+});
 const treeZoomIn = document.getElementById("tree-zoom-in");
 const treeZoomOut = document.getElementById("tree-zoom-out");
 const treeReset = document.getElementById("tree-reset");
