@@ -1,4 +1,4 @@
-// v170 Persistenter Personen-Cache + Delta-Synchronisation + Sync-Diagnose + Egress-Test.
+// v171 Persistenter Personen-Cache + Delta-Synchronisation + persistenter Bild-Cache + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -20,7 +20,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v170";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v171";
 
 function neuesEgressMessObjekt() {
   return {
@@ -73,6 +73,136 @@ function ladeEgressMessung() {
 }
 
 const egressMessung = ladeEgressMessung();
+
+
+// ---------- Persistenter Bild-Cache (v171) ----------
+// Bilder werden anhand ihres stabilen Storage-Pfades im Browser Cache Storage
+// abgelegt. Die signierte Supabase-URL dient nur zum erstmaligen Abruf. Nach
+// einem Safari-/App-Neustart wird das Bild aus dem lokalen Cache gelesen, ohne
+// erneuten Storage-Download und ohne neue signierte URL.
+const FOTO_CACHE_NAME = "partezettel-fotos-v171";
+const fotoBildMemoryCache = new Map(); // dateipfad -> objectURL
+const fotoBildLadePromises = new Map(); // dateipfad -> Promise<objectURL|null>
+
+function fotoCacheSchluessel(dateipfad) {
+  return new Request(`${location.origin}/__partezettel_foto_cache__/${encodeURIComponent(dateipfad)}`);
+}
+
+async function leseFotoAusBrowserCache(dateipfad) {
+  if (!dateipfad || !window.caches) return null;
+  try {
+    const cache = await caches.open(FOTO_CACHE_NAME);
+    const response = await cache.match(fotoCacheSchluessel(dateipfad));
+    if (!response) return null;
+    const blob = await response.blob();
+    if (!blob || !blob.size) return null;
+    return URL.createObjectURL(blob);
+  } catch (err) {
+    debugLog(`⚠️ Bild-Cache lesen: ${err.message || err}`);
+    return null;
+  }
+}
+
+async function speichereFotoImBrowserCache(dateipfad, response) {
+  if (!dateipfad || !response || !response.ok || !window.caches) return;
+  try {
+    const cache = await caches.open(FOTO_CACHE_NAME);
+    await cache.put(fotoCacheSchluessel(dateipfad), response.clone());
+  } catch (err) {
+    debugLog(`⚠️ Bild-Cache speichern: ${err.message || err}`);
+  }
+}
+
+async function loescheFotoAusBrowserCache(dateipfad) {
+  if (!dateipfad) return;
+  const memoryUrl = fotoBildMemoryCache.get(dateipfad);
+  if (memoryUrl) {
+    try { URL.revokeObjectURL(memoryUrl); } catch (_) {}
+    fotoBildMemoryCache.delete(dateipfad);
+  }
+  if (!window.caches) return;
+  try {
+    const cache = await caches.open(FOTO_CACHE_NAME);
+    await cache.delete(fotoCacheSchluessel(dateipfad));
+  } catch (_) {}
+}
+
+async function ladeFotoBilder(dateipfade) {
+  const pfade = [...new Set((dateipfade || []).filter(Boolean))];
+  const ergebnis = new Map();
+  if (!pfade.length) return ergebnis;
+
+  const fehlende = [];
+  for (const pfad of pfade) {
+    const memoryUrl = fotoBildMemoryCache.get(pfad);
+    if (memoryUrl) {
+      ergebnis.set(pfad, memoryUrl);
+      continue;
+    }
+    const cachedUrl = await leseFotoAusBrowserCache(pfad);
+    if (cachedUrl) {
+      fotoBildMemoryCache.set(pfad, cachedUrl);
+      ergebnis.set(pfad, cachedUrl);
+    } else {
+      fehlende.push(pfad);
+    }
+  }
+
+  if (!fehlende.length) return ergebnis;
+
+  // Nur für tatsächlich noch nicht lokal vorhandene Bilder eine signierte URL
+  // anfordern. Mehrere Bilder werden weiterhin mit EINEM createSignedUrls-
+  // Aufruf geholt.
+  egressMessung.signierteURLAnfragen++;
+  egressMessung.signierteURLPfade += fehlende.length;
+  speichereEgressMessung();
+  aktualisiereEgressMessung();
+
+  const { data: signedList, error } = await sb.storage
+    .from(BUCKET_FOTOS)
+    .createSignedUrls(fehlende, 3600);
+  if (error) {
+    debugLog(`❌ Bild-URLs laden: ${error.message}`);
+    return ergebnis;
+  }
+
+  const signedByPath = new Map();
+  for (const item of signedList || []) {
+    if (item?.path && item?.signedUrl) signedByPath.set(item.path, item.signedUrl);
+  }
+
+  await Promise.all(fehlende.map(async (pfad) => {
+    const signedUrl = signedByPath.get(pfad);
+    if (!signedUrl) return;
+    try {
+      const response = await fetch(signedUrl, { cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      await speichereFotoImBrowserCache(pfad, response);
+      const blob = await response.clone().blob();
+      if (!blob.size) throw new Error("leere Bildantwort");
+      const objectUrl = URL.createObjectURL(blob);
+      fotoBildMemoryCache.set(pfad, objectUrl);
+      ergebnis.set(pfad, objectUrl);
+    } catch (err) {
+      // Fallback: bestehendes Verhalten beibehalten, falls Cache Storage oder
+      // CORS auf dem Gerät nicht verfügbar ist.
+      ergebnis.set(pfad, signedUrl);
+      debugLog(`⚠️ Bild-Cache Fallback für ${pfad}: ${err.message || err}`);
+    }
+  }));
+
+  return ergebnis;
+}
+
+async function ladeFotoBild(dateipfad) {
+  if (!dateipfad) return null;
+  const bestehend = fotoBildLadePromises.get(dateipfad);
+  if (bestehend) return bestehend;
+  const promise = ladeFotoBilder([dateipfad]).then(map => map.get(dateipfad) || null);
+  fotoBildLadePromises.set(dateipfad, promise);
+  try { return await promise; }
+  finally { fotoBildLadePromises.delete(dateipfad); }
+}
 
 function speichereEgressMessung() {
   try {
@@ -1953,23 +2083,8 @@ async function ladeSchluesselfotos(personen, force = false) {
     if (!fotos.length) return;
 
     const pfade = [...new Set(fotos.map(f => f.dateipfad))];
-    egressMessung.signierteURLAnfragen++;
-    egressMessung.signierteURLPfade += pfade.length;
-    speichereEgressMessung();
-    aktualisiereEgressMessung();
-    const { data: signedList, error: signedError } = await sb.storage
-      .from(BUCKET_FOTOS)
-      .createSignedUrls(pfade, 3600);
-    if (signedError) {
-      debugLog(`❌ Schlüsselfoto-URLs laden: ${signedError.message}`);
-      return;
-    }
-
-    const urlByPath = new Map();
-    for (const item of signedList || []) {
-      if (item?.path && item?.signedUrl) urlByPath.set(item.path, item.signedUrl);
-    }
-    const gueltigBis = Date.now() + (55 * 60 * 1000);
+    const urlByPath = await ladeFotoBilder(pfade);
+    const gueltigBis = Date.now() + (55 * 60 * 60 * 1000);
     for (const foto of fotos) {
       const url = urlByPath.get(foto.dateipfad);
       if (url) schluesselfotoCache.set(foto.personenId, { url, pfad: foto.dateipfad, gueltigBis });
@@ -2568,8 +2683,9 @@ async function loadDetailFotos(personId) {
     verknuepfte = data || [];
   }
   const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+  const fotoUrls = await ladeFotoBilder(fotos.map(f => f.dateipfad));
   for (const foto of fotos) {
-    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    const fotoUrl = fotoUrls.get(foto.dateipfad) || "";
     const { data: markierungen } = await sb.from("foto_personen")
       .select("id, personen_id, nummer, position_x, position_y, position_format")
       .eq("foto_id", foto.id)
@@ -2581,7 +2697,7 @@ async function loadDetailFotos(personId) {
     if (istGruppenfoto) {
       div.innerHTML = `
         <div class="detail-group-photo-wrap">
-          <img src="${signed ? signed.signedUrl : ""}" alt="Gruppenfoto">
+          <img src="${fotoUrl}" alt="Gruppenfoto">
           <div class="detail-group-photo-markers"></div>
         </div>
         <div class="detail-group-photo-info">
@@ -2611,10 +2727,10 @@ async function loadDetailFotos(personId) {
       });
       wrap.addEventListener("click", (event) => {
         event.stopPropagation();
-        openGruppenfotoViewer(signed?.signedUrl, markierungen || [], foto);
+        openGruppenfotoViewer(fotoUrl, markierungen || [], foto);
       });
     } else {
-      div.innerHTML = `<img src="${signed ? signed.signedUrl : ""}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
+      div.innerHTML = `<img src="${fotoUrl}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
       const fotoImg = div.querySelector("img");
       const openFoto = (event) => {
         if (event) event.stopPropagation();
@@ -2648,11 +2764,11 @@ async function loadDetailFotos(personId) {
         const verbleibend = (links || []).filter(x => x.personen_id !== personId);
         const istEigentuemer = foto.personen_id === personId;
         if (!verbleibend.length && istEigentuemer) {
-          await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
+          await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
           await sb.from("fotos").delete().eq("id", foto.id);
         }
       } else {
-        await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]);
+        await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
         await sb.from("fotos").delete().eq("id", foto.id);
       }
       await loadDetailFotos(personId);
@@ -2766,10 +2882,10 @@ async function ladeGruppenfotoListe() {
   gruppenfotoListe.innerHTML = "";
   gruppenfotoLeer.hidden = !!(data && data.length);
   for (const foto of (data || [])) {
-    const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
+    const fotoUrl = await ladeFotoBild(foto.dateipfad);
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<img src="${signed?.signedUrl || ""}" alt="Foto"><span class="beziehung-text">Foto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">👥 Personen</button>`;
+    div.innerHTML = `<img src="${fotoUrl || ""}" alt="Foto"><span class="beziehung-text">Foto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">👥 Personen</button>`;
     div.querySelector("img")?.addEventListener("click", () => openFotoPersonenModal(foto));
     div.querySelector(".gruppenfoto-personen-btn").addEventListener("click", () => openFotoPersonenModal(foto));
     gruppenfotoListe.appendChild(div);
@@ -2854,8 +2970,8 @@ async function openFotoPersonenModal(foto) {
   const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", foto.id).order("nummer", { ascending: true });
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen = rows || [];
-  const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
-  fotoMarkierbild.src = signed?.signedUrl || "";
+  const fotoUrl = await ladeFotoBild(foto.dateipfad);
+  fotoMarkierbild.src = fotoUrl || "";
   // Für die nachträgliche Zuordnung alle Personen anzeigen. Bereits zugeordnete
   // Personen bleiben sichtbar und werden mit ihrer vorhandenen Nummer markiert.
   // So ist auch bei einem großen Gruppenfoto sofort erkennbar, wer schon zugeordnet ist.
@@ -3349,7 +3465,7 @@ async function loadDetailAudio(personId) {
     const { data: signed } = await sb.storage.from(BUCKET_AUDIO).createSignedUrl(note.dateipfad, 3600);
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<audio controls src="${signed ? signed.signedUrl : ""}"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.innerHTML = `<audio controls src="${fotoUrl}"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
     div.querySelector(".del-btn").addEventListener("click", async () => {
       await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
       await sb.from("sprachnotizen").delete().eq("id", note.id);
@@ -4316,7 +4432,7 @@ document.getElementById("d-delete-person-btn").addEventListener("click", async (
     if (fotoFetchError) throw fotoFetchError;
 
     for (const f of fotos || []) {
-      if (f.dateipfad) await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]);
+      if (f.dateipfad) { await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]); await loescheFotoAusBrowserCache(f.dateipfad); }
       const { error } = await sb.from("fotos").delete().eq("id", f.id);
       if (error) throw error;
     }
@@ -4436,6 +4552,7 @@ async function optimiereBestehendeFotos() {
           cacheControl: "3600",
         });
         if (updateError) throw updateError;
+        await loescheFotoAusBrowserCache(foto.dateipfad);
         verarbeitet++;
       } catch (err) {
         fehler++;
@@ -5089,9 +5206,10 @@ async function loadStammbaumData() {
       .in("personen_id", ids)
       .eq("ist_schluesselfoto", true);
     if (fotoError) debugLog(`❌ Stammbaum-Schlüsselfotos: ${fotoError.message}`);
+    const fotoUrls = await ladeFotoBilder((fotos || []).map(f => f.dateipfad));
     for (const foto of fotos || []) {
-      const { data: signed } = await sb.storage.from(BUCKET_FOTOS).createSignedUrl(foto.dateipfad, 3600);
-      if (signed?.signedUrl) treeData.photos.set(foto.personen_id, signed.signedUrl);
+      const fotoUrl = fotoUrls.get(foto.dateipfad);
+      if (fotoUrl) treeData.photos.set(foto.personen_id, fotoUrl);
     }
   }
 }
