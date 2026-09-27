@@ -1,4 +1,4 @@
-// v179: Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+// v180: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -4855,16 +4855,11 @@ async function erstelleICloudBackup() {
     const gesammelt = await sammleMedien(data, msg);
     const media = gesammelt.media;
 
-    // Verwaiste Foto-Einträge werden beim Backup ebenfalls bereinigt.
-    // Das verhindert, dass ein bereits gelöschtes Storage-Objekt später
-    // beim Backup oder Restore wieder als defekter Foto-Datensatz auftaucht.
+    // Fehlende Mediendateien werden nur im Backup übersprungen.
+    // Das Backup darf niemals automatisch Datensätze in Supabase löschen.
     if (gesammelt.fehlendeFotos.length) {
       const fehlendeSet = new Set(gesammelt.fehlendeFotos);
       data.fotos = (data.fotos || []).filter(row => !fehlendeSet.has(row.dateipfad));
-      for (const path of gesammelt.fehlendeFotos) {
-        const { error: deleteError } = await sb.from("fotos").delete().eq("dateipfad", path);
-        if (deleteError) debugLog(`⚠️ Verwaister Fotoeintrag konnte nicht gelöscht werden: ${path} – ${deleteError.message}`);
-      }
     }
     if (gesammelt.fehlendeAudio.length) {
       const fehlendeSet = new Set(gesammelt.fehlendeAudio);
