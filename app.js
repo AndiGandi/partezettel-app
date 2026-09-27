@@ -1,4 +1,4 @@
-// v175 Warteschlange final bereinigt + Geschlecht als Pflichtfeld + persistenter Personen-/Bild-Cache + Egress-Test.
+// v176 Warteschlange FINAL robust bereinigt + Geschlecht als Pflichtfeld + persistenter Personen-/Bild-Cache + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -1199,23 +1199,18 @@ const BEKANNTE_FEHLER_QUEUE_IDS_V174 = [
 
 async function bereinigeBekannteFehlerQueueV174() {
   const marker = "partezettel-v174-queue-bereinigung";
-  if (localStorage.getItem(marker) !== "1") {
-    for (const id of BEKANNTE_FEHLER_QUEUE_IDS_V174) {
-      await removeFromQueue(id);
-    }
-    localStorage.setItem(marker, "1");
-    debugLog("🧹 v174: 8 bekannte alte Warteschlangeneinträge lokal entfernt. Supabase unverändert.");
+  // Die bekannten Alt-Einträge werden bei jedem Start nochmals lokal gelöscht.
+  // Das ist absichtlich ohne Marker, damit kein alter/fehlerhafter Marker die
+  // Bereinigung verhindern kann. Supabase wird dabei niemals angesprochen.
+  for (const id of BEKANNTE_FEHLER_QUEUE_IDS_V174) {
+    await removeFromQueue(id);
   }
+  localStorage.setItem(marker, "1");
 
-  // v175: Der letzte verbliebene alte Testeintrag wird ebenfalls ausschließlich
-  // lokal entfernt. Supabase bleibt vollständig unverändert.
   const letzterAlterTestId = "fdbb5a03-c089-4a05-94a6-dcd04064c429";
-  const v175Marker = "partezettel-v175-final-queue-bereinigung";
-  if (localStorage.getItem(v175Marker) !== "1") {
-    await removeFromQueue(letzterAlterTestId);
-    localStorage.setItem(v175Marker, "1");
-    debugLog("🧹 v175: letzter alter Testeintrag lokal entfernt. Supabase unverändert.");
-  }
+  await removeFromQueue(letzterAlterTestId);
+  localStorage.setItem("partezettel-v176-final-queue-bereinigung", "1");
+  debugLog("🧹 v176: bekannte Alt-Warteschlangeneinträge einschließlich Anonymous Test lokal entfernt. Supabase unverändert.");
 }
 
 async function zeigeQueueDiagnose() {
@@ -1276,7 +1271,9 @@ async function flushQueue() {
   }
 }
 
-window.addEventListener("online", flushQueue);
+// v176: Keine automatische Queue-Übermittlung. Dadurch kann kein paralleler online-
+// Handler die gerade bereinigten Alt-Einträge wieder in der Diagnose erscheinen lassen.
+// Die Queue bleibt für neue, ausdrücklich erzeugte Offline-Einträge verfügbar.
 
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("queue-diagnostic-btn");
@@ -2474,7 +2471,7 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
 (async function init() {
   try {
     await ensureSession();
-    // v175: Alte lokale Fehlversuche final bereinigen.
+    // v176: Alte lokale Fehlversuche final bereinigen.
     await bereinigeBekannteFehlerQueueV174();
     // Keine automatische Übermittlung der Warteschlange: so entstehen keine
     // wiederkehrenden 400er-POSTs aus den alten Fehlversuchen.
