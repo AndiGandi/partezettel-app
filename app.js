@@ -1,4 +1,4 @@
-// v184: Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+// v185: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -4992,7 +4992,7 @@ async function stelleBackupWiederHer(file) {
 
         // Bestehende Datei nicht überschreiben. So benötigt der Restore keine UPDATE-Rechte
         // und ein vorhandenes Original bleibt unangetastet.
-        // v184: Die Existenzprüfung lädt die Datei NICHT mehr herunter (früher .download()),
+        // Die Existenzprüfung lädt die Datei NICHT mehr herunter (früher .download()),
         // sondern fragt nur per exists() (HEAD-Anfrage, keine Dateidaten) nach. Ist exists()
         // in der geladenen Supabase-Version nicht verfügbar oder schlägt es fehl, wird direkt
         // hochgeladen; ein 409 "already exists" zählt dann als "vorhanden beibehalten".
@@ -6188,36 +6188,83 @@ function treeClassicAddSvgLine(svg, x1, y1, x2, y2, className = "") {
 }
 
 function treeClassicDrawConnections(canvas, svg) {
-  const rect = canvas.getBoundingClientRect();
-  const canvasRect = { left: rect.left, top: rect.top };
-  const center = id => {
-    const el = canvas.querySelector(`[data-classic-person="${CSS.escape(id)}"]`);
-    if (!el) return null;
+  // Klassische Stammbaumlinien: Ehepartner waagrecht verbinden, danach von
+  // der Familienmitte zum Kinder-Bus und von dort senkrecht zu jedem Kind.
+  // Die Koordinaten werden aus den real gerenderten Karten berechnet, damit
+  // sie auch bei unterschiedlichen Bildschirmgrößen und Scrollpositionen
+  // exakt an den Karten hängen.
+  svg.innerHTML = "";
+
+  const canvasRect = canvas.getBoundingClientRect();
+  const positions = new Map();
+  canvas.querySelectorAll("[data-classic-person]").forEach((el) => {
     const r = el.getBoundingClientRect();
-    return { x: r.left + r.width/2 - canvasRect.left, top: r.top-canvasRect.top, bottom: r.bottom-canvasRect.top };
+    positions.set(el.dataset.classicPerson, {
+      left: r.left - canvasRect.left,
+      right: r.right - canvasRect.left,
+      top: r.top - canvasRect.top,
+      bottom: r.bottom - canvasRect.top,
+      centerX: (r.left + r.right) / 2 - canvasRect.left,
+      centerY: (r.top + r.bottom) / 2 - canvasRect.top
+    });
+  });
+
+  // SVG exakt auf die reale Zeichenfläche bringen.
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  svg.setAttribute("width", String(width));
+  svg.setAttribute("height", String(height));
+
+  const addLine = (x1, y1, x2, y2, className = "") => {
+    treeClassicAddSvgLine(svg, x1, y1, x2, y2, className);
   };
-  const addFamily = (family, childLinks) => {
-    const a = center(family.partner_a_id), b = center(family.partner_b_id);
-    const parents = [a,b].filter(Boolean);
-    const children = childLinks.map(k=>center(k.kind_id)).filter(Boolean);
-    if (!parents.length || !children.length) return;
-    const childXs = children.map(c=>c.x);
-    const junctionX = childXs.reduce((sum,x)=>sum+x,0)/childXs.length;
-    const parentY = Math.max(...parents.map(p=>p.bottom));
-    const childY = Math.min(...children.map(c=>c.top));
-    const midY = parentY + Math.max(24,(childY-parentY)*0.48);
-    if (parents.length===2) {
-      treeClassicAddSvgLine(svg, parents[0].x, parentY, parents[1].x, parentY, "tree-classic-spouse");
-      treeClassicAddSvgLine(svg, (parents[0].x+parents[1].x)/2, parentY, (parents[0].x+parents[1].x)/2, midY);
-    } else {
-      treeClassicAddSvgLine(svg, parents[0].x, parentY, parents[0].x, midY);
-    }
-    treeClassicAddSvgLine(svg, Math.min(...childXs), midY, Math.max(...childXs), midY);
-    for (const child of children) treeClassicAddSvgLine(svg, child.x, midY, child.x, child.top);
-  };
+  const visible = (id) => id ? positions.get(id) : null;
+
   for (const family of treeData.familien || []) {
-    const links = treeChildrenForFamily(family.id);
-    if (links.length) addFamily(family, links);
+    const parentA = visible(family.partner_a_id);
+    const parentB = visible(family.partner_b_id);
+    const children = treeChildrenForFamily(family.id)
+      .map((child) => visible(child.kind_id))
+      .filter(Boolean);
+
+    // Ehe-/Partnerlinie nur im freien Bereich zwischen den beiden Karten.
+    let parentJoinX = null;
+    let parentBottom = 0;
+    const parents = [parentA, parentB].filter(Boolean);
+
+    if (parentA && parentB) {
+      const leftParent = parentA.centerX <= parentB.centerX ? parentA : parentB;
+      const rightParent = leftParent === parentA ? parentB : parentA;
+      const spouseY = Math.min(parentA.centerY, parentB.centerY);
+      addLine(leftParent.right, spouseY, rightParent.left, spouseY, "tree-classic-spouse");
+      parentJoinX = (leftParent.right + rightParent.left) / 2;
+      parentBottom = Math.max(parentA.bottom, parentB.bottom);
+    } else if (parents.length === 1) {
+      parentJoinX = parents[0].centerX;
+      parentBottom = parents[0].bottom;
+    }
+
+    if (!children.length || parentJoinX === null) continue;
+
+    const childTop = Math.min(...children.map((p) => p.top));
+    const gap = Math.max(30, childTop - parentBottom);
+    const busY = parentBottom + Math.min(36, Math.max(18, gap * 0.35));
+
+    // Von der Eltern-/Eheverbindung zum Familienbus.
+    addLine(parentJoinX, parentBottom, parentJoinX, busY);
+
+    const childXs = children.map((p) => p.centerX);
+    const left = Math.min(...childXs);
+    const right = Math.max(...childXs);
+
+    // Gemeinsamer Familienbus über den sichtbaren Kindern.
+    addLine(left, busY, right, busY);
+
+    // Eigener Abzweig für jedes Kind.
+    for (const child of children) {
+      addLine(child.centerX, busY, child.centerX, child.top);
+    }
   }
 }
 
