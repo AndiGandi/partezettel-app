@@ -56,28 +56,26 @@
 }
 
 
-/* Stammbaum v34: zusätzliche klassische Ansicht */
+/* v188: Klassischer Stammbaum – gemeinsames Koordinatensystem */
 .tree-view-switch{display:flex;gap:.45rem;align-items:center;margin:.35rem 0 .65rem;flex-wrap:wrap}
 .tree-view-switch .btn{min-height:42px}
 .tree-view-switch .btn.is-active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
-.tree-classic-stage{position:relative;width:100%;min-width:0;min-height:620px;padding:2.5rem 1rem 4rem;transform-origin:top center;background:#eeeae2;overflow:visible}
+.tree-classic-stage{position:relative;width:100%;min-width:0;min-height:520px;padding:1rem .25rem 3rem;transform-origin:top left;background:#eeeae2;overflow:visible}
 .tree-classic-stage[hidden]{display:none !important}
 .tree-classic-canvas{position:relative;margin:0 auto;max-width:none}
-.tree-classic-level{position:absolute;left:0;display:flex;align-items:flex-start;justify-content:center;gap:18px;width:100%;z-index:2}
-.tree-classic-level__label{position:absolute;left:0;top:-1.55rem;width:100%;text-align:center;color:var(--ink-soft);font-size:.78rem;font-style:italic;pointer-events:none;white-space:nowrap}
-.tree-classic-node{position:relative;z-index:3}
-.tree-classic-node .tree-node{width:145px;min-height:82px}
+.tree-classic-node{position:absolute;z-index:3;cursor:pointer}
+.tree-classic-node .tree-node{width:100%;min-height:82px}
 .tree-classic-node--root .tree-node{border:2px solid var(--accent);box-shadow:0 3px 9px rgba(43,42,40,.13)}
-.tree-classic-svg{position:absolute;inset:0;width:100%;height:100%;z-index:1;overflow:visible;pointer-events:none}
-.tree-classic-svg path,.tree-classic-svg line{fill:none;stroke:var(--accent);stroke-width:2}
+.tree-classic-svg{position:absolute;left:0;top:0;width:100%;height:100%;z-index:1;overflow:visible;pointer-events:none}
+.tree-classic-svg line{fill:none;stroke:var(--accent);stroke-width:2}
 .tree-classic-svg .tree-classic-spouse{stroke-width:2.5}
+.tree-classic-level__label{position:absolute;left:0;width:100%;text-align:center;color:var(--ink-soft);font-size:.78rem;font-style:italic;pointer-events:none;white-space:nowrap;z-index:0}
 .tree-classic-empty{padding:3rem 1rem;text-align:center;color:var(--ink-soft)}
 @media(max-width:700px){
  .tree-view-switch{display:grid;grid-template-columns:1fr 1fr}
  .tree-view-switch .btn{width:100%;padding:.55rem .5rem}
- .tree-classic-stage{padding:2.4rem .25rem 3rem}
- .tree-classic-level{gap:12px}
- .tree-classic-node .tree-node{width:125px;min-height:76px}
+ .tree-classic-stage{padding:.75rem .1rem 2.5rem}
+ .tree-classic-node .tree-node{min-height:76px}
 }
 
 .login-screen{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:1rem;background:var(--paper)}.login-screen[hidden]{display:none !important}.login-card{width:min(420px,100%);background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.08)}.login-card h1{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:400;font-size:1.6rem;text-align:center;margin:.1rem 0 .15rem}.login-subtitle{text-align:center;color:var(--ink-soft);margin:0 0 1rem;font-style:italic}.login-logout{margin:.55rem auto 0;display:flex;min-height:40px}
