@@ -1,4 +1,4 @@
-// v183: Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+// v184: Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -4992,7 +4992,7 @@ async function stelleBackupWiederHer(file) {
 
         // Bestehende Datei nicht überschreiben. So benötigt der Restore keine UPDATE-Rechte
         // und ein vorhandenes Original bleibt unangetastet.
-        // v183: Die Existenzprüfung lädt die Datei NICHT mehr herunter (früher .download()),
+        // v184: Die Existenzprüfung lädt die Datei NICHT mehr herunter (früher .download()),
         // sondern fragt nur per exists() (HEAD-Anfrage, keine Dateidaten) nach. Ist exists()
         // in der geladenen Supabase-Version nicht verfügbar oder schlägt es fehl, wird direkt
         // hochgeladen; ein 409 "already exists" zählt dann als "vorhanden beibehalten".
@@ -5205,6 +5205,7 @@ document.getElementById("export-pdf-btn").addEventListener("click", async () => 
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
+let treeViewMode = "cards";
 let treeData = { personen: [], familien: [], kinder: [], photos: new Map() };
 
 function escTree(value) {
@@ -5390,6 +5391,7 @@ function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = ""
 }
 
 function renderStammbaum(rootId) {
+  if (treeViewMode === "classic") { renderKlassischerStammbaum(rootId); return; }
   const stage = document.getElementById("tree-stage");
   const message = document.getElementById("tree-message");
   if (!stage) return;
@@ -6116,6 +6118,192 @@ function fillTreePersonSelect(searchValue = "", preferredId = "") {
   return select.value;
 }
 
+
+function treeClassicGenerationName(distance) {
+  const names = {
+    [-5]: "5. Generation Vorfahren", [-4]: "4. Generation Vorfahren", [-3]: "Urgroßeltern",
+    [-2]: "Großeltern", [-1]: "Eltern", [0]: "Ausgangsgeneration",
+    [1]: "Kinder", [2]: "Enkelkinder", [3]: "Urenkelkinder",
+    [4]: "4. Generation Nachkommen", [5]: "5. Generation Nachkommen"
+  };
+  return names[distance] || (distance < 0 ? `${Math.abs(distance)}. Generation Vorfahren` : `${distance}. Generation Nachkommen`);
+}
+
+function treeClassicLevels(rootId, maxDistance = 5) {
+  const distances = new Map([[rootId, 0]]);
+  const queue = [rootId];
+  while (queue.length) {
+    const id = queue.shift();
+    const distance = distances.get(id) ?? 0;
+    if (Math.abs(distance) >= maxDistance) continue;
+
+    // Partner bleiben in derselben Generation.
+    for (const family of treeFamiliesForPerson(id)) {
+      const partnerId = [family.partner_a_id, family.partner_b_id].find(pid => pid && pid !== id);
+      if (partnerId && treePerson(partnerId) && !distances.has(partnerId)) {
+        distances.set(partnerId, distance);
+        queue.push(partnerId);
+      }
+      for (const child of treeChildrenForFamily(family.id)) {
+        if (!distances.has(child.person.id)) {
+          distances.set(child.person.id, distance + 1);
+          queue.push(child.person.id);
+        }
+      }
+    }
+
+    // Eltern liegen eine Generation darüber.
+    for (const family of treeParentFamiliesForPerson(id)) {
+      for (const parentId of [family.partner_a_id, family.partner_b_id]) {
+        if (parentId && treePerson(parentId) && !distances.has(parentId)) {
+          distances.set(parentId, distance - 1);
+          queue.push(parentId);
+        }
+      }
+    }
+  }
+  const levels = new Map();
+  for (const [id, distance] of distances) {
+    if (distance < -maxDistance || distance > maxDistance) continue;
+    if (!levels.has(distance)) levels.set(distance, []);
+    levels.get(distance).push(id);
+  }
+  const personSort = (aId,bId) => {
+    const a=treePerson(aId), b=treePerson(bId);
+    const da=a?.geburtsdatum||"", db=b?.geburtsdatum||"";
+    if (da && db && da!==db) return da.localeCompare(db);
+    if (da) return -1; if (db) return 1;
+    return `${a?.nachname||""} ${a?.vorname||""}`.localeCompare(`${b?.nachname||""} ${b?.vorname||""}`,"de",{sensitivity:"base"});
+  };
+  for (const ids of levels.values()) ids.sort(personSort);
+  return levels;
+}
+
+function treeClassicAddSvgLine(svg, x1, y1, x2, y2, className = "") {
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  line.setAttribute("x1", x1); line.setAttribute("y1", y1);
+  line.setAttribute("x2", x2); line.setAttribute("y2", y2);
+  if (className) line.setAttribute("class", className);
+  svg.appendChild(line);
+}
+
+function treeClassicDrawConnections(canvas, svg) {
+  const rect = canvas.getBoundingClientRect();
+  const canvasRect = { left: rect.left, top: rect.top };
+  const center = id => {
+    const el = canvas.querySelector(`[data-classic-person="${CSS.escape(id)}"]`);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width/2 - canvasRect.left, top: r.top-canvasRect.top, bottom: r.bottom-canvasRect.top };
+  };
+  const addFamily = (family, childLinks) => {
+    const a = center(family.partner_a_id), b = center(family.partner_b_id);
+    const parents = [a,b].filter(Boolean);
+    const children = childLinks.map(k=>center(k.kind_id)).filter(Boolean);
+    if (!parents.length || !children.length) return;
+    const childXs = children.map(c=>c.x);
+    const junctionX = childXs.reduce((sum,x)=>sum+x,0)/childXs.length;
+    const parentY = Math.max(...parents.map(p=>p.bottom));
+    const childY = Math.min(...children.map(c=>c.top));
+    const midY = parentY + Math.max(24,(childY-parentY)*0.48);
+    if (parents.length===2) {
+      treeClassicAddSvgLine(svg, parents[0].x, parentY, parents[1].x, parentY, "tree-classic-spouse");
+      treeClassicAddSvgLine(svg, (parents[0].x+parents[1].x)/2, parentY, (parents[0].x+parents[1].x)/2, midY);
+    } else {
+      treeClassicAddSvgLine(svg, parents[0].x, parentY, parents[0].x, midY);
+    }
+    treeClassicAddSvgLine(svg, Math.min(...childXs), midY, Math.max(...childXs), midY);
+    for (const child of children) treeClassicAddSvgLine(svg, child.x, midY, child.x, child.top);
+  };
+  for (const family of treeData.familien || []) {
+    const links = treeChildrenForFamily(family.id);
+    if (links.length) addFamily(family, links);
+  }
+}
+
+function renderKlassischerStammbaum(rootId) {
+  const stage = document.getElementById("tree-classic-stage");
+  if (!stage) return;
+  stage.innerHTML = "";
+  const root = treePerson(rootId);
+  if (!root) { stage.innerHTML = '<div class="tree-classic-empty">Bitte eine Person auswählen.</div>'; return; }
+
+  const levels = treeClassicLevels(rootId, 5);
+  const distances = [...levels.keys()].sort((a,b)=>a-b);
+  const maxCount = Math.max(1, ...distances.map(d => levels.get(d).length));
+  const cardWidth = window.innerWidth <= 700 ? 125 : 145;
+  const gap = window.innerWidth <= 700 ? 18 : 28;
+  const width = Math.max(window.innerWidth > 700 ? 1000 : 760, maxCount*cardWidth + Math.max(0,maxCount-1)*gap + 180);
+  const rowHeight = window.innerWidth <= 700 ? 155 : 175;
+  const height = Math.max(620, distances.length*rowHeight + 100);
+  const canvas = document.createElement("div");
+  canvas.className = "tree-classic-canvas";
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
+
+  const svg = document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.classList.add("tree-classic-svg");
+  svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
+  canvas.appendChild(svg);
+
+  const minDistance = distances[0] ?? 0;
+  for (const distance of distances) {
+    const ids = levels.get(distance) || [];
+    const row = document.createElement("div");
+    row.className = "tree-classic-level";
+    row.style.top = `${45 + (distance-minDistance)*rowHeight}px`;
+    const label = document.createElement("div");
+    label.className = "tree-classic-level__label";
+    label.textContent = treeClassicGenerationName(distance);
+    row.appendChild(label);
+    for (const id of ids) {
+      const p = treePerson(id);
+      const wrap = document.createElement("div");
+      wrap.className = `tree-classic-node ${id===rootId ? "tree-classic-node--root" : ""}`;
+      wrap.dataset.classicPerson = id;
+      wrap.innerHTML = treePersonCard(p, rootId, "", treeMaleAncestorSurname(rootId) || String(root.nachname||""));
+      row.appendChild(wrap);
+    }
+    canvas.appendChild(row);
+  }
+  stage.appendChild(canvas);
+  requestAnimationFrame(() => {
+    treeClassicDrawConnections(canvas, svg);
+  });
+
+  let suppress = false, lastTouch = {id:null,time:0};
+  canvas.querySelectorAll("[data-tree-person]").forEach(el => {
+    const open = async (event) => {
+      if (suppress) { suppress=false; event.preventDefault(); event.stopPropagation(); return; }
+      event.preventDefault(); event.stopPropagation();
+      const id=el.dataset.treePerson; if(!id) return;
+      const select=document.getElementById("tree-person-select"); if(select) select.value=id;
+      renderStammbaum(id);
+    };
+    el.addEventListener("click",open);
+    el.addEventListener("dblclick",async(event)=>{event.preventDefault();event.stopPropagation();const id=el.dataset.treePerson;if(!id)return;const select=document.getElementById("tree-person-select");if(select)select.value=id;await openPersonDetail(id,{fromTree:true});});
+    el.addEventListener("pointerup",async(event)=>{if(event.pointerType!=="touch")return;const id=el.dataset.treePerson;if(!id)return;const now=Date.now();if(lastTouch.id===id&&now-lastTouch.time<=450){lastTouch={id:null,time:0};suppress=true;event.preventDefault();event.stopPropagation();const select=document.getElementById("tree-person-select");if(select)select.value=id;await openPersonDetail(id,{fromTree:true});}else lastTouch={id,time:now};});
+  });
+}
+
+function setTreeViewMode(mode, rootId = "") {
+  treeViewMode = mode === "classic" ? "classic" : "cards";
+  const panel = document.getElementById("tab-stammbaum");
+  const cards = document.getElementById("tree-view-cards");
+  const classic = document.getElementById("tree-view-classic");
+  const cardStage = document.getElementById("tree-stage");
+  const classicStage = document.getElementById("tree-classic-stage");
+  if (panel) panel.classList.toggle("tree-view--classic", treeViewMode === "classic");
+  if (cardStage) cardStage.hidden = treeViewMode === "classic";
+  if (classicStage) classicStage.hidden = treeViewMode !== "classic";
+  if (cards) { cards.classList.toggle("is-active", treeViewMode === "cards"); cards.setAttribute("aria-selected", treeViewMode === "cards" ? "true" : "false"); }
+  if (classic) { classic.classList.toggle("is-active", treeViewMode === "classic"); classic.setAttribute("aria-selected", treeViewMode === "classic" ? "true" : "false"); }
+  const select = document.getElementById("tree-person-select");
+  const id = rootId || select?.value || treeData.personen[0]?.id || "";
+  if (treeViewMode === "classic") renderKlassischerStammbaum(id);
+  else renderStammbaum(id);
+}
+
 async function loadStammbaum() {
   const message = document.getElementById("tree-message");
   const select = document.getElementById("tree-person-select");
@@ -6145,8 +6333,10 @@ async function loadStammbaum() {
 
 function updateTreeZoom() {
   const stage = document.getElementById("tree-stage");
+  const classicStage = document.getElementById("tree-classic-stage");
   const value = document.getElementById("tree-zoom-value");
   if (stage) stage.style.transform = `scale(${treeZoom})`;
+  if (classicStage) classicStage.style.transform = `scale(${treeZoom})`;
   if (value) value.textContent = `${Math.round(treeZoom * 100)} %`;
 }
 
@@ -6163,5 +6353,10 @@ const treeReset = document.getElementById("tree-reset");
 if (treeZoomIn) treeZoomIn.addEventListener("click", () => { treeZoom = Math.min(1.5, +(treeZoom + 0.1).toFixed(2)); updateTreeZoom(); });
 if (treeZoomOut) treeZoomOut.addEventListener("click", () => { treeZoom = Math.max(0.6, +(treeZoom - 0.1).toFixed(2)); updateTreeZoom(); });
 if (treeReset) treeReset.addEventListener("click", () => { treeZoom = 1; updateTreeZoom(); });
+const treeViewCards = document.getElementById("tree-view-cards");
+const treeViewClassic = document.getElementById("tree-view-classic");
+if (treeViewCards) treeViewCards.addEventListener("click", () => setTreeViewMode("cards"));
+if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeViewMode("classic"));
+window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
