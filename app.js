@@ -1,4 +1,4 @@
-// v182: Restore prüft vorhandene Mediendateien ohne Download (exists/409). // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+// v183: Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -2217,7 +2217,7 @@ async function ladeSchluesselfotos(personen, force = false) {
 
     const pfade = [...new Set(fotos.map(f => f.dateipfad))];
     const urlByPath = await ladeFotoBilder(pfade);
-    const gueltigBis = Date.now() + (55 * 60 * 60 * 1000);
+    const gueltigBis = Date.now() + (55 * 60 * 1000);
     for (const foto of fotos) {
       const url = urlByPath.get(foto.dateipfad);
       if (url) schluesselfotoCache.set(foto.personenId, { url, pfad: foto.dateipfad, gueltigBis });
@@ -4992,7 +4992,7 @@ async function stelleBackupWiederHer(file) {
 
         // Bestehende Datei nicht überschreiben. So benötigt der Restore keine UPDATE-Rechte
         // und ein vorhandenes Original bleibt unangetastet.
-        // v182: Die Existenzprüfung lädt die Datei NICHT mehr herunter (früher .download()),
+        // v183: Die Existenzprüfung lädt die Datei NICHT mehr herunter (früher .download()),
         // sondern fragt nur per exists() (HEAD-Anfrage, keine Dateidaten) nach. Ist exists()
         // in der geladenen Supabase-Version nicht verfügbar oder schlägt es fehl, wird direkt
         // hochgeladen; ein 409 "already exists" zählt dann als "vorhanden beibehalten".
