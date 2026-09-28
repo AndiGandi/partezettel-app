@@ -1,4 +1,4 @@
-// v186: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+// v187: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -6186,64 +6186,75 @@ function treeClassicAddSvgLine(svg, x1, y1, x2, y2, className = "") {
 
 function treeClassicDrawConnections(canvas, svg, familyInfo) {
   svg.innerHTML = "";
-  const canvasRect = canvas.getBoundingClientRect();
   const positions = new Map();
+
+  // Die Karten liegen direkt in den drei Ebenen. Deshalb verwenden wir bewusst
+  // offsetLeft/offsetTop statt getBoundingClientRect(). Das ist stabil bei Zoom,
+  // Scrollen und iPad-Safari-Transforms.
   canvas.querySelectorAll("[data-classic-person]").forEach((el) => {
-    const r = el.getBoundingClientRect();
     positions.set(el.dataset.classicPerson, {
-      left: r.left - canvasRect.left,
-      right: r.right - canvasRect.left,
-      top: r.top - canvasRect.top,
-      bottom: r.bottom - canvasRect.top,
-      centerX: (r.left + r.right) / 2 - canvasRect.left,
-      centerY: (r.top + r.bottom) / 2 - canvasRect.top
+      left: el.offsetLeft,
+      right: el.offsetLeft + el.offsetWidth,
+      top: el.offsetTop,
+      bottom: el.offsetTop + el.offsetHeight,
+      centerX: el.offsetLeft + el.offsetWidth / 2,
+      centerY: el.offsetTop + el.offsetHeight / 2
     });
   });
 
-  const width = canvas.clientWidth;
-  const height = canvas.clientHeight;
+  const width = canvas.clientWidth || canvas.offsetWidth;
+  const height = canvas.clientHeight || canvas.offsetHeight;
   svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
 
-  const addLine = (x1, y1, x2, y2, className = "") => treeClassicAddSvgLine(svg, x1, y1, x2, y2, className);
-  const pos = id => id ? positions.get(id) : null;
-  const visibleIds = ids => (ids || []).map(pos).filter(Boolean);
+  const addLine = (x1, y1, x2, y2, className = "") => {
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", String(Math.round(x1)));
+    line.setAttribute("y1", String(Math.round(y1)));
+    line.setAttribute("x2", String(Math.round(x2)));
+    line.setAttribute("y2", String(Math.round(y2)));
+    if (className) line.setAttribute("class", className);
+    svg.appendChild(line);
+  };
 
-  // Eine Familie wird immer als saubere Elternlinie -> Familienbus -> Kinder dargestellt.
-  const drawFamily = (parentIds, childIds, className = "tree-classic-family") => {
-    const parents = visibleIds(parentIds);
-    const children = visibleIds(childIds);
+  const visible = (ids) => (ids || []).map(id => positions.get(id)).filter(Boolean);
+
+  // Eine Familie: Partner verbinden, dann eine gemeinsame senkrechte Linie
+  // zum Familienbus und von dort senkrecht zu jedem Kind.
+  const drawFamily = (parentIds, childIds, className) => {
+    const parents = visible(parentIds);
+    const children = visible(childIds);
     if (!parents.length) return;
 
-    let spouseLineY = Math.max(...parents.map(p => p.centerY));
-    if (parents.length >= 2) {
-      const ordered = [...parents].sort((a,b) => a.centerX - b.centerX);
-      const left = ordered[0], right = ordered[ordered.length - 1];
-      spouseLineY = Math.min(left.centerY, right.centerY);
-      addLine(left.right, spouseLineY, right.left, spouseLineY, `${className} tree-classic-spouse`);
+    const orderedParents = [...parents].sort((a, b) => a.centerX - b.centerX);
+    const parentBottom = Math.max(...parents.map(p => p.bottom));
+
+    if (orderedParents.length >= 2) {
+      const left = orderedParents[0];
+      const right = orderedParents[orderedParents.length - 1];
+      const spouseY = (Math.max(left.top, right.top) + Math.min(left.bottom, right.bottom)) / 2;
+      addLine(left.right, spouseY, right.left, spouseY, `${className} tree-classic-spouse`);
     }
 
     if (!children.length) return;
 
-    const parentBottom = Math.max(...parents.map(p => p.bottom));
     const childTop = Math.min(...children.map(p => p.top));
-    const busY = parentBottom + Math.max(18, Math.min(38, (childTop - parentBottom) * 0.45));
-    const parentJoinX = parents.length >= 2
-      ? ((Math.min(...parents.map(p => p.right)) + Math.max(...parents.map(p => p.left))) / 2)
-      : parents[0].centerX;
+    const busY = parentBottom + Math.max(16, Math.min(34, (childTop - parentBottom) * 0.42));
+    const parentJoinX = orderedParents.length >= 2
+      ? (orderedParents[0].right + orderedParents[orderedParents.length - 1].left) / 2
+      : orderedParents[0].centerX;
 
     addLine(parentJoinX, parentBottom, parentJoinX, busY, className);
-    const leftChild = Math.min(...children.map(p => p.centerX));
-    const rightChild = Math.max(...children.map(p => p.centerX));
-    if (leftChild !== rightChild) addLine(leftChild, busY, rightChild, busY, className);
-    for (const child of children) addLine(child.centerX, busY, child.centerX, child.top, className);
+
+    const childCenters = children.map(p => p.centerX).sort((a, b) => a - b);
+    if (childCenters.length > 1) addLine(childCenters[0], busY, childCenters[childCenters.length - 1], busY, className);
+    for (const x of childCenters) addLine(x, busY, x, childTop, className);
   };
 
-  // Eltern -> Geschwister + ausgewählte Person.
+  // Eltern -> Geschwister + Ausgangsperson.
   drawFamily(familyInfo.parentIds, [...familyInfo.siblingIds, familyInfo.root.id], "tree-classic-parents");
-
-  // Ausgewählte Person + Partner -> Kinder.
+  // Ausgangsperson + Partner -> Kinder.
   drawFamily([familyInfo.root.id, ...familyInfo.spouseIds], familyInfo.childIds, "tree-classic-children");
 }
 
@@ -6310,11 +6321,11 @@ function renderKlassischerStammbaum(rootId) {
   stage.appendChild(canvas);
   requestAnimationFrame(() => treeClassicDrawConnections(canvas, svg, info));
 
-  canvas.querySelectorAll("[data-tree-person]").forEach(el => {
+  canvas.querySelectorAll("[data-classic-person]").forEach(el => {
     el.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const id = el.dataset.treePerson;
+      const id = el.dataset.classicPerson;
       if (!id) return;
       const select = document.getElementById("tree-person-select");
       if (select) select.value = id;
@@ -6323,7 +6334,7 @@ function renderKlassischerStammbaum(rootId) {
     el.addEventListener("dblclick", async (event) => {
       event.preventDefault();
       event.stopPropagation();
-      const id = el.dataset.treePerson;
+      const id = el.dataset.classicPerson;
       if (!id) return;
       const select = document.getElementById("tree-person-select");
       if (select) select.value = id;
