@@ -1,4 +1,4 @@
-// v180: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+// v182: Restore prüft vorhandene Mediendateien ohne Download (exists/409). // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
 // Partezettel Archiv – App-Logik
@@ -707,7 +707,7 @@ if (audioBtn && audioStatus && audioPreview) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const chosenType = pickAudioMimeType();
-        mediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+        mediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType, audioBitsPerSecond: 32000 }) : new MediaRecorder(stream);
         audioChunks = [];
         mediaRecorder.ondataavailable = (e) => audioChunks.push(e.data);
         mediaRecorder.onstop = () => {
@@ -3596,16 +3596,60 @@ document.getElementById("d-foto-input-galerie").addEventListener("change", async
 async function loadDetailAudio(personId) {
   const container = document.getElementById("d-audio-list");
   container.innerHTML = "";
-  const { data, error } = await sb.from("sprachnotizen").select("*").eq("person_id", personId);
+  const { data, error } = await sb
+    .from("sprachnotizen")
+    .select("id, dateipfad, dauer_sekunden")
+    .eq("person_id", personId);
   if (error) { debugLog(`❌ Sprachnotizen laden: ${error.message}`); return; }
+
   for (const note of data || []) {
-    const { data: signed } = await sb.storage.from(BUCKET_AUDIO).createSignedUrl(note.dateipfad, 3600);
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<audio controls src="${fotoUrl}"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.innerHTML = `<audio controls preload="none"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
+
+    const audio = div.querySelector("audio");
+    let audioUrl = null;
+    let urlPromise = null;
+
+    const ladeAudioUrl = async () => {
+      if (audioUrl) return audioUrl;
+      if (!urlPromise) {
+        urlPromise = sb.storage.from(BUCKET_AUDIO).createSignedUrl(note.dateipfad, 3600)
+          .then(({ data: signed, error: signedError }) => {
+            if (signedError || !signed?.signedUrl) {
+              throw new Error(signedError?.message || "Keine signierte Audio-URL erhalten");
+            }
+            audioUrl = signed.signedUrl;
+            return audioUrl;
+          });
+      }
+      return urlPromise;
+    };
+
+    audio.addEventListener("play", async (event) => {
+      if (audio.src) return;
+      event.preventDefault();
+      try {
+        const url = await ladeAudioUrl();
+        audio.src = url;
+        audio.load();
+        await audio.play();
+      } catch (err) {
+        debugLog(`❌ Sprachnotiz abspielen: ${err.message || err}`);
+      }
+    });
+
     div.querySelector(".del-btn").addEventListener("click", async () => {
-      await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
-      await sb.from("sprachnotizen").delete().eq("id", note.id);
+      const { error: storageError } = await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
+      if (storageError) {
+        debugLog(`⚠️ Sprachnotiz-Datei konnte nicht gelöscht werden: ${storageError.message}`);
+        return;
+      }
+      const { error: dbError } = await sb.from("sprachnotizen").delete().eq("id", note.id);
+      if (dbError) {
+        debugLog(`⚠️ Sprachnotiz-Eintrag konnte nicht gelöscht werden: ${dbError.message}`);
+        return;
+      }
       loadDetailAudio(personId);
     });
     container.appendChild(div);
@@ -3619,7 +3663,7 @@ document.getElementById("d-audio-record-btn").addEventListener("click", async ()
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const chosenType = pickAudioMimeType();
-      detailAudioMediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType }) : new MediaRecorder(stream);
+      detailAudioMediaRecorder = chosenType ? new MediaRecorder(stream, { mimeType: chosenType, audioBitsPerSecond: 32000 }) : new MediaRecorder(stream);
       detailAudioChunks = [];
       detailAudioMediaRecorder.ondataavailable = (e) => detailAudioChunks.push(e.data);
       detailAudioMediaRecorder.onstop = async () => {
@@ -4948,17 +4992,33 @@ async function stelleBackupWiederHer(file) {
 
         // Bestehende Datei nicht überschreiben. So benötigt der Restore keine UPDATE-Rechte
         // und ein vorhandenes Original bleibt unangetastet.
-        const { data: vorhanden } = await sb.storage.from(item.bucket).download(item.path);
-        if (vorhanden) {
+        // v182: Die Existenzprüfung lädt die Datei NICHT mehr herunter (früher .download()),
+        // sondern fragt nur per exists() (HEAD-Anfrage, keine Dateidaten) nach. Ist exists()
+        // in der geladenen Supabase-Version nicht verfügbar oder schlägt es fehl, wird direkt
+        // hochgeladen; ein 409 "already exists" zählt dann als "vorhanden beibehalten".
+        const bucketApi = sb.storage.from(item.bucket);
+        let existiertBereits = false;
+        if (typeof bucketApi.exists === "function") {
+          const { data: existiert, error: existsError } = await bucketApi.exists(item.path);
+          if (!existsError && existiert === true) existiertBereits = true;
+        }
+        if (existiertBereits) {
           skippedMedia++;
           continue;
         }
         const blob = new Blob([bytes], { type: item.mimeType || "application/octet-stream" });
-        const { error } = await sb.storage.from(item.bucket).upload(item.path, blob, {
+        const { error } = await bucketApi.upload(item.path, blob, {
           upsert: false,
           contentType: item.mimeType || "application/octet-stream",
         });
-        if (error) throw new Error(`Mediendatei ${item.path}: ${error.message}`);
+        if (error) {
+          const status = String(error.statusCode || error.status || "");
+          if (status === "409" || /already exists|duplicate/i.test(error.message || "")) {
+            skippedMedia++;
+            continue;
+          }
+          throw new Error(`Mediendatei ${item.path}: ${error.message}`);
+        }
         restoredMedia++;
       }
     }

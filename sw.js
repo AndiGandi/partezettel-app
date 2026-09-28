@@ -1,4 +1,4 @@
-const CACHE_NAME = "partezettel-shell-v180";
+const CACHE_NAME = "partezettel-shell-v182";
 const SHELL_FILES = [
   "./index.html",
   "./style.css",
@@ -17,7 +17,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k.startsWith("partezettel-shell-") && k !== CACHE_NAME).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
