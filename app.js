@@ -1,4 +1,4 @@
-// v203: Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v204: Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -6443,7 +6443,7 @@ function treeClassicPersonSort(aId, bId) {
   return `${a?.nachname||""} ${a?.vorname||""}`.localeCompare(`${b?.nachname||""} ${b?.vorname||""}`,"de",{sensitivity:"base"});
 }
 
-// v189: fokussierter klassischer Stammbaum. Genealogie ausschließlich aus
+// v204: fokussierter klassischer Stammbaum mit getrennten Generationsebenen. Genealogie ausschließlich aus
 // familien + familien_kinder; keine Änderungen an der Datenbank.
 function treeClassicFamilyInfo(rootId){
   const root=treePerson(rootId); if(!root)return null;
@@ -6497,7 +6497,12 @@ function renderKlassischerStammbaum(rootId){
   const parents=[...info.parentIds].sort(treeClassicPersonSort), middle=[...info.siblingIds,rootId].sort(treeClassicPersonSort), families=info.families.filter(f=>f.spouseId||f.childIds.length);
   const blocks=families.map(f=>{const n=Math.max(2,f.childIds.length);return n*card+Math.max(0,n-1)*gap+36;}), familyW=blocks.reduce((a,b)=>a+b,0)+Math.max(0,blocks.length-1)*28;
   const rowW=ids=>Math.max(1,ids.length)*card+Math.max(0,ids.length-1)*gap;
-  const width=Math.max(vw-24,rowW(parents)+80,rowW(middle)+80,familyW+80,620), yp=48, ym=yp+rowH, yf=ym+rowH+28, ycSingle=ym+rowH+32, ycMulti=yf+rowH+32, height=families.length?(families.length===1?ycSingle+120:ycMulti+120):ym+120;
+  // v204: jede Generation bekommt eine eigene Kartenhöhe plus sicheren Zwischenraum.
+  // Die Kinderzeile beginnt immer unterhalb der Partnerzeile, nicht auf Höhe der Geschwister.
+  const cardHeight = mobile ? 148 : 158;
+  const rowGap = mobile ? 58 : 66;
+  const marginX = 32;
+  const width=Math.max(vw-24,rowW(parents)+marginX*2,rowW(middle)+marginX*2,familyW+marginX*2,620), yp=48, ym=yp+cardHeight+rowGap, yf=ym+cardHeight+rowGap, ycSingle=yf+cardHeight+rowGap, ycMulti=yf+cardHeight+rowGap, height=families.length?(families.length===1?ycSingle+cardHeight+70:ycMulti+cardHeight+70):ym+cardHeight+70;
   const canvas=document.createElement("div");canvas.className="tree-classic-canvas tree-classic-canvas--focused";canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.classList.add("tree-classic-svg");canvas.appendChild(svg);
   const label=(t,y)=>{const e=document.createElement("div");e.className="tree-classic-level__label";e.textContent=t;e.style.top=`${y-27}px`;canvas.appendChild(e);};
