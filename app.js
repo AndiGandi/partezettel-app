@@ -4179,7 +4179,17 @@ async function loadDetailFamilie(personId) {
   }));
 
   partnerList.innerHTML = "";
-  for (const f of partnerFamilies || []) {
+  // Ehe-/Partnerschaftsblöcke chronologisch sortieren: frühester Beginn zuerst.
+  // Unbekannte Beginndaten bleiben am Ende; die Originaldaten werden nicht verändert.
+  const partnerFamiliesChronologisch = [...(partnerFamilies || [])].sort((a, b) => {
+    const da = String(a?.beginn || "").slice(0, 10);
+    const db = String(b?.beginn || "").slice(0, 10);
+    if (da && db) return da.localeCompare(db);
+    if (da) return -1;
+    if (db) return 1;
+    return 0;
+  });
+  for (const f of partnerFamiliesChronologisch) {
     const otherId = familiePartnerIds(f, personId)[0];
     if (!otherId) continue;
     const div = document.createElement("div");
@@ -4329,11 +4339,21 @@ async function loadDetailFamilie(personId) {
     sourceRowInput.value = (typeof quelle !== "undefined" && quelle?.trauungsbuch_zeile) || "";
     sourceEditBtn.addEventListener("click", () => { sourceEditor.hidden = !sourceEditor.hidden; });
     div.querySelector(".familie-source-save").addEventListener("click", async () => {
-      const url = sourceUrlInput.value.trim() || null;
-      const row = sourceRowInput.value.trim() ? Number(sourceRowInput.value) : null;
+      const url = sourceUrlInput.value.trim();
+      const rowText = sourceRowInput.value.trim();
+      const row = rowText ? Number(rowText) : null;
+      if (rowText && (!Number.isInteger(row) || row < 1)) {
+        alert("Bitte eine gültige Zeilennummer ab 1 eingeben.");
+        sourceRowInput.focus();
+        return;
+      }
       const zielPersonId = (typeof quelle !== "undefined" && quelle?.id) || personId;
-      const { error } = await sb.from("personen").update({ trauungsbuch_link: url, trauungsbuch_zeile: row }).eq("id", zielPersonId);
-      if (error) { alert(`Trauungsbuch-Link konnte nicht gespeichert werden: ${error.message}`); return; }
+      // Eine Zeilennummer darf auch allein geändert werden. Ein leeres URL-Feld
+      // bedeutet hier nicht, dass ein bestehender Link gelöscht werden soll.
+      const updateDaten = { trauungsbuch_zeile: row };
+      if (url) updateDaten.trauungsbuch_link = url;
+      const { error } = await sb.from("personen").update(updateDaten).eq("id", zielPersonId);
+      if (error) { alert(`Trauungsbuch-Quelle konnte nicht gespeichert werden: ${error.message}`); return; }
       await loadDetailFamilie(currentDetailPersonId);
     });
 
