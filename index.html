@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 193 -->
+    <!-- Version 194 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 193</p>
+  <p id="app-version" class="app-header__version">Version 194</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -190,7 +190,7 @@
       <summary>Temporäre Egress-Messung</summary>
       <div id="egress-debug-status" class="egress-debug-status" aria-live="polite"></div>
       <button type="button" id="egress-debug-reset" class="btn btn--ghost">Messung zurücksetzen</button>
-      <p class="egress-debug-hint">Nur für den Test. Die Anzeige protokolliert Bildabrufe und einzelne Suchschritte. Den tatsächlichen Supabase-Egress vergleichen wir separat im Supabase-Dashboard.</p>
+      <p class="egress-debug-hint">Testanzeige v194: unterscheidet lokale Arbeitsspeicher-Treffer, Browser-Cache-Treffer und erfolgreiche Supabase-Bild-fetchs samt empfangenen Bildbytes. Die Bytes sind Bilddaten, nicht der exakte Abrechnungswert des Supabase-Dashboards.</p>
     </details>
 
     <div class="personen-sortierung">

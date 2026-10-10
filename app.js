@@ -1,4 +1,4 @@
-// v193: Egress-Diagnose trennt Memory-Cache, Browser-Cache und erfolgreiche Supabase-Bilddownloads inkl. Bytes. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v194: Egress-Diagnose mit sichtbarer Codeversion, stabilen Cache-/Netzwerkzählern und expliziter Messgrenze. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -21,7 +21,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v172";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v194";
 
 function neuesEgressMessObjekt() {
   return {
@@ -35,6 +35,9 @@ function neuesEgressMessObjekt() {
     fotoSupabaseDownloads: 0,
     fotoSupabaseBytes: 0,
     fotoSupabaseFehler: 0,
+    fotoMemoryCachePfade: [],
+    fotoBrowserCachePfade: [],
+    fotoSupabasePfade: [],
     signierteURLAnfragen: 0,
     personenSupabaseAbrufe: 0,
     signierteURLPfade: 0,
@@ -143,12 +146,14 @@ async function ladeFotoBilder(dateipfade) {
     const memoryUrl = fotoBildMemoryCache.get(pfad);
     if (memoryUrl) {
       egressMessung.fotoMemoryCacheTreffer++;
+      if (!egressMessung.fotoMemoryCachePfade.includes(pfad)) egressMessung.fotoMemoryCachePfade.push(pfad);
       ergebnis.set(pfad, memoryUrl);
       continue;
     }
     const cachedUrl = await leseFotoAusBrowserCache(pfad);
     if (cachedUrl) {
       egressMessung.fotoBrowserCacheTreffer++;
+      if (!egressMessung.fotoBrowserCachePfade.includes(pfad)) egressMessung.fotoBrowserCachePfade.push(pfad);
       fotoBildMemoryCache.set(pfad, cachedUrl);
       ergebnis.set(pfad, cachedUrl);
     } else {
@@ -192,6 +197,7 @@ async function ladeFotoBilder(dateipfade) {
       // Echter erfolgreicher Storage-Fetch: als Supabase-Download zählen.
       egressMessung.fotoSupabaseDownloads++;
       egressMessung.fotoSupabaseBytes += blob.size;
+      if (!egressMessung.fotoSupabasePfade.includes(pfad)) egressMessung.fotoSupabasePfade.push(pfad);
       speichereEgressMessung();
       aktualisiereEgressMessung();
       await speichereFotoImBrowserCache(pfad, response);
@@ -302,7 +308,12 @@ function aktualisiereEgressMessung() {
       ).join("\n")
     : "";
   el.textContent =
-    `Messung seit: ${seit}\n` +
+    `Messcode: v194 aktiv · Messung seit: ${seit}\n` +
+    `FOTOS AUS ARBEITSSPEICHER-CACHE: ${egressMessung.fotoMemoryCacheTreffer || 0} Treffer · ${egressMessung.fotoMemoryCachePfade?.length || 0} unterschiedliche Dateien\n` +
+    `FOTOS AUS BROWSER-CACHE: ${egressMessung.fotoBrowserCacheTreffer || 0} Treffer · ${egressMessung.fotoBrowserCachePfade?.length || 0} unterschiedliche Dateien\n` +
+    `FOTOS VON SUPABASE (erfolgreicher Bild-fetch): ${egressMessung.fotoSupabaseDownloads || 0} Dateien · ${formatBytesDebug(egressMessung.fotoSupabaseBytes || 0)} empfangene Bilddaten · ${egressMessung.fotoSupabasePfade?.length || 0} unterschiedliche Dateien\n` +
+    `Bildabruf-Fehler: ${egressMessung.fotoSupabaseFehler || 0}\n` +
+    `Hinweis: Cache-Treffer sind lokale Wiederverwendungen; Supabase-Bytes zählen nur erfolgreiche Bild-fetch-Antworten. Nicht über diesen Ladepfad gesetzte Bilder sind hier nicht enthalten.\n` +
     `Personen-Supabase-Abfragen: ${egressMessung.personenSupabaseAbrufe}\n` +
     `Delta-Sync: ${egressMessung.syncPruefungen || 0} Prüfung(en) · letzter Lauf: ${egressMessung.syncLetzterErfolgreicherLaufAenderungen || 0} Änderung(en) · seq: ${egressMessung.syncLetzterErfolgreicherLaufSeq || 0}\n` +
     `Delta verarbeitet: ${egressMessung.syncLetzterErfolgreicherLaufAktualisiert || 0} Person(en) aktualisiert · ${egressMessung.syncLetzterErfolgreicherLaufGeloescht || 0} gelöscht${egressMessung.syncBeziehungenAktualisiert ? ` · Beziehungen/Familien neu geladen: ${egressMessung.syncBeziehungenAktualisiert}` : ""}\n` +
@@ -310,9 +321,6 @@ function aktualisiereEgressMessung() {
     `Signierte URL-Anfragen: ${egressMessung.signierteURLAnfragen} · Pfade: ${egressMessung.signierteURLPfade}\n` +
     `Bild-URL-Zuweisungen gesamt: ${egressMessung.urlSetzungen} · eindeutig: ${egressMessung.eindeutigeURLSetzungen}\n` +
     `Bild-Ladevorgänge (Elemente): ${egressMessung.loadEvents} · eindeutige URLs: ${egressMessung.eindeutigeLoadURLs}\n` +
-    `Aus Cache: Arbeitsspeicher ${egressMessung.fotoMemoryCacheTreffer || 0} · Browser-Cache ${egressMessung.fotoBrowserCacheTreffer || 0}\n` +
-    `Von Supabase tatsächlich per fetch geladen: ${egressMessung.fotoSupabaseDownloads || 0} Datei(en) · ${formatBytesDebug(egressMessung.fotoSupabaseBytes || 0)} empfangene Bilddaten\n` +
-    `Supabase-Bildabruf-Fehler: ${egressMessung.fotoSupabaseFehler || 0}\n` +
     `ResourceTiming > 0 B: ${formatBytesDebug(egressMessung.transferBytes)}\n` +
     `ResourceTiming 0 B: ${egressMessung.timingNullBytes} · nicht messbar: ${egressMessung.timingNichtMessbar}` + schritte;
 }
