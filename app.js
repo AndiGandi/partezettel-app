@@ -3077,6 +3077,18 @@ document.getElementById("d-sterbebuch-link")?.addEventListener("input", (e) => {
   aktualisiereLinkButton("d-sterbebuch-open", e.target.value);
 });
 
+// v209: URL-Felder bei Bedarf mit dem Bleistift ein-/ausblenden.
+document.querySelectorAll("[data-source-edit]").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const input = document.getElementById(btn.dataset.sourceEdit);
+    if (!input) return;
+    input.classList.toggle("source-url-hidden");
+    input.classList.toggle("source-url-editing");
+    if (!input.classList.contains("source-url-hidden")) input.focus();
+  });
+});
+
+
 // ---- Fotos im Detail ----
 async function loadDetailFotos(personId) {
   const container = document.getElementById("d-fotos-list");
@@ -4142,6 +4154,29 @@ async function loadDetailFamilie(personId) {
 
   parentSelectVater.value = vaterId || "";
   parentSelectMutter.value = mutterId || "";
+  const aktualisiereElternLink = (select, button) => {
+    const person = personenCache.find(p => p.id === select.value);
+    button.textContent = person ? personenAuswahlText(person) : "— nicht angegeben —";
+    button.hidden = !person;
+    select.hidden = !!person;
+  };
+  const vaterOpen = document.getElementById("d-vater-open");
+  const mutterOpen = document.getElementById("d-mutter-open");
+  aktualisiereElternLink(parentSelectVater, vaterOpen);
+  aktualisiereElternLink(parentSelectMutter, mutterOpen);
+  vaterOpen.onclick = () => { if (parentSelectVater.value) openPersonDetail(parentSelectVater.value); };
+  mutterOpen.onclick = () => { if (parentSelectMutter.value) openPersonDetail(parentSelectMutter.value); };
+  document.querySelectorAll("[data-parent-edit]").forEach(btn => {
+    btn.onclick = () => {
+      const select = document.getElementById(btn.dataset.parentEdit);
+      const openBtn = document.getElementById(btn.dataset.parentEdit.replace("d-vater", "d-vater-open").replace("d-mutter", "d-mutter-open"));
+      select.hidden = false; if (openBtn) openBtn.hidden = true; select.focus();
+    };
+  });
+  [parentSelectVater, parentSelectMutter].forEach(select => select.addEventListener("change", () => {
+    const openBtn = document.getElementById(select.id === "d-vater" ? "d-vater-open" : "d-mutter-open");
+    aktualisiereElternLink(select, openBtn);
+  }));
 
   partnerList.innerHTML = "";
   for (const f of partnerFamilies || []) {
@@ -4182,7 +4217,7 @@ async function loadDetailFamilie(personId) {
             <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
           </div>
           <div class="familie-auto-ende"></div>
-          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span></div>
+          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span><button type="button" class="source-edit-btn familie-source-edit" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button><div class="familie-source-editor" hidden><input type="url" class="familie-source-url" placeholder="https://…" aria-label="Trauungsbuch-URL"><label>Zeile <input type="number" class="familie-source-row" min="1" placeholder="–"></label><button type="button" class="btn btn--secondary familie-source-save">Quelle speichern</button></div></div>
           <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
         </div>
       </div>`;
@@ -4285,6 +4320,22 @@ async function loadDetailFamilie(personId) {
       familienQuelleZeile.textContent = "";
       debugLog(`⚠️ Trauungsbuch-Link anzeigen: ${err.message || err}`);
     }
+
+    const sourceEditor = div.querySelector(".familie-source-editor");
+    const sourceEditBtn = div.querySelector(".familie-source-edit");
+    const sourceUrlInput = div.querySelector(".familie-source-url");
+    const sourceRowInput = div.querySelector(".familie-source-row");
+    sourceUrlInput.value = (typeof quelle !== "undefined" && quelle?.trauungsbuch_link) || "";
+    sourceRowInput.value = (typeof quelle !== "undefined" && quelle?.trauungsbuch_zeile) || "";
+    sourceEditBtn.addEventListener("click", () => { sourceEditor.hidden = !sourceEditor.hidden; });
+    div.querySelector(".familie-source-save").addEventListener("click", async () => {
+      const url = sourceUrlInput.value.trim() || null;
+      const row = sourceRowInput.value.trim() ? Number(sourceRowInput.value) : null;
+      const zielPersonId = (typeof quelle !== "undefined" && quelle?.id) || personId;
+      const { error } = await sb.from("personen").update({ trauungsbuch_link: url, trauungsbuch_zeile: row }).eq("id", zielPersonId);
+      if (error) { alert(`Trauungsbuch-Link konnte nicht gespeichert werden: ${error.message}`); return; }
+      await loadDetailFamilie(currentDetailPersonId);
+    });
 
     div.querySelector(".familie-save-btn").addEventListener("click", async () => {
       let eingegebenesEnde = getDatum(endePrefix);

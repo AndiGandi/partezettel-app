@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 207 -->
+    <!-- Version 209 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=207">
+<link rel="stylesheet" href="style.css?v=209">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 207</p>
+  <p id="app-version" class="app-header__version">Version 209</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -377,7 +377,7 @@
             <select id="d-geburtsdatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Geburtsjahr bekannt</span><select id="d-geburtsjahr"><option value="">Jahr</option></select></div>
           </div>
-          <div class="detail-event-source"><span>Taufbuch</span><input type="url" id="d-taufbuch-link" class="source-url-hidden" aria-label="Taufbuch-URL"><div class="source-button-line"><a id="d-taufbuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Taufbuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–"></div></div>
+          <div class="detail-event-source"><span>Taufbuch</span><input type="url" id="d-taufbuch-link" class="source-url-hidden" aria-label="Taufbuch-URL"><div class="source-button-line"><a id="d-taufbuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Taufbuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–"><button type="button" class="source-edit-btn" data-source-edit="d-taufbuch-link" title="Taufbuch-Link bearbeiten" aria-label="Taufbuch-Link bearbeiten">✏️</button></div></div>
           </label>
           <label class="field"><span>Sterbedatum</span><div class="date-parts date-parts--with-year">
             <select id="d-sterbedatum-tag"><option value="">Tag</option></select>
@@ -385,10 +385,10 @@
             <select id="d-sterbedatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Todesjahr bekannt</span><select id="d-sterbejahr"><option value="">Jahr</option></select></div>
           </div>
-          <div class="detail-event-source"><span>Sterbebuch</span><input type="url" id="d-sterbebuch-link" class="source-url-hidden" aria-label="Sterbebuch-URL"><div class="source-button-line"><a id="d-sterbebuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Sterbebuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–"></div></div>
+          <div class="detail-event-source"><span>Sterbebuch</span><input type="url" id="d-sterbebuch-link" class="source-url-hidden" aria-label="Sterbebuch-URL"><div class="source-button-line"><a id="d-sterbebuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Sterbebuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–"><button type="button" class="source-edit-btn" data-source-edit="d-sterbebuch-link" title="Sterbebuch-Link bearbeiten" aria-label="Sterbebuch-Link bearbeiten">✏️</button></div></div>
           </label>
         </div>
-        <div hidden aria-hidden="true"><input type="url" id="d-trauungsbuch-link"><input type="number" id="d-trauungsbuch-zeile"><a id="d-trauungsbuch-open" href="#" hidden></a></div>
+        <div class="detail-event-source trauungsbuch-person-source"><span>Trauungsbuch-Link (Person)</span><input type="url" id="d-trauungsbuch-link" class="source-url-hidden" aria-label="Trauungsbuch-URL"><div class="source-button-line"><a id="d-trauungsbuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Trauungsbuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-trauungsbuch-zeile" min="1" inputmode="numeric" placeholder="–"><button type="button" class="source-edit-btn" data-source-edit="d-trauungsbuch-link" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button></div></div>
         <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
       </fieldset>
 
@@ -417,12 +417,8 @@
 
       <fieldset class="field-group">
         <legend>Eltern</legend>
-        <label class="field"><span>Vater</span>
-          <select id="d-vater"><option value="">— nicht angegeben —</option></select>
-        </label>
-        <label class="field"><span>Mutter</span>
-          <select id="d-mutter"><option value="">— nicht angegeben —</option></select>
-        </label>
+        <div class="field parent-link-field"><span>Vater</span><button type="button" id="d-vater-open" class="parent-open-link" hidden></button><button type="button" class="source-edit-btn parent-edit-btn" data-parent-edit="d-vater" title="Vater ändern" aria-label="Vater ändern">✏️</button><select id="d-vater"><option value="">— nicht angegeben —</option></select></div>
+        <div class="field parent-link-field"><span>Mutter</span><button type="button" id="d-mutter-open" class="parent-open-link" hidden></button><button type="button" class="source-edit-btn parent-edit-btn" data-parent-edit="d-mutter" title="Mutter ändern" aria-label="Mutter ändern">✏️</button><select id="d-mutter"><option value="">— nicht angegeben —</option></select></div>
         <button type="button" id="d-save-eltern-btn" class="btn btn--secondary btn--full">Eltern speichern</button>
       </fieldset>
 
@@ -562,6 +558,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=207"></script>
+<script src="app.js?v=209"></script>
 </body>
 </html>
