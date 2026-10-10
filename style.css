@@ -596,7 +596,3 @@
 .tree-classic-node--children .tree-node{min-height:76px}
 .tree-classic-svg .tree-classic-family{stroke:var(--accent);stroke-width:2}
 .tree-classic-svg .tree-classic-spouse{stroke:var(--accent);stroke-width:2.5}
-
-/* v191: Gruppenfotos bereits in der Übersicht als kleine Vorschaubilder zeigen. */
-#gruppenfoto-liste .gruppenfoto-uebersicht-item{min-height:68px;gap:.65rem}
-#gruppenfoto-liste .gruppenfoto-miniatur{width:64px;height:56px;flex:0 0 64px;object-fit:cover;border-radius:5px;background:#eee}
