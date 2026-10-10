@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 204 -->
+    <!-- Version 205 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=203">
+<link rel="stylesheet" href="style.css?v=205">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 204</p>
+  <p id="app-version" class="app-header__version">Version 205</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -134,7 +134,7 @@
           <p id="erst-partner-hinweis" class="capture-status" aria-live="polite"></p>
         </fieldset>
 
-        <div class="field-row source-links-row">
+        <div class="field-row source-links-row" hidden>
           <label class="field source-link-field">
             <span>Taufbuch-Link</span>
             <div class="source-link-inline">
@@ -376,45 +376,19 @@
             <select id="d-geburtsdatum-monat"><option value="">Monat</option></select>
             <select id="d-geburtsdatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Geburtsjahr bekannt</span><select id="d-geburtsjahr"><option value="">Jahr</option></select></div>
-          </div></label>
+          </div>
+          <div class="detail-event-source"><span>Taufbuch-Link</span><div class="source-link-inline"><input type="url" id="d-taufbuch-link" placeholder="https://…" inputmode="url"><span class="source-line-label">Zeile</span><input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–"></div><a id="d-taufbuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Taufbuch öffnen</a></div>
+          </label>
           <label class="field"><span>Sterbedatum</span><div class="date-parts date-parts--with-year">
             <select id="d-sterbedatum-tag"><option value="">Tag</option></select>
             <select id="d-sterbedatum-monat"><option value="">Monat</option></select>
             <select id="d-sterbedatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Todesjahr bekannt</span><select id="d-sterbejahr"><option value="">Jahr</option></select></div>
-          </div></label>
-        </div>
-        <div class="field-row source-links-row">
-          <label class="field source-link-field">
-            <span>Taufbuch-Link</span>
-            <div class="source-link-inline">
-              <input type="url" id="d-taufbuch-link" placeholder="https://…" inputmode="url">
-              <span class="source-line-label">Zeile</span>
-              <input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–">
-            </div>
-          </label>
-          <label class="field source-link-field">
-            <span>Trauungsbuch-Link</span>
-            <div class="source-link-inline">
-              <input type="url" id="d-trauungsbuch-link" placeholder="https://…" inputmode="url">
-              <span class="source-line-label">Zeile</span>
-              <input type="number" id="d-trauungsbuch-zeile" min="1" inputmode="numeric" placeholder="–">
-            </div>
-          </label>
-          <label class="field source-link-field">
-            <span>Sterbebuch-Link</span>
-            <div class="source-link-inline">
-              <input type="url" id="d-sterbebuch-link" placeholder="https://…" inputmode="url">
-              <span class="source-line-label">Zeile</span>
-              <input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–">
-            </div>
+          </div>
+          <div class="detail-event-source"><span>Sterbebuch-Link</span><div class="source-link-inline"><input type="url" id="d-sterbebuch-link" placeholder="https://…" inputmode="url"><span class="source-line-label">Zeile</span><input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–"></div><a id="d-sterbebuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Sterbebuch öffnen</a></div>
           </label>
         </div>
-        <div class="capture-row detail-links-row">
-          <a id="d-taufbuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Taufbuch öffnen</a>
-          <a id="d-trauungsbuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Trauungsbuch öffnen</a>
-          <a id="d-sterbebuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Sterbebuch öffnen</a>
-        </div>
+        <div hidden aria-hidden="true"><input type="url" id="d-trauungsbuch-link"><input type="number" id="d-trauungsbuch-zeile"><a id="d-trauungsbuch-open" href="#" hidden></a></div>
         <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
       </fieldset>
 
@@ -588,6 +562,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=203"></script>
+<script src="app.js?v=205"></script>
 </body>
 </html>

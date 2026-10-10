@@ -599,3 +599,18 @@
 
 /* Versteckte Formularbereiche bei der Verwandtschaftsauswahl zuverlässig ausblenden. */
 [hidden] { display: none !important; }
+
+
+/* v205: Quellen direkt beim passenden Lebensereignis bzw. Familienblock */
+.detail-date-sources { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.65rem; margin:.5rem 0 1rem; }
+.detail-source-box { min-width:0; margin:0; padding:.65rem; }
+.detail-source-box .source-link-inline { display:grid; grid-template-columns:minmax(0,1fr) auto 4rem; gap:.35rem; align-items:center; }
+.detail-source-box input, .familie-quelle-row input { min-width:0; width:100%; box-sizing:border-box; }
+.familie-quellen { margin:.6rem 0; padding:.6rem; }
+.familie-quellen-liste { display:grid; gap:.4rem; margin-bottom:.5rem; }
+.familie-quelle-row { display:grid; grid-template-columns:minmax(0,1fr) auto 4rem auto; gap:.35rem; align-items:center; }
+@media (max-width:640px) { .detail-date-sources { grid-template-columns:minmax(0,1fr); } }
+.detail-event-source { margin-top:.55rem; padding-top:.45rem; border-top:1px solid var(--border-color, #ddd); display:grid; gap:.35rem; }
+.detail-event-source > span { font-size:.9rem; color:var(--text-muted, #68645d); }
+.detail-event-source .source-link-inline { display:grid; grid-template-columns:minmax(0,1fr) auto 4rem; gap:.35rem; align-items:center; }
+.detail-event-source input { min-width:0; width:100%; box-sizing:border-box; }
