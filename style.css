@@ -692,46 +692,53 @@
   .familie-trauungsbuch .familie-trauungsbuch-link { min-width: 8rem; padding: .4rem .5rem; }
 }
 
-/* v217: Trauungsbuch-Zeile im Partnerschaftsblock sauber ausrichten */
+/* v218: Trauungsbuch-Zeile – flexible Zeile ohne schmale Grid-Spalte */
 .familie-trauungsbuch {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  display: flex;
+  flex-flow: row wrap;
   align-items: center;
-  justify-content: stretch;
-  column-gap: .55rem;
-  row-gap: .4rem;
+  justify-content: flex-start;
+  gap: .4rem .55rem;
   width: 100%;
+  min-width: 0;
   box-sizing: border-box;
+  margin: .45rem 0 .6rem;
+  line-height: 1.35;
 }
 .familie-trauungsbuch > span:first-child {
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 .familie-trauungsbuch .familie-trauungsbuch-link {
+  display: inline-flex;
+  flex: 0 1 auto;
+  align-items: center;
+  justify-content: flex-start;
+  width: auto;
   min-width: 0;
-  width: fit-content;
   max-width: 100%;
   box-sizing: border-box;
   white-space: normal;
   overflow-wrap: anywhere;
+  word-break: normal;
   text-align: left;
 }
 .familie-trauungsbuch .familie-trauungsbuch-zeile {
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 .familie-trauungsbuch .familie-source-edit {
-  justify-self: end;
+  flex: 0 0 auto;
+  margin-left: .1rem;
 }
 .familie-trauungsbuch .familie-source-editor {
-  grid-column: 1 / -1;
+  flex: 1 0 100%;
+  width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
+.familie-trauungsbuch .familie-source-editor[hidden] { display: none !important; }
 @media (max-width: 520px) {
-  .familie-trauungsbuch {
-    grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
-    column-gap: .35rem;
-  }
-  .familie-trauungsbuch .familie-trauungsbuch-link {
-    min-width: 0;
-    padding: .4rem .5rem;
-  }
+  .familie-trauungsbuch { gap: .35rem; }
+  .familie-trauungsbuch .familie-trauungsbuch-link { padding: .4rem .5rem; }
 }
