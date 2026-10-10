@@ -663,3 +663,30 @@
   .date-source-inline .source-open-btn { font-size:.78rem; padding:.35rem .3rem; }
   .date-source-inline .source-line-label { display:none; }
 }
+
+
+/* v211: Trauungsbuch-Quelle sauber in einer Zeile ohne Überlagerungen. */
+.familie-trauungsbuch {
+  display: grid;
+  grid-template-columns: max-content minmax(9rem, max-content) max-content max-content;
+  justify-content: start;
+  align-items: center;
+  gap: .4rem .55rem;
+  min-width: 0;
+}
+.familie-trauungsbuch > span:first-child { white-space: nowrap; }
+.familie-trauungsbuch .familie-trauungsbuch-link {
+  min-width: 9rem;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: nowrap;
+  overflow-wrap: normal;
+  text-align: center;
+}
+.familie-trauungsbuch .familie-trauungsbuch-zeile { white-space: nowrap; }
+.familie-trauungsbuch .familie-source-edit { justify-self: start; }
+.familie-trauungsbuch .familie-source-editor { grid-column: 1 / -1; }
+@media (max-width: 520px) {
+  .familie-trauungsbuch { grid-template-columns: max-content minmax(8rem, max-content) max-content max-content; gap: .35rem; }
+  .familie-trauungsbuch .familie-trauungsbuch-link { min-width: 8rem; padding: .4rem .5rem; }
+}
