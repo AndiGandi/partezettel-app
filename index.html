@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 201 -->
+    <!-- Version 203 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=201">
+<link rel="stylesheet" href="style.css?v=203">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 201</p>
+  <p id="app-version" class="app-header__version">Version 203</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -119,6 +119,19 @@
             <select id="erstverwandtschaft-elternteil"><option value="">— Mutter oder Vater auswählen —</option></select>
           </label>
           <p id="erstverwandtschaft-hinweis" class="capture-status" aria-live="polite"></p>
+          <hr>
+          <h3>Ehepartner/in oder Partner/in (optional)</h3>
+          <p class="capture-status">Du kannst eine bereits vorhandene Person auswählen. Die Beziehung wird beim Speichern zusätzlich angelegt.</p>
+          <label class="field"><span>Vorhandene Person</span>
+            <select id="erst-partner-vorhanden"><option value="">— keinen Partner auswählen —</option></select>
+          </label>
+          <label class="field"><span>Art der Beziehung</span>
+            <select id="erst-partnerschaft-art">
+              <option value="Ehe">Ehe</option>
+              <option value="Partnerschaft">Partnerschaft</option>
+            </select>
+          </label>
+          <p id="erst-partner-hinweis" class="capture-status" aria-live="polite"></p>
         </fieldset>
 
         <div class="field-row source-links-row">
@@ -575,6 +588,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=201"></script>
+<script src="app.js?v=203"></script>
 </body>
 </html>

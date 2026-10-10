@@ -1,4 +1,4 @@
-// v199: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v203: Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -1077,6 +1077,27 @@ const erstFamilie = document.getElementById("erstverwandtschaft-familie");
 const erstElternteil = document.getElementById("erstverwandtschaft-elternteil");
 const erstRelationHinweis = document.getElementById("erstverwandtschaft-hinweis");
 let erstRelationDaten = { personen: [], familien: [] };
+const erstPartnerVorhanden = document.getElementById("erst-partner-vorhanden");
+const erstPartnerschaftArt = document.getElementById("erst-partnerschaft-art");
+let erstPartnerPersonenGeladen = false;
+async function ladeErstPartnerPersonen() {
+  if (!erstPartnerVorhanden || erstPartnerPersonenGeladen) return;
+  const { data, error } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname").limit(5000);
+  if (error) throw error;
+  const aktuell = document.getElementById("erstverwandtschaft-person")?.value || "";
+  erstPartnerVorhanden.innerHTML = '<option value="">— keinen Partner auswählen —</option>';
+  for (const person of data || []) {
+    if (person.id === aktuell) continue;
+    erstPartnerVorhanden.appendChild(new Option(personenAuswahlText(person), person.id));
+  }
+  erstPartnerPersonenGeladen = true;
+}
+if (erstPartnerVorhanden) {
+  erstPartnerVorhanden.addEventListener("focus", async () => {
+    try { await ladeErstPartnerPersonen(); }
+    catch (err) { const msg = document.getElementById("erst-partner-hinweis"); if (msg) msg.textContent = `Personen konnten nicht geladen werden: ${err.message || err}`; }
+  });
+}
 async function ladeErstverwandtschaftPersonen() {
   if (!erstPerson) return;
   erstPerson.innerHTML = '<option value="">— Person auswählen —</option>';
@@ -1182,6 +1203,8 @@ form.addEventListener("submit", async (e) => {
     erstverwandtschaftPerson: document.getElementById("erstverwandtschaft-person")?.value || null,
     erstverwandtschaftFamilie: document.getElementById("erstverwandtschaft-familie")?.value || null,
     erstverwandtschaftElternteil: document.getElementById("erstverwandtschaft-elternteil")?.value || null,
+    erstPartnerId: document.getElementById("erst-partner-vorhanden")?.value || null,
+    erstPartnerschaftArt: document.getElementById("erst-partnerschaft-art")?.value || "Ehe",
   };
 
   if (!eintrag.vorname || !eintrag.nachname) {
@@ -1237,6 +1260,9 @@ function resetForm() {
   if (erstFamilie) erstFamilie.innerHTML = '<option value="">— Elternfamilie auswählen —</option>';
   if (erstElternteil) erstElternteil.innerHTML = '<option value="">— Mutter oder Vater auswählen —</option>';
   if (erstRelationHinweis) erstRelationHinweis.textContent = "";
+  if (erstPartnerVorhanden) { erstPartnerVorhanden.value = ""; erstPartnerVorhanden.innerHTML = '<option value="">— keinen Partner auswählen —</option>'; erstPartnerPersonenGeladen = false; }
+  const erstPartnerHinweis = document.getElementById("erst-partner-hinweis");
+  if (erstPartnerHinweis) erstPartnerHinweis.textContent = "";
   document.getElementById("erstverwandtschaft-person-wrap").hidden = true;
   document.getElementById("erstverwandtschaft-familie-wrap").hidden = true;
   document.getElementById("erstverwandtschaft-elternteil-wrap").hidden = true;
@@ -1315,6 +1341,18 @@ async function sendEintrag(eintrag, onProgress) {
     if (eintrag.erstverwandtschaftTyp && eintrag.erstverwandtschaftTyp !== "keine") {
       step("Verwandtschaft speichern …");
       await speichereErstverwandtschaft(eintrag);
+    }
+    if (eintrag.erstPartnerId) {
+      if (eintrag.erstPartnerId === eintrag.id) throw new Error("Die Person kann nicht ihr eigener Partner sein.");
+      step("Ehe/Partnerschaft speichern …");
+      const { error: partnerError } = await sb.from("familien").insert({
+        partner_a_id: eintrag.id,
+        partner_b_id: eintrag.erstPartnerId,
+        familientyp: eintrag.erstPartnerschaftArt || "Ehe",
+        beginn: null,
+        ende: null,
+      });
+      if (partnerError) throw partnerError;
     }
 
     // 2. Fotos hochladen
