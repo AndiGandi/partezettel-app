@@ -2838,10 +2838,14 @@ function aktualisiereLinkButton(id, wert) {
     btn.href = link;
     btn.hidden = false;
     btn.classList.add("btn--link-present");
+    btn.removeAttribute("aria-disabled");
+    btn.setAttribute("tabindex", "0");
   } else {
     btn.href = "#";
-    btn.hidden = true;
+    btn.hidden = false;
     btn.classList.remove("btn--link-present");
+    btn.setAttribute("aria-disabled", "true");
+    btn.removeAttribute("tabindex");
   }
 }
 
@@ -2873,6 +2877,8 @@ async function openPersonDetail(personId, options = {}) {
   aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
   aktualisiereLinkButton("d-trauungsbuch-open", person.trauungsbuch_link);
   aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
+  document.getElementById("d-taufbuch-open").textContent = person.taufbuch_link ? "📖 Taufbuch öffnen" : "📖 Kein Taufbuch-Link";
+  document.getElementById("d-sterbebuch-open").textContent = person.sterbebuch_link ? "📖 Sterbebuch öffnen" : "📖 Kein Sterbebuch-Link";
   document.getElementById("d-notiz").value = person.Notiz || "";
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
@@ -4260,14 +4266,23 @@ async function loadDetailFamilie(personId) {
         familienQuelleLink.href = quelle.trauungsbuch_link;
         familienQuelleLink.textContent = "Trauungsbuch öffnen";
         familienQuelleLink.hidden = false;
-        familienQuelleZeile.textContent = quelle.trauungsbuch_zeile ? ` · Zeile ${quelle.trauungsbuch_zeile}` : "";
+        familienQuelleLink.classList.add("btn--link-present");
+        familienQuelleLink.removeAttribute("aria-disabled");
+        familienQuelleZeile.textContent = quelle.trauungsbuch_zeile ? `Zeile ${quelle.trauungsbuch_zeile}` : "Zeile –";
       } else {
-        familienQuelleLink.hidden = true;
-        familienQuelleZeile.textContent = "Kein Link hinterlegt";
+        familienQuelleLink.hidden = false;
+        familienQuelleLink.href = "#";
+        familienQuelleLink.textContent = "Trauungsbuch nicht hinterlegt";
+        familienQuelleLink.classList.remove("btn--link-present");
+        familienQuelleLink.setAttribute("aria-disabled", "true");
+        familienQuelleZeile.textContent = "";
       }
     } catch (err) {
-      familienQuelleLink.hidden = true;
-      familienQuelleZeile.textContent = "Trauungsbuch-Link konnte nicht geladen werden";
+      familienQuelleLink.hidden = false;
+      familienQuelleLink.href = "#";
+      familienQuelleLink.textContent = "Trauungsbuch-Link nicht verfügbar";
+      familienQuelleLink.classList.remove("btn--link-present");
+      familienQuelleZeile.textContent = "";
       debugLog(`⚠️ Trauungsbuch-Link anzeigen: ${err.message || err}`);
     }
 

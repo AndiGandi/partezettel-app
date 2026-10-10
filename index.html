@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 205 -->
+    <!-- Version 207 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=206">
+<link rel="stylesheet" href="style.css?v=207">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 205</p>
+  <p id="app-version" class="app-header__version">Version 207</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -377,7 +377,7 @@
             <select id="d-geburtsdatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Geburtsjahr bekannt</span><select id="d-geburtsjahr"><option value="">Jahr</option></select></div>
           </div>
-          <div class="detail-event-source"><span>Taufbuch-Link</span><div class="source-link-inline"><input type="url" id="d-taufbuch-link" placeholder="https://…" inputmode="url"><span class="source-line-label">Zeile</span><input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–"></div><a id="d-taufbuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Taufbuch öffnen</a></div>
+          <div class="detail-event-source"><span>Taufbuch</span><input type="url" id="d-taufbuch-link" class="source-url-hidden" aria-label="Taufbuch-URL"><div class="source-button-line"><a id="d-taufbuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Taufbuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–"></div></div>
           </label>
           <label class="field"><span>Sterbedatum</span><div class="date-parts date-parts--with-year">
             <select id="d-sterbedatum-tag"><option value="">Tag</option></select>
@@ -385,7 +385,7 @@
             <select id="d-sterbedatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Todesjahr bekannt</span><select id="d-sterbejahr"><option value="">Jahr</option></select></div>
           </div>
-          <div class="detail-event-source"><span>Sterbebuch-Link</span><div class="source-link-inline"><input type="url" id="d-sterbebuch-link" placeholder="https://…" inputmode="url"><span class="source-line-label">Zeile</span><input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–"></div><a id="d-sterbebuch-open" class="btn btn--secondary" href="#" target="_blank" rel="noopener" hidden>📖 Sterbebuch öffnen</a></div>
+          <div class="detail-event-source"><span>Sterbebuch</span><input type="url" id="d-sterbebuch-link" class="source-url-hidden" aria-label="Sterbebuch-URL"><div class="source-button-line"><a id="d-sterbebuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Sterbebuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–"></div></div>
           </label>
         </div>
         <div hidden aria-hidden="true"><input type="url" id="d-trauungsbuch-link"><input type="number" id="d-trauungsbuch-zeile"><a id="d-trauungsbuch-open" href="#" hidden></a></div>
@@ -562,6 +562,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=206"></script>
+<script src="app.js?v=207"></script>
 </body>
 </html>
