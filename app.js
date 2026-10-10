@@ -1,4 +1,4 @@
-// v194: Egress-Diagnose mit sichtbarer Codeversion, stabilen Cache-/Netzwerkzählern und expliziter Messgrenze. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v195: Egress-Messung mit Quellenklassifizierung, Zugriffen/Dateien getrennt und Bild-Load-Erfassung für alle Ansichten. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -21,7 +21,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v194";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v195";
 
 function neuesEgressMessObjekt() {
   return {
@@ -38,6 +38,20 @@ function neuesEgressMessObjekt() {
     fotoMemoryCachePfade: [],
     fotoBrowserCachePfade: [],
     fotoSupabasePfade: [],
+    fotoDirektFallbackLoads: 0,
+    fotoDirektFallbackPfade: [],
+    fotoQuelleUnbekanntLoads: 0,
+    fotoQuelleUnbekanntPfade: [],
+    fotoMemoryLoadEvents: 0,
+    fotoBrowserLoadEvents: 0,
+    fotoSupabaseLoadEvents: 0,
+    fotoCacheZugriffe: 0,
+    fotoBrowserCacheZugriffe: 0,
+    fotoNetzwerkVersuche: 0,
+    fotoNetzwerkErfolge: 0,
+    fotoNetzwerkFehler: 0,
+    fotoLadePfade: [],
+    fotoFehlerPfade: [],
     signierteURLAnfragen: 0,
     personenSupabaseAbrufe: 0,
     signierteURLPfade: 0,
@@ -74,6 +88,13 @@ function ladeEgressMessung() {
       ...parsed,
       uniqueAssignedUrls: Array.isArray(parsed.uniqueAssignedUrls) ? parsed.uniqueAssignedUrls : [],
       uniqueLoadedUrls: Array.isArray(parsed.uniqueLoadedUrls) ? parsed.uniqueLoadedUrls : [],
+      fotoMemoryCachePfade: Array.isArray(parsed.fotoMemoryCachePfade) ? parsed.fotoMemoryCachePfade : [],
+      fotoBrowserCachePfade: Array.isArray(parsed.fotoBrowserCachePfade) ? parsed.fotoBrowserCachePfade : [],
+      fotoSupabasePfade: Array.isArray(parsed.fotoSupabasePfade) ? parsed.fotoSupabasePfade : [],
+      fotoDirektFallbackPfade: Array.isArray(parsed.fotoDirektFallbackPfade) ? parsed.fotoDirektFallbackPfade : [],
+      fotoQuelleUnbekanntPfade: Array.isArray(parsed.fotoQuelleUnbekanntPfade) ? parsed.fotoQuelleUnbekanntPfade : [],
+      fotoLadePfade: Array.isArray(parsed.fotoLadePfade) ? parsed.fotoLadePfade : [],
+      fotoFehlerPfade: Array.isArray(parsed.fotoFehlerPfade) ? parsed.fotoFehlerPfade : [],
       schritte: Array.isArray(parsed.schritte) ? parsed.schritte : []
     };
   } catch (_) {
@@ -92,6 +113,8 @@ const egressMessung = ladeEgressMessung();
 const FOTO_CACHE_NAME = "partezettel-fotos-v171";
 const fotoBildMemoryCache = new Map(); // dateipfad -> objectURL
 const fotoBildLadePromises = new Map(); // dateipfad -> Promise<objectURL|null>
+const fotoQuelleNachUrl = new Map(); // objectURL/signierte URL -> Quelle der Bilddaten
+const fotoPfadeMitQuelle = new Map(); // dateipfad -> letzte bekannte Quelle
 
 function fotoCacheSchluessel(dateipfad) {
   return new Request(`${location.origin}/__partezettel_foto_cache__/${encodeURIComponent(dateipfad)}`);
@@ -143,9 +166,13 @@ async function ladeFotoBilder(dateipfade) {
 
   const fehlende = [];
   for (const pfad of pfade) {
+    if (!egressMessung.fotoLadePfade.includes(pfad)) egressMessung.fotoLadePfade.push(pfad);
     const memoryUrl = fotoBildMemoryCache.get(pfad);
     if (memoryUrl) {
       egressMessung.fotoMemoryCacheTreffer++;
+      egressMessung.fotoCacheZugriffe++;
+      fotoPfadeMitQuelle.set(pfad, "Arbeitsspeicher-Cache");
+      fotoQuelleNachUrl.set(memoryUrl, "Arbeitsspeicher-Cache");
       if (!egressMessung.fotoMemoryCachePfade.includes(pfad)) egressMessung.fotoMemoryCachePfade.push(pfad);
       ergebnis.set(pfad, memoryUrl);
       continue;
@@ -153,6 +180,9 @@ async function ladeFotoBilder(dateipfade) {
     const cachedUrl = await leseFotoAusBrowserCache(pfad);
     if (cachedUrl) {
       egressMessung.fotoBrowserCacheTreffer++;
+      egressMessung.fotoBrowserCacheZugriffe++;
+      fotoPfadeMitQuelle.set(pfad, "Browser-Cache");
+      fotoQuelleNachUrl.set(cachedUrl, "Browser-Cache");
       if (!egressMessung.fotoBrowserCachePfade.includes(pfad)) egressMessung.fotoBrowserCachePfade.push(pfad);
       fotoBildMemoryCache.set(pfad, cachedUrl);
       ergebnis.set(pfad, cachedUrl);
@@ -165,59 +195,86 @@ async function ladeFotoBilder(dateipfade) {
   aktualisiereEgressMessung();
   if (!fehlende.length) return ergebnis;
 
-  // Nur für tatsächlich noch nicht lokal vorhandene Bilder eine signierte URL
-  // anfordern. Mehrere Bilder werden weiterhin mit EINEM createSignedUrls-
-  // Aufruf geholt.
-  egressMessung.signierteURLAnfragen++;
-  egressMessung.signierteURLPfade += fehlende.length;
+  // Dedupliziere gleichzeitige Requests: bereits laufende Pfade werden nicht
+  // nochmals signiert oder heruntergeladen.
+  const neuZuLaden = fehlende.filter(p => !fotoBildLadePromises.has(p));
+  const laufende = fehlende.filter(p => fotoBildLadePromises.has(p));
+  if (neuZuLaden.length) {
+    egressMessung.signierteURLAnfragen++;
+    egressMessung.signierteURLPfade += neuZuLaden.length;
+    egressMessung.fotoNetzwerkVersuche += neuZuLaden.length;
+    speichereEgressMessung();
+    aktualisiereEgressMessung();
+
+    const batchPromise = (async () => {
+      const { data: signedList, error } = await sb.storage.from(BUCKET_FOTOS).createSignedUrls(neuZuLaden, 3600);
+      if (error) throw error;
+      const signedByPath = new Map();
+      for (const item of signedList || []) if (item?.path && item?.signedUrl) signedByPath.set(item.path, item.signedUrl);
+
+      await Promise.all(neuZuLaden.map(async (pfad) => {
+        const signedUrl = signedByPath.get(pfad);
+        if (!signedUrl) {
+          egressMessung.fotoSupabaseFehler++;
+          egressMessung.fotoNetzwerkFehler++;
+          if (!egressMessung.fotoFehlerPfade.includes(pfad)) egressMessung.fotoFehlerPfade.push(pfad);
+          return;
+        }
+        try {
+          const response = await fetch(signedUrl, { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const blob = await response.blob();
+          if (!blob.size) throw new Error("leere Bildantwort");
+          egressMessung.fotoSupabaseDownloads++;
+          egressMessung.fotoSupabaseBytes += blob.size;
+          egressMessung.fotoNetzwerkErfolge++;
+          if (!egressMessung.fotoSupabasePfade.includes(pfad)) egressMessung.fotoSupabasePfade.push(pfad);
+          fotoPfadeMitQuelle.set(pfad, "Supabase-Netzwerk");
+          const responseForCache = new Response(blob, { status: 200, headers: { "Content-Type": blob.type || "image/jpeg" } });
+          await speichereFotoImBrowserCache(pfad, responseForCache);
+          const objectUrl = URL.createObjectURL(blob);
+          fotoBildMemoryCache.set(pfad, objectUrl);
+          fotoQuelleNachUrl.set(objectUrl, "Supabase-Netzwerk");
+          ergebnis.set(pfad, objectUrl);
+        } catch (err) {
+          egressMessung.fotoSupabaseFehler++;
+          egressMessung.fotoNetzwerkFehler++;
+          if (!egressMessung.fotoFehlerPfade.includes(pfad)) egressMessung.fotoFehlerPfade.push(pfad);
+          // Direkter <img>-Fallback: wird explizit als nicht byte-messbar erfasst.
+          fotoPfadeMitQuelle.set(pfad, "Direkter Browser-Fallback (Bytes unbekannt)");
+          fotoQuelleNachUrl.set(signedUrl, "Direkter Browser-Fallback (Bytes unbekannt)");
+          ergebnis.set(pfad, signedUrl);
+          debugLog(`⚠️ Bild-Fallback für ${pfad}: ${err.message || err}`);
+        }
+      }));
+    })();
+
+    for (const pfad of neuZuLaden) fotoBildLadePromises.set(pfad, batchPromise.then(() => ergebnis.get(pfad) || null));
+    try { await batchPromise; }
+    catch (err) {
+      for (const pfad of neuZuLaden) {
+        egressMessung.fotoSupabaseFehler++;
+        egressMessung.fotoNetzwerkFehler++;
+        if (!egressMessung.fotoFehlerPfade.includes(pfad)) egressMessung.fotoFehlerPfade.push(pfad);
+      }
+      debugLog(`❌ Signierte Bild-URLs: ${err.message || err}`);
+    } finally {
+      for (const pfad of neuZuLaden) fotoBildLadePromises.delete(pfad);
+    }
+  }
+
+  if (laufende.length) {
+    await Promise.all(laufende.map(async pfad => {
+      try {
+        const url = await fotoBildLadePromises.get(pfad);
+        if (url) ergebnis.set(pfad, url);
+      } catch (_) {}
+    }));
+  }
   speichereEgressMessung();
   aktualisiereEgressMessung();
-
-  const { data: signedList, error } = await sb.storage
-    .from(BUCKET_FOTOS)
-    .createSignedUrls(fehlende, 3600);
-  if (error) {
-    debugLog(`❌ Bild-URLs laden: ${error.message}`);
-    return ergebnis;
-  }
-
-  const signedByPath = new Map();
-  for (const item of signedList || []) {
-    if (item?.path && item?.signedUrl) signedByPath.set(item.path, item.signedUrl);
-  }
-
-  await Promise.all(fehlende.map(async (pfad) => {
-    const signedUrl = signedByPath.get(pfad);
-    if (!signedUrl) return;
-    try {
-      const response = await fetch(signedUrl, { cache: "no-store" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.clone().blob();
-      if (!blob.size) throw new Error("leere Bildantwort");
-      // Echter erfolgreicher Storage-Fetch: als Supabase-Download zählen.
-      egressMessung.fotoSupabaseDownloads++;
-      egressMessung.fotoSupabaseBytes += blob.size;
-      if (!egressMessung.fotoSupabasePfade.includes(pfad)) egressMessung.fotoSupabasePfade.push(pfad);
-      speichereEgressMessung();
-      aktualisiereEgressMessung();
-      await speichereFotoImBrowserCache(pfad, response);
-      const objectUrl = URL.createObjectURL(blob);
-      fotoBildMemoryCache.set(pfad, objectUrl);
-      ergebnis.set(pfad, objectUrl);
-    } catch (err) {
-      egressMessung.fotoSupabaseFehler++;
-      speichereEgressMessung();
-      aktualisiereEgressMessung();
-      // Fallback: bestehendes Verhalten beibehalten, falls Cache Storage oder
-      // CORS auf dem Gerät nicht verfügbar ist.
-      ergebnis.set(pfad, signedUrl);
-      debugLog(`⚠️ Bild-Cache Fallback für ${pfad}: ${err.message || err}`);
-    }
-  }));
-
   return ergebnis;
 }
-
 async function ladeFotoBild(dateipfad) {
   if (!dateipfad) return null;
   const bestehend = fotoBildLadePromises.get(dateipfad);
@@ -257,27 +314,45 @@ function findeResourceTiming(url) {
   return null;
 }
 
-function registriereEgressBildLoad(url) {
+function registriereEgressBildLoad(url, img = null) {
+  // Verhindert, dass dasselbe load-Event durch lokale und globale Listener
+  // doppelt gezählt wird. Ein erneutes Setzen derselben URL zählt nicht erneut.
+  if (img && img.dataset.egressLastCountedSrc === url) return;
+  if (img) img.dataset.egressLastCountedSrc = url;
   egressMessung.loadEvents++;
   if (url && !egressMessung.uniqueLoadedUrls.includes(url)) {
     egressMessung.uniqueLoadedUrls.push(url);
     egressMessung.eindeutigeLoadURLs++;
   }
-
+  const quelle = fotoQuelleNachUrl.get(url) || "Unbekannt / außerhalb des zentralen Ladepfads";
+  if (quelle === "Arbeitsspeicher-Cache") egressMessung.fotoMemoryLoadEvents++;
+  else if (quelle === "Browser-Cache") egressMessung.fotoBrowserLoadEvents++;
+  else if (quelle === "Supabase-Netzwerk") egressMessung.fotoSupabaseLoadEvents++;
+  else if (quelle.startsWith("Direkter Browser-Fallback")) {
+    egressMessung.fotoDirektFallbackLoads++;
+    const pfad = img?.dataset?.fotoPfad || "(Pfad unbekannt)";
+    if (!egressMessung.fotoDirektFallbackPfade.includes(pfad)) egressMessung.fotoDirektFallbackPfade.push(pfad);
+  } else {
+    egressMessung.fotoQuelleUnbekanntLoads++;
+    if (url && !egressMessung.fotoQuelleUnbekanntPfade.includes(url)) egressMessung.fotoQuelleUnbekanntPfade.push(url);
+  }
   const timing = findeResourceTiming(url);
-  if (!timing) {
-    egressMessung.timingNichtMessbar++;
-  } else if (Number.isFinite(timing.transferSize)) {
+  if (!timing) egressMessung.timingNichtMessbar++;
+  else if (Number.isFinite(timing.transferSize)) {
     egressMessung.transferMessungen++;
     if (timing.transferSize > 0) egressMessung.transferBytes += timing.transferSize;
     else egressMessung.timingNullBytes++;
-  } else {
-    egressMessung.timingNichtMessbar++;
-  }
+  } else egressMessung.timingNichtMessbar++;
   speichereEgressMessung();
   aktualisiereEgressMessung();
 }
 
+// Capture-Listener deckt auch Bilder in Stammbaum, Gruppenfoto und Detailansicht
+// ab. Die Herkunft wird nur dann zugeordnet, wenn der zentrale Loader sie kennt.
+document.addEventListener("load", (event) => {
+  const img = event.target;
+  if (img && img.tagName === "IMG") registriereEgressBildLoad(img.currentSrc || img.src || "", img);
+}, true);
 function registriereEgressSchritt(label) {
   const step = {
     zeit: new Date().toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
@@ -308,12 +383,14 @@ function aktualisiereEgressMessung() {
       ).join("\n")
     : "";
   el.textContent =
-    `Messcode: v194 aktiv · Messung seit: ${seit}\n` +
-    `FOTOS AUS ARBEITSSPEICHER-CACHE: ${egressMessung.fotoMemoryCacheTreffer || 0} Treffer · ${egressMessung.fotoMemoryCachePfade?.length || 0} unterschiedliche Dateien\n` +
-    `FOTOS AUS BROWSER-CACHE: ${egressMessung.fotoBrowserCacheTreffer || 0} Treffer · ${egressMessung.fotoBrowserCachePfade?.length || 0} unterschiedliche Dateien\n` +
-    `FOTOS VON SUPABASE (erfolgreicher Bild-fetch): ${egressMessung.fotoSupabaseDownloads || 0} Dateien · ${formatBytesDebug(egressMessung.fotoSupabaseBytes || 0)} empfangene Bilddaten · ${egressMessung.fotoSupabasePfade?.length || 0} unterschiedliche Dateien\n` +
-    `Bildabruf-Fehler: ${egressMessung.fotoSupabaseFehler || 0}\n` +
-    `Hinweis: Cache-Treffer sind lokale Wiederverwendungen; Supabase-Bytes zählen nur erfolgreiche Bild-fetch-Antworten. Nicht über diesen Ladepfad gesetzte Bilder sind hier nicht enthalten.\n` +
+    `Messcode: v195 aktiv · Messung seit: ${seit}\n` +
+    `ARBEITSSPEICHER: ${egressMessung.fotoMemoryCacheTreffer || 0} Cache-Zugriffe · ${egressMessung.fotoMemoryCachePfade?.length || 0} Dateien · ${egressMessung.fotoMemoryLoadEvents || 0} angezeigte Bilder\n` +
+    `BROWSER-CACHE: ${egressMessung.fotoBrowserCacheZugriffe || 0} Cache-Zugriffe · ${egressMessung.fotoBrowserCachePfade?.length || 0} Dateien · ${egressMessung.fotoBrowserLoadEvents || 0} angezeigte Bilder\n` +
+    `SUPABASE: ${egressMessung.fotoSupabaseDownloads || 0} erfolgreiche fetch-Downloads · ${egressMessung.fotoSupabasePfade?.length || 0} Dateien · ${formatBytesDebug(egressMessung.fotoSupabaseBytes || 0)} empfangene Bilddaten · ${egressMessung.fotoSupabaseLoadEvents || 0} angezeigte Bilder\n` +
+    `Direkter Browser-Fallback: ${egressMessung.fotoDirektFallbackLoads || 0} angezeigte Bilder (Bytes nicht messbar)\n` +
+    `Herkunft unbekannt/außerhalb des zentralen Ladepfads: ${egressMessung.fotoQuelleUnbekanntLoads || 0} angezeigte Bilder\n` +
+    `Netzwerkversuche: ${egressMessung.fotoNetzwerkVersuche || 0} · Fehler: ${egressMessung.fotoNetzwerkFehler || 0} · Bildabruf-Fehler gesamt: ${egressMessung.fotoSupabaseFehler || 0}\n` +
+    `Hinweis: Supabase-Bytes zählen nur erfolgreiche fetch-Antworten. Direkte img-src-Abrufe werden als Fallback separat angezeigt; deren Bytes sind im Browser nicht zuverlässig messbar.\n` +
     `Personen-Supabase-Abfragen: ${egressMessung.personenSupabaseAbrufe}\n` +
     `Delta-Sync: ${egressMessung.syncPruefungen || 0} Prüfung(en) · letzter Lauf: ${egressMessung.syncLetzterErfolgreicherLaufAenderungen || 0} Änderung(en) · seq: ${egressMessung.syncLetzterErfolgreicherLaufSeq || 0}\n` +
     `Delta verarbeitet: ${egressMessung.syncLetzterErfolgreicherLaufAktualisiert || 0} Person(en) aktualisiert · ${egressMessung.syncLetzterErfolgreicherLaufGeloescht || 0} gelöscht${egressMessung.syncBeziehungenAktualisiert ? ` · Beziehungen/Familien neu geladen: ${egressMessung.syncBeziehungenAktualisiert}` : ""}\n` +
@@ -2353,10 +2430,6 @@ function erstellePersonenKarte(p) {
   content.append(name, years, relations, note);
   li.append(img, placeholder, content);
   li.addEventListener("click", () => openPersonDetail(p.id));
-
-  img.addEventListener("load", () => {
-    registriereEgressBildLoad(img.dataset.egressDebugUrl || img.currentSrc || img.src || "");
-  });
 
   const karte = { li, img, placeholder, name, years, relations, note, person: p };
   personenKartenCache.set(p.id, karte);
