@@ -394,6 +394,9 @@ async function zeigeAppWennAngemeldet() {
       loginScreen.hidden = true;
       appShell.hidden = false;
       debugLog("Angemeldet.");
+      // v191: Gruppenfotos gleich beim App-Start laden, damit auch die Übersicht
+      // und Personendetails nicht mit leeren Platzhaltern erscheinen.
+      void ladeGruppenfotoListe().catch(err => debugLog(`⚠️ Gruppenfotos beim Start: ${err.message || err}`));
     } else {
       loginScreen.hidden = false;
       appShell.hidden = true;
@@ -2820,12 +2823,13 @@ async function loadDetailFotos(personId) {
     verknuepfte = data || [];
   }
   const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
-  // Beim Öffnen der Details nur Schlüsselfotos laden. Alle übrigen Fotos
-  // werden erst nach einem bewussten Tippen auf das jeweilige Foto geladen.
-  const schluesselfotoPfade = fotos.filter(f => f.ist_schluesselfoto).map(f => f.dateipfad);
-  const fotoUrls = await ladeFotoBilder(schluesselfotoPfade);
+  // Schlüsselfotos UND Gruppenfotos beim Öffnen der Details laden, damit
+  // Gruppenbilder samt Markierungen sofort sichtbar sind. Normale Fotos bleiben
+  // weiterhin bis zum bewussten Antippen ungeladen.
+  const direktLadenPfade = fotos.filter(f => f.ist_schluesselfoto || f.gruppenfoto).map(f => f.dateipfad);
+  const fotoUrls = await ladeFotoBilder(direktLadenPfade);
   for (const foto of fotos) {
-    const fotoUrl = foto.ist_schluesselfoto ? (fotoUrls.get(foto.dateipfad) || "") : "";
+    const fotoUrl = (foto.ist_schluesselfoto || foto.gruppenfoto) ? (fotoUrls.get(foto.dateipfad) || "") : "";
     const { data: markierungen } = await sb.from("foto_personen")
       .select("id, personen_id, nummer, position_x, position_y, position_format")
       .eq("foto_id", foto.id)
@@ -3036,15 +3040,20 @@ gruppenfotoPersonenSuche?.addEventListener("input", fuelleGruppenfotoPersonen);
 async function ladeGruppenfotoListe() {
   if (!gruppenfotoListe) return;
   const { data, error } = await sb.from("fotos").select("*").eq("gruppenfoto", true).order("id", { ascending: false });
-  if (error) { gruppenfotoMessage.textContent = `Fehler: ${error.message}`; return; }
+  if (error) { if (gruppenfotoMessage) gruppenfotoMessage.textContent = `Fehler: ${error.message}`; return; }
+  const fotos = data || [];
+  // Beim ersten App-Laden auch die Gruppenbilder selbst laden. Die gemeinsame
+  // Foto-Cache-Funktion verhindert erneute Downloads bei weiteren Ansichten.
+  const fotoUrls = await ladeFotoBilder(fotos.map(f => f.dateipfad));
   gruppenfotoListe.innerHTML = "";
-  gruppenfotoLeer.hidden = !!(data && data.length);
-  for (const foto of (data || [])) {
-    // Die Übersicht lädt keine Gruppenbilder im Hintergrund. Erst die
-    // ausdrückliche Aktion öffnet das Foto und lädt es bei Cache-Miss.
+  gruppenfotoLeer.hidden = !!fotos.length;
+  for (const foto of fotos) {
     const div = document.createElement("div");
-    div.className = "detail-media-item";
-    div.innerHTML = `<span class="beziehung-text">📷 Gruppenfoto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">Foto öffnen / Personen</button>`;
+    div.className = "detail-media-item gruppenfoto-uebersicht-item";
+    const url = fotoUrls.get(foto.dateipfad) || "";
+    div.innerHTML = `<img class="gruppenfoto-miniatur" alt="Gruppenfoto" loading="eager"><span class="beziehung-text">📷 Gruppenfoto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">Foto öffnen / Personen</button>`;
+    const img = div.querySelector(".gruppenfoto-miniatur");
+    if (url) img.src = url;
     div.querySelector(".gruppenfoto-personen-btn").addEventListener("click", () => openFotoPersonenModal(foto));
     gruppenfotoListe.appendChild(div);
   }
