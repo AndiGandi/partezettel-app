@@ -666,6 +666,7 @@
 
 
 /* v211: Trauungsbuch-Quelle sauber in einer Zeile ohne Überlagerungen. */
+/* v212: sichtbare App-Version und Cache-Version synchronisiert. */
 .familie-trauungsbuch {
   display: grid;
   grid-template-columns: max-content minmax(9rem, max-content) max-content max-content;
