@@ -1,3 +1,4 @@
+// v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -6150,234 +6151,90 @@ function fillTreePersonSelect(searchValue = "", preferredId = "") {
 
 
 function treeClassicPersonSort(aId, bId) {
-  const a = treePerson(aId), b = treePerson(b);
-  const da = a?.geburtsdatum || "", db = b?.geburtsdatum || "";
-  if (da && db && da !== db) return da.localeCompare(db);
-  if (da) return -1;
-  if (db) return 1;
-  return `${a?.nachname || ""} ${a?.vorname || ""}`.localeCompare(
-    `${b?.nachname || ""} ${b?.vorname || ""}`,
-    "de",
-    { sensitivity: "base" }
-  );
+  const a=treePerson(aId), b=treePerson(bId), da=a?.geburtsdatum||"", db=b?.geburtsdatum||"";
+  if(da&&db&&da!==db) return da.localeCompare(db); if(da)return -1; if(db)return 1;
+  return `${a?.nachname||""} ${a?.vorname||""}`.localeCompare(`${b?.nachname||""} ${b?.vorname||""}`,"de",{sensitivity:"base"});
 }
 
-function treeClassicFamilyInfo(rootId) {
-  const root = treePerson(rootId);
-  if (!root) return null;
-
-  const parentFamilies = treeParentFamiliesForPerson(rootId) || [];
-  const parentIds = [];
-  const siblingIds = [];
-  const seenSiblings = new Set();
-
-  for (const family of parentFamilies) {
-    for (const parentId of [family.partner_a_id, family.partner_b_id]) {
-      if (parentId && treePerson(parentId) && !parentIds.includes(parentId)) parentIds.push(parentId);
-    }
-    for (const child of treeChildrenForFamily(family.id) || []) {
-      const id = child?.person?.id;
-      if (id && id !== rootId && treePerson(id) && !seenSiblings.has(id)) {
-        seenSiblings.add(id);
-        siblingIds.push(id);
-      }
-    }
-  }
-
-  const spouseIds = [];
-  const childIds = [];
-  const seenChildren = new Set();
-  for (const family of treeFamiliesForPerson(rootId) || []) {
-    const spouseId = [family.partner_a_id, family.partner_b_id].find(pid => pid && pid !== rootId);
-    if (spouseId && treePerson(spouseId) && !spouseIds.includes(spouseId)) spouseIds.push(spouseId);
-    for (const child of treeChildrenForFamily(family.id) || []) {
-      const id = child?.person?.id;
-      if (id && treePerson(id) && !seenChildren.has(id)) {
-        seenChildren.add(id);
-        childIds.push(id);
-      }
-    }
-  }
-
-  parentIds.sort(treeClassicPersonSort);
-  siblingIds.sort(treeClassicPersonSort);
-  childIds.sort(treeClassicPersonSort);
-
-  return { root, parentIds, siblingIds, spouseIds, childIds };
+// v189: fokussierter klassischer Stammbaum. Genealogie ausschließlich aus
+// familien + familien_kinder; keine Änderungen an der Datenbank.
+function treeClassicFamilyInfo(rootId){
+  const root=treePerson(rootId); if(!root)return null;
+  const parentFamilies=(treeParentFamiliesForPerson(rootId)||[]).map(f=>({
+    id:f.id,
+    parentIds:[f.partner_a_id,f.partner_b_id].filter(Boolean).filter(id=>treePerson(id)),
+    childIds:treeChildrenForFamily(f.id).map(x=>x.person?.id).filter(Boolean)
+  }));
+  const siblingIds=[]; const seen=new Set();
+  parentFamilies.forEach(f=>f.childIds.forEach(id=>{if(id!==rootId&&!seen.has(id)&&treePerson(id)){seen.add(id);siblingIds.push(id)}}));
+  const families=(treeFamiliesForPerson(rootId)||[]).map(f=>({
+    id:f.id, familientyp:f.familientyp||"Partnerschaft",
+    spouseId:[f.partner_a_id,f.partner_b_id].find(id=>id&&id!==rootId&&treePerson(id))||null,
+    childIds:treeChildrenForFamily(f.id).map(x=>x.person?.id).filter(Boolean)
+  }));
+  parentFamilies.forEach(f=>f.parentIds.sort(treeClassicPersonSort)); siblingIds.sort(treeClassicPersonSort); families.forEach(f=>f.childIds.sort(treeClassicPersonSort));
+  return {root,parentFamilies,parentIds:[...new Set(parentFamilies.flatMap(f=>f.parentIds))],siblingIds,families};
 }
 
-function treeClassicDrawConnections(canvas, svg, familyInfo) {
-  svg.innerHTML = "";
-
-  const positions = new Map();
-  const canvasRect = canvas.getBoundingClientRect();
-  canvas.querySelectorAll("[data-classic-person]").forEach((el) => {
-    const r = el.getBoundingClientRect();
-    positions.set(el.dataset.classicPerson, {
-      left: r.left - canvasRect.left,
-      right: r.right - canvasRect.left,
-      top: r.top - canvasRect.top,
-      bottom: r.bottom - canvasRect.top,
-      centerX: (r.left + r.right) / 2 - canvasRect.left,
-      centerY: (r.top + r.bottom) / 2 - canvasRect.top
-    });
-  });
-
-  const width = canvas.scrollWidth || canvas.clientWidth;
-  const height = canvas.scrollHeight || canvas.clientHeight;
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", String(width));
-  svg.setAttribute("height", String(height));
-
-  const line = (x1, y1, x2, y2, cls = "") => {
-    const el = document.createElementNS("http://www.w3.org/2000/svg", "line");
-    el.setAttribute("x1", String(Math.round(x1)));
-    el.setAttribute("y1", String(Math.round(y1)));
-    el.setAttribute("x2", String(Math.round(x2)));
-    el.setAttribute("y2", String(Math.round(y2)));
-    if (cls) el.setAttribute("class", cls);
-    svg.appendChild(el);
-  };
-
-  const get = (id) => id ? positions.get(id) : null;
-  const many = (ids) => (ids || []).map(get).filter(Boolean);
-
-  // Eltern -> Geschwister + Mittelpunkt. Die Familienlinie endet beim
-  // Mittelpunkt der Eltern und verzweigt erst danach zu den Karten.
-  const parents = many(familyInfo.parentIds).sort((a,b) => a.centerX - b.centerX);
-  const siblingAndRoot = many([...familyInfo.siblingIds, familyInfo.root.id]).sort((a,b) => a.centerX - b.centerX);
-  if (parents.length && siblingAndRoot.length) {
-    const parentBottom = Math.max(...parents.map(p => p.bottom));
-    const targetTop = Math.min(...siblingAndRoot.map(p => p.top));
-    const busY = parentBottom + Math.max(22, Math.min(48, (targetTop - parentBottom) * 0.45));
-    const parentJoinX = parents.length === 1
-      ? parents[0].centerX
-      : (parents[0].right + parents[parents.length - 1].left) / 2;
-
-    if (parents.length >= 2) {
-      const spouseY = (Math.max(...parents.map(p => p.top)) + Math.min(...parents.map(p => p.bottom))) / 2;
-      line(parents[0].right, spouseY, parents[parents.length - 1].left, spouseY, "tree-classic-spouse");
-    }
-    line(parentJoinX, Math.max(...parents.map(p => p.bottom)), parentJoinX, busY, "tree-classic-family");
-    const xs = siblingAndRoot.map(p => p.centerX);
-    if (xs.length > 1) line(Math.min(...xs), busY, Math.max(...xs), busY, "tree-classic-family");
-    for (const p of siblingAndRoot) line(p.centerX, busY, p.centerX, p.top, "tree-classic-family");
-  }
-
-  // Mittelpunkt + Partner -> Kinder. Die Verbindung ist eine eigene Familie
-  // und darf niemals mit der Elternlinie vermischt werden.
-  const spouses = many(familyInfo.spouseIds).sort((a,b) => a.centerX - b.centerX);
-  const root = get(familyInfo.root.id);
-  const children = many(familyInfo.childIds).sort((a,b) => a.centerX - b.centerX);
-  const couple = [root, ...spouses].filter(Boolean).sort((a,b) => a.centerX - b.centerX);
-  if (couple.length && children.length) {
-    if (couple.length >= 2) {
-      const y = (Math.max(...couple.map(p => p.top)) + Math.min(...couple.map(p => p.bottom))) / 2;
-      line(couple[0].right, y, couple[couple.length - 1].left, y, "tree-classic-spouse");
-    }
-    const parentBottom = Math.max(...couple.map(p => p.bottom));
-    const childTop = Math.min(...children.map(p => p.top));
-    const busY = parentBottom + Math.max(22, Math.min(48, (childTop - parentBottom) * 0.45));
-    const joinX = couple.length === 1 ? couple[0].centerX : (couple[0].right + couple[couple.length - 1].left) / 2;
-    line(joinX, parentBottom, joinX, busY, "tree-classic-family");
-    const xs = children.map(p => p.centerX);
-    if (xs.length > 1) line(Math.min(...xs), busY, Math.max(...xs), busY, "tree-classic-family");
-    for (const p of children) line(p.centerX, busY, p.centerX, p.top, "tree-classic-family");
-  }
+function treeClassicLine(svg,x1,y1,x2,y2,cls="tree-classic-family"){
+  const e=document.createElementNS("http://www.w3.org/2000/svg","line");
+  e.setAttribute("x1",Math.round(x1));e.setAttribute("y1",Math.round(y1));e.setAttribute("x2",Math.round(x2));e.setAttribute("y2",Math.round(y2));e.setAttribute("class",cls);svg.appendChild(e);
+}
+function treeClassicPositions(canvas){
+  const c=canvas.getBoundingClientRect(),m=new Map();
+  canvas.querySelectorAll("[data-classic-key]").forEach(e=>{const r=e.getBoundingClientRect();m.set(e.dataset.classicKey,{left:r.left-c.left,right:r.right-c.left,top:r.top-c.top,bottom:r.bottom-c.top,centerX:(r.left+r.right)/2-c.left});});
+  return m;
+}
+function treeClassicConnectParents(svg,pos,family){
+  const ps=family.parentIds.map(id=>pos.get(`person:${id}:parent`)).filter(Boolean);
+  const ids=family.childIds.filter(id=>id===family.rootId||family.targetIds?.includes(id));
+  const ts=ids.map(id=>pos.get(`person:${id}:middle`)).filter(Boolean); if(!ps.length||!ts.length)return;
+  const pb=Math.max(...ps.map(p=>p.bottom)), tt=Math.min(...ts.map(p=>p.top)), by=pb+Math.max(22,Math.min(46,(tt-pb)*.42));
+  if(ps.length>=2){const q=[...ps].sort((a,b)=>a.centerX-b.centerX),y=(Math.max(...q.map(p=>p.top))+Math.min(...q.map(p=>p.bottom)))/2;treeClassicLine(svg,q[0].right,y,q[q.length-1].left,y,"tree-classic-spouse");}
+  const j=ps.length===1?ps[0].centerX:(Math.max(...ps.map(p=>p.left))+Math.min(...ps.map(p=>p.right)))/2;
+  treeClassicLine(svg,j,pb,j,by); const xs=ts.map(p=>p.centerX); if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by); ts.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));
+}
+function treeClassicConnectFamily(svg,pos,f){
+  const r=pos.get(`family:${f.id}:root`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean); if(!r||!s)return;
+  const l=r.centerX<s.centerX?r:s, q=l===r?s:r, y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;
+  treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse"); if(!cs.length)return;
+  const by0=Math.max(r.bottom,s.bottom), ct=Math.min(...cs.map(p=>p.top)), by=by0+Math.max(22,Math.min(46,(ct-by0)*.42)), j=(l.right+q.left)/2;
+  treeClassicLine(svg,j,by0,j,by); const xs=cs.map(p=>p.centerX); if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by); cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));
 }
 
-function renderKlassischerStammbaum(rootId) {
-  const stage = document.getElementById("tree-classic-stage");
-  if (!stage) return;
-  stage.innerHTML = "";
-  const info = treeClassicFamilyInfo(rootId);
-  if (!info) {
-    stage.innerHTML = '<div class="tree-classic-empty">Bitte eine Person auswählen.</div>';
-    return;
+function renderKlassischerStammbaum(rootId){
+  const stage=document.getElementById("tree-classic-stage"); if(!stage)return; stage.innerHTML="";
+  const info=treeClassicFamilyInfo(rootId); if(!info){stage.innerHTML='<div class="tree-classic-empty">Bitte eine Person auswählen.</div>';return;}
+  const mobile=window.innerWidth<=700, card=mobile?125:145, gap=mobile?14:20, rowH=mobile?118:132, vw=document.getElementById("tree-viewport")?.clientWidth||window.innerWidth;
+  const lineSurname=treeMaleAncestorSurname(rootId)||String(info.root.nachname||"").trim();
+  const parents=[...info.parentIds].sort(treeClassicPersonSort), middle=[...info.siblingIds,rootId].sort(treeClassicPersonSort), families=info.families.filter(f=>f.spouseId||f.childIds.length);
+  const blocks=families.map(f=>{const n=Math.max(2,f.childIds.length);return n*card+Math.max(0,n-1)*gap+36;}), familyW=blocks.reduce((a,b)=>a+b,0)+Math.max(0,blocks.length-1)*28;
+  const rowW=ids=>Math.max(1,ids.length)*card+Math.max(0,ids.length-1)*gap;
+  const width=Math.max(vw-24,rowW(parents)+80,rowW(middle)+80,familyW+80,620), yp=48, ym=yp+rowH, yf=ym+rowH+28, ycSingle=ym+rowH+32, ycMulti=yf+rowH+32, height=families.length?(families.length===1?ycSingle+120:ycMulti+120):ym+120;
+  const canvas=document.createElement("div");canvas.className="tree-classic-canvas tree-classic-canvas--focused";canvas.style.width=`${width}px`;canvas.style.height=`${height}px`;
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.classList.add("tree-classic-svg");canvas.appendChild(svg);
+  const label=(t,y)=>{const e=document.createElement("div");e.className="tree-classic-level__label";e.textContent=t;e.style.top=`${y-27}px`;canvas.appendChild(e);};
+  const node=(id,key,x,y,extra="")=>{const p=treePerson(id);if(!p)return;const e=document.createElement("div");e.className=`tree-classic-node ${extra} ${id===rootId?"tree-classic-node--root":""}`.trim();e.dataset.classicPerson=id;e.dataset.classicKey=key;e.style.left=`${x}px`;e.style.top=`${y}px`;e.style.width=`${card}px`;e.innerHTML=treePersonCard(p,rootId,"",lineSurname);canvas.appendChild(e);};
+  const row=(ids,y,text,suffix,extra="")=>{if(!ids.length)return[];label(text,y);const total=rowW(ids),keys=[];let x=(width-total)/2;ids.forEach(id=>{const k=`person:${id}:${suffix}`;node(id,k,x,y,extra);keys.push(k);x+=card+gap;});return keys;};
+  row(parents,yp,"Eltern","parent","tree-classic-nodes--parents");
+  row(middle,ym,info.siblingIds.length?"Ausgangsperson und Geschwister":"Ausgangsperson","middle","tree-classic-nodes--middle");
+
+  if(families.length===1){
+    const f=families[0],re=canvas.querySelector(`[data-classic-key="person:${rootId}:middle"]`); if(f.spouseId&&re){const rx=parseFloat(re.style.left),right=rx+card+gap,left=rx-card-gap,sx=right+card<=width-24?right:left;node(f.spouseId,`family:${f.id}:spouse`,sx,ym,"tree-classic-node--spouse");}
+    if(f.childIds.length){label("Kinder",ycSingle);const total=rowW(f.childIds);let x=(width-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,x,ycSingle,"tree-classic-node--children");x+=card+gap;});}
+  } else if(families.length>1){
+    label("Partnerschaften",yf);let x=(width-familyW)/2;
+    families.forEach((f,i)=>{const bw=blocks[i],pair=f.spouseId?2*card+gap:card,px=x+(bw-pair)/2;node(rootId,`family:${f.id}:root`,px,yf,"tree-classic-node--family-root");if(f.spouseId)node(f.spouseId,`family:${f.id}:spouse`,px+card+gap,yf,"tree-classic-node--spouse");if(f.childIds.length){const total=rowW(f.childIds);let cx=x+(bw-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,cx,ycMulti,"tree-classic-node--children");cx+=card+gap;});}x+=bw+28;});
+    label("Kinder je Partnerschaft",ycMulti);
   }
-
-  const isMobile = window.innerWidth <= 700;
-  const cardWidth = isMobile ? 125 : 145;
-  const gap = isMobile ? 14 : 20;
-  const parents = info.parentIds;
-  const siblings = info.siblingIds;
-  const spouses = info.spouseIds;
-  const children = info.childIds;
-  const middle = [...siblings, info.root.id, ...spouses];
-  const maxCount = Math.max(1, parents.length, middle.length, children.length);
-  const contentWidth = maxCount * cardWidth + Math.max(0, maxCount - 1) * gap;
-  const viewportWidth = document.getElementById("tree-viewport")?.clientWidth || window.innerWidth;
-  const width = Math.max(viewportWidth - 24, contentWidth + 80, 620);
-  const rowHeight = isMobile ? 118 : 132;
-  const top = 50;
-  const middleTop = parents.length ? top + rowHeight : top;
-  const childrenTop = middleTop + rowHeight;
-  const height = children.length ? childrenTop + 125 : middleTop + 125;
-
-  const canvas = document.createElement("div");
-  canvas.className = "tree-classic-canvas tree-classic-canvas--focused";
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.classList.add("tree-classic-svg");
-  canvas.appendChild(svg);
-
-  const addLabel = (text, y) => {
-    const label = document.createElement("div");
-    label.className = "tree-classic-level__label";
-    label.textContent = text;
-    label.style.top = `${y - 28}px`;
-    canvas.appendChild(label);
-  };
-
-  const addNodes = (ids, y, labelText, extraClass = "") => {
-    if (!ids.length) return;
-    addLabel(labelText, y);
-    const total = ids.length * cardWidth + Math.max(0, ids.length - 1) * gap;
-    let x = (width - total) / 2;
-    for (const id of ids) {
-      const person = treePerson(id);
-      if (!person) continue;
-      const wrap = document.createElement("div");
-      wrap.className = `tree-classic-node ${extraClass} ${id === rootId ? "tree-classic-node--root" : ""}`;
-      wrap.dataset.classicPerson = id;
-      wrap.style.left = `${x}px`;
-      wrap.style.top = `${y}px`;
-      wrap.style.width = `${cardWidth}px`;
-      wrap.innerHTML = treePersonCard(person, rootId, "", treeMaleAncestorSurname(rootId) || String(info.root.nachname || ""));
-      canvas.appendChild(wrap);
-      x += cardWidth + gap;
-    }
-  };
-
-  addNodes(parents, top, "Eltern", "tree-classic-nodes--parents");
-  addNodes(middle, middleTop, siblings.length ? "Ausgangsperson und Geschwister" : "Ausgangsperson", "tree-classic-nodes--middle");
-  addNodes(children, childrenTop, "Kinder", "tree-classic-nodes--children");
-
   stage.appendChild(canvas);
-  requestAnimationFrame(() => treeClassicDrawConnections(canvas, svg, info));
-
-  canvas.querySelectorAll("[data-classic-person]").forEach((el) => {
-    el.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const id = el.dataset.classicPerson;
-      if (!id) return;
-      const select = document.getElementById("tree-person-select");
-      if (select) select.value = id;
-      renderKlassischerStammbaum(id);
-    });
-    el.addEventListener("dblclick", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const id = el.dataset.classicPerson;
-      if (!id) return;
-      const select = document.getElementById("tree-person-select");
-      if (select) select.value = id;
-      await openPersonDetail(id, {fromTree:true});
-    });
+  requestAnimationFrame(()=>{
+    const pos=treeClassicPositions(canvas);svg.innerHTML="";svg.setAttribute("viewBox",`0 0 ${canvas.clientWidth} ${canvas.clientHeight}`);svg.setAttribute("width",canvas.clientWidth);svg.setAttribute("height",canvas.clientHeight);
+    for(const f of info.parentFamilies){f.rootId=rootId;f.targetIds=info.siblingIds;treeClassicConnectParents(svg,pos,f);}
+    if(families.length===1){const f=families[0],r=pos.get(`person:${rootId}:middle`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&s){const l=r.centerX<s.centerX?r:s,q=l===r?s:r,y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse");if(cs.length){const j=(l.right+q.left)/2,pb=Math.max(r.bottom,s.bottom),ct=Math.min(...cs.map(p=>p.top)),by=pb+Math.max(22,Math.min(46,(ct-pb)*.42));treeClassicLine(svg,j,pb,j,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}else if(families.length===1&&f.childIds.length){const r=pos.get(`person:${rootId}:middle`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&cs.length){const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42));treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}}
+    if(families.length>1)families.forEach(f=>treeClassicConnectFamily(svg,pos,f));
   });
+  canvas.querySelectorAll("[data-classic-person]").forEach(el=>{el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;renderKlassischerStammbaum(id);});el.addEventListener("dblclick",async e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;await openPersonDetail(id,{fromTree:true});});});
 }
 
 function setTreeViewMode(mode, rootId = "") {
