@@ -3114,22 +3114,42 @@ async function loadDetailFotos(personId) {
       if (fotoUrl) fotoImg.dataset.fotoLoaded = "true";
       const openFoto = async (event) => {
         if (event) event.stopPropagation();
-        let url = fotoImg.dataset.fotoLoaded === "true" ? fotoImg.src : null;
-        if (!url) url = await ladeFotoBild(foto.dateipfad);
+        const msg = document.getElementById("d-foto-message");
+        // Nur eine URL verwenden, wenn das Bild tatsächlich erfolgreich geladen wurde.
+        let url = fotoImg.dataset.fotoLoaded === "true" ? (fotoBildMemoryCache.get(foto.dateipfad) || fotoImg.src) : null;
+        if (!url || url === window.location.href) {
+          fotoImg.dataset.fotoLoaded = "false";
+          msg.textContent = "Foto wird geladen …";
+          try { url = await ladeFotoBild(foto.dateipfad); }
+          catch (err) { debugLog(`❌ Foto laden: ${err.message || err}`); url = null; }
+        }
         if (!url) {
-          document.getElementById("d-foto-message").textContent = "Foto konnte nicht geladen werden.";
+          msg.textContent = "Foto konnte nicht geladen werden. Bitte Verbindung prüfen und erneut tippen.";
           return;
         }
         fotoImg.src = url;
         fotoImg.dataset.fotoLoaded = "true";
+        fotoImg.onerror = () => {
+          fotoImg.dataset.fotoLoaded = "false";
+          msg.textContent = "Foto konnte nicht angezeigt werden. Bitte erneut tippen.";
+        };
         const viewer = document.getElementById("detail-photo-viewer");
         const viewerImg = document.getElementById("detail-photo-viewer-img");
-        if (!viewer || !viewerImg) return;
+        if (!viewer || !viewerImg) {
+          msg.textContent = "Foto geladen, aber die Fotoansicht ist nicht verfügbar.";
+          return;
+        }
         viewerImg.src = url;
         viewer.hidden = false;
+        msg.textContent = "";
       };
+      // Auf Touchgeräten ist click zuverlässig; pointerup zusätzlich kann doppelt auslösen.
       fotoImg.addEventListener("click", openFoto);
-      fotoImg.addEventListener("pointerup", (event) => { if (event.pointerType === "touch") openFoto(event); });
+      // Auch die gesamte Fotokarte ist antippbar, nicht nur das kleine Vorschaubild.
+      div.addEventListener("click", (event) => {
+        if (event.target.closest("button")) return;
+        openFoto(event);
+      });
     }
     div.querySelector(".foto-personen-open-btn")?.addEventListener("click", (event) => { event.stopPropagation(); openFotoPersonenModal(foto); });
     div.querySelector(".key-photo-btn").addEventListener("click", async () => {
