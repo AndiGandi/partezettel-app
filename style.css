@@ -691,3 +691,47 @@
   .familie-trauungsbuch { grid-template-columns: max-content minmax(8rem, max-content) max-content max-content; gap: .35rem; }
   .familie-trauungsbuch .familie-trauungsbuch-link { min-width: 8rem; padding: .4rem .5rem; }
 }
+
+/* v217: Trauungsbuch-Zeile im Partnerschaftsblock sauber ausrichten */
+.familie-trauungsbuch {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+  align-items: center;
+  justify-content: stretch;
+  column-gap: .55rem;
+  row-gap: .4rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.familie-trauungsbuch > span:first-child {
+  white-space: nowrap;
+}
+.familie-trauungsbuch .familie-trauungsbuch-link {
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  box-sizing: border-box;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.familie-trauungsbuch .familie-trauungsbuch-zeile {
+  white-space: nowrap;
+}
+.familie-trauungsbuch .familie-source-edit {
+  justify-self: end;
+}
+.familie-trauungsbuch .familie-source-editor {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+@media (max-width: 520px) {
+  .familie-trauungsbuch {
+    grid-template-columns: max-content minmax(0, 1fr) max-content max-content;
+    column-gap: .35rem;
+  }
+  .familie-trauungsbuch .familie-trauungsbuch-link {
+    min-width: 0;
+    padding: .4rem .5rem;
+  }
+}
