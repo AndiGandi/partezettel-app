@@ -1,4 +1,4 @@
-// v198: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v196: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v199: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -21,7 +21,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v196";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v199";
 
 function neuesEgressMessObjekt() {
   return {
@@ -383,7 +383,7 @@ function aktualisiereEgressMessung() {
       ).join("\n")
     : "";
   el.textContent =
-    `Messcode: v196 aktiv · Messung seit: ${seit}\n` +
+    `Messcode: v199 aktiv · Messung seit: ${seit}\n` +
     `ARBEITSSPEICHER: ${egressMessung.fotoMemoryCacheTreffer || 0} Cache-Zugriffe · ${egressMessung.fotoMemoryCachePfade?.length || 0} Dateien · ${egressMessung.fotoMemoryLoadEvents || 0} angezeigte Bilder\n` +
     `BROWSER-CACHE: ${egressMessung.fotoBrowserCacheZugriffe || 0} Cache-Zugriffe · ${egressMessung.fotoBrowserCachePfade?.length || 0} Dateien · ${egressMessung.fotoBrowserLoadEvents || 0} angezeigte Bilder\n` +
     `SUPABASE: ${egressMessung.fotoSupabaseDownloads || 0} erfolgreiche fetch-Downloads · ${egressMessung.fotoSupabasePfade?.length || 0} Dateien · ${formatBytesDebug(egressMessung.fotoSupabaseBytes || 0)} empfangene Bilddaten · ${egressMessung.fotoSupabaseLoadEvents || 0} angezeigte Bilder\n` +
@@ -4372,7 +4372,9 @@ async function loadDetailFamilie(personId) {
   const partnerAddBtn = document.getElementById("d-add-partner-btn");
   if (partnerAddBtn) {
     const hatPartnerschaft = !!partnerList.querySelector(".familie-item");
-    partnerAddBtn.hidden = !hatPartnerschaft;
+    // Der Button muss auch ohne bisherige Partnerschaft sichtbar sein,
+    // sonst kann die erste Partnerschaft nicht angelegt werden.
+    partnerAddBtn.hidden = false;
     partnerAddBtn.textContent = hatPartnerschaft ? "Weitere Partnerschaft hinzufügen" : "Partnerschaft hinzufügen";
   }
   await fillFamilienPersonSelect("d-kind-person", personId);
