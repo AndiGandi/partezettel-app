@@ -1,4 +1,4 @@
-// v197: Bei der Personenerstellung das Schlüsselfoto direkt auswählen; gewähltes Foto wird beim Upload markiert. // v196: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v198: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v196: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -1068,6 +1068,84 @@ synchronisiereNurJahrFeld("sterbedatum", "sterbejahr");
 synchronisiereNurJahrFeld("d-geburtsdatum", "d-geburtsjahr");
 synchronisiereNurJahrFeld("d-sterbedatum", "d-sterbejahr");
 
+// ---------- Verwandtschaft direkt bei der Ersterfassung ----------
+const erstRelation = document.getElementById("erstverwandtschaft-typ");
+const erstPerson = document.getElementById("erstverwandtschaft-person");
+const erstFamilie = document.getElementById("erstverwandtschaft-familie");
+const erstElternteil = document.getElementById("erstverwandtschaft-elternteil");
+const erstRelationHinweis = document.getElementById("erstverwandtschaft-hinweis");
+let erstRelationDaten = { personen: [], familien: [] };
+async function ladeErstverwandtschaftPersonen() {
+  if (!erstPerson) return;
+  erstPerson.innerHTML = '<option value="">— Person auswählen —</option>';
+  const { data, error } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname").limit(5000);
+  if (error) throw error;
+  erstRelationDaten.personen = data || [];
+  for (const person of erstRelationDaten.personen) erstPerson.appendChild(new Option(personenAuswahlText(person), person.id));
+}
+async function aktualisiereErstverwandtschaft() {
+  const typ = erstRelation?.value || "keine";
+  document.getElementById("erstverwandtschaft-person-wrap").hidden = typ === "keine";
+  document.getElementById("erstverwandtschaft-familie-wrap").hidden = typ !== "voll";
+  document.getElementById("erstverwandtschaft-elternteil-wrap").hidden = typ !== "halb";
+  erstRelationHinweis.textContent = "";
+  if (typ === "keine") return;
+  try {
+    if (!erstRelationDaten.personen.length) await ladeErstverwandtschaftPersonen();
+    if (!erstPerson.value) { erstRelationHinweis.textContent = "Bitte eine Bezugsperson auswählen."; return; }
+    const { data: links, error: le } = await sb.from("familien_kinder").select("familie_id, kind_id, beziehungstyp").eq("kind_id", erstPerson.value);
+    if (le) throw le;
+    const ids = [...new Set((links || []).map(x => x.familie_id))];
+    let familien = [];
+    if (ids.length) {
+      const { data, error } = await sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp").in("id", ids);
+      if (error) throw error;
+      familien = data || [];
+    }
+    erstRelationDaten.familien = familien.map(f => ({...f, link:(links||[]).find(l=>l.familie_id===f.id)}));
+    erstFamilie.innerHTML = '<option value="">— Elternfamilie auswählen —</option>';
+    for (const f of erstRelationDaten.familien) {
+      const eltern = [f.partner_a_id,f.partner_b_id].filter(Boolean).map(id => personenAuswahlText(erstRelationDaten.personen.find(p=>p.id===id))).join(" + ");
+      erstFamilie.appendChild(new Option(eltern || "Unbekannte Eltern", f.id));
+    }
+    erstElternteil.innerHTML = '<option value="">— gemeinsamen Elternteil auswählen —</option>';
+    const elternIds = [...new Set(erstRelationDaten.familien.flatMap(f=>[f.partner_a_id,f.partner_b_id]).filter(Boolean))];
+    for (const id of elternIds) erstElternteil.appendChild(new Option(personenAuswahlText(erstRelationDaten.personen.find(p=>p.id===id)), id));
+    if (typ === "voll") {
+      if (erstRelationDaten.familien.length === 1) erstFamilie.value = erstRelationDaten.familien[0].id;
+      erstRelationHinweis.textContent = erstRelationDaten.familien.length ? "Die neue Person wird derselben Elternfamilie zugeordnet." : "Für diese Person ist noch keine Elternfamilie hinterlegt. Bitte zuerst die Eltern erfassen oder eine andere Beziehung wählen.";
+    } else {
+      erstRelationHinweis.textContent = "Wähle den Elternteil, den beide Personen gemeinsam haben. Für die neue Person wird eine eigene Ein-Eltern-Familie angelegt.";
+    }
+  } catch (err) { erstRelationHinweis.textContent = `Verwandtschaft konnte nicht geladen werden: ${err.message || err}`; }
+}
+if (erstRelation) erstRelation.addEventListener("change", () => { erstRelationDaten = { personen: [], familien: [] }; aktualisiereErstverwandtschaft(); });
+if (erstPerson) erstPerson.addEventListener("change", aktualisiereErstverwandtschaft);
+if (erstFamilie) erstFamilie.addEventListener("change", () => { erstRelationHinweis.textContent = "Diese Elternfamilie wird für die neue Person übernommen."; });
+if (erstElternteil) erstElternteil.addEventListener("change", () => { erstRelationHinweis.textContent = "Der ausgewählte Elternteil wird mit der neuen Person verknüpft."; });
+
+async function speichereErstverwandtschaft(eintrag) {
+  const typ = eintrag.erstverwandtschaftTyp;
+  if (!typ || typ === "keine") return;
+  const bezugId = eintrag.erstverwandtschaftPerson;
+  if (!bezugId || bezugId === eintrag.id) throw new Error("Bitte eine gültige Bezugsperson auswählen.");
+  if (typ === "voll") {
+    const familieId = eintrag.erstverwandtschaftFamilie;
+    if (!familieId) throw new Error("Für Vollgeschwister bitte die gemeinsame Elternfamilie auswählen.");
+    const { error } = await sb.from("familien_kinder").upsert({ familie_id: familieId, kind_id: eintrag.id, beziehungstyp: "biologisch" }, { onConflict: "familie_id,kind_id" });
+    if (error) throw error;
+    return;
+  }
+  if (typ === "halb") {
+    const elternId = eintrag.erstverwandtschaftElternteil;
+    if (!elternId) throw new Error("Bitte den gemeinsamen Elternteil auswählen.");
+    const { data: f, error: fe } = await sb.from("familien").insert({ partner_a_id: elternId, partner_b_id: null, familientyp: "Elternfamilie" }).select("id").single();
+    if (fe) throw fe;
+    const { error: ke } = await sb.from("familien_kinder").insert({ familie_id: f.id, kind_id: eintrag.id, beziehungstyp: "biologisch" });
+    if (ke) throw ke;
+  }
+}
+
 // ---------- Formular absenden ----------
 const form = document.getElementById("person-form");
 const formMessage = document.getElementById("form-message");
@@ -1098,6 +1176,10 @@ form.addEventListener("submit", async (e) => {
     schluesselfotoIndex: currentSchluesselfotoIndex,
     audio: currentAudioBlob,
     audio_dauer: audioPreview.hidden ? null : Math.round((audioPreview.duration || 0)),
+    erstverwandtschaftTyp: document.getElementById("erstverwandtschaft-typ")?.value || "keine",
+    erstverwandtschaftPerson: document.getElementById("erstverwandtschaft-person")?.value || null,
+    erstverwandtschaftFamilie: document.getElementById("erstverwandtschaft-familie")?.value || null,
+    erstverwandtschaftElternteil: document.getElementById("erstverwandtschaft-elternteil")?.value || null,
   };
 
   if (!eintrag.vorname || !eintrag.nachname) {
@@ -1113,6 +1195,11 @@ form.addEventListener("submit", async (e) => {
     return;
   }
   geschlechtFeld?.classList.remove("feld-fehler");
+  if (eintrag.erstverwandtschaftTyp !== "keine") {
+    if (!eintrag.erstverwandtschaftPerson) { formMessage.textContent = "Bitte die Bezugsperson auswählen."; return; }
+    if (eintrag.erstverwandtschaftTyp === "voll" && !eintrag.erstverwandtschaftFamilie) { formMessage.textContent = "Bitte die gemeinsame Elternfamilie auswählen."; return; }
+    if (eintrag.erstverwandtschaftTyp === "halb" && !eintrag.erstverwandtschaftElternteil) { formMessage.textContent = "Bitte den gemeinsamen Elternteil auswählen."; return; }
+  }
 
   if (navigator.onLine) {
     const result = await sendEintrag(eintrag, (msg) => { formMessage.textContent = msg; });
@@ -1143,6 +1230,15 @@ function resetForm() {
   document.getElementById("trauungsbuch-zeile").value = "";
   document.getElementById("sterbebuch-zeile").value = "";
   document.getElementById("ledigenname").value = "";
+  if (erstRelation) erstRelation.value = "keine";
+  if (erstPerson) erstPerson.innerHTML = '<option value="">— Person auswählen —</option>';
+  if (erstFamilie) erstFamilie.innerHTML = '<option value="">— Elternfamilie auswählen —</option>';
+  if (erstElternteil) erstElternteil.innerHTML = '<option value="">— Mutter oder Vater auswählen —</option>';
+  if (erstRelationHinweis) erstRelationHinweis.textContent = "";
+  document.getElementById("erstverwandtschaft-person-wrap").hidden = true;
+  document.getElementById("erstverwandtschaft-familie-wrap").hidden = true;
+  document.getElementById("erstverwandtschaft-elternteil-wrap").hidden = true;
+  erstRelationDaten = { personen: [], familien: [] };
 
   // Neue Person beginnt nach dem Speichern garantiert ohne alte Medien.
   currentFotoBlobs = [];
@@ -1212,6 +1308,12 @@ async function sendEintrag(eintrag, onProgress) {
       "Zeitüberschreitung beim Speichern der Person (Netzwerk antwortet nicht)"
     );
     if (personError) throw personError;
+
+    // Familienbeziehung nur nach erfolgreichem Personen-INSERT speichern.
+    if (eintrag.erstverwandtschaftTyp && eintrag.erstverwandtschaftTyp !== "keine") {
+      step("Verwandtschaft speichern …");
+      await speichereErstverwandtschaft(eintrag);
+    }
 
     // 2. Fotos hochladen
     if (eintrag.fotos && eintrag.fotos.length) {

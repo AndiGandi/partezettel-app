@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 197 -->
+    <!-- Version 198 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=197">
+<link rel="stylesheet" href="style.css?v=198">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 197</p>
+  <p id="app-version" class="app-header__version">Version 198</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -98,6 +98,28 @@
             </div>
           </label>
         </div>
+
+        <fieldset class="field-group" id="erstverwandtschaft-gruppe">
+          <legend>Verwandtschaft (optional)</legend>
+          <p class="capture-status">Du kannst die neue Person direkt einer bestehenden Familie zuordnen.</p>
+          <label class="field"><span>Beziehung zu einer bestehenden Person</span>
+            <select id="erstverwandtschaft-typ">
+              <option value="keine">Keine Verwandtschaft angeben</option>
+              <option value="voll">Bruder / Schwester (gleiche Eltern)</option>
+              <option value="halb">Halbbruder / Halbschwester (ein gemeinsamer Elternteil)</option>
+            </select>
+          </label>
+          <label class="field" id="erstverwandtschaft-person-wrap" hidden><span>Bezugsperson</span>
+            <select id="erstverwandtschaft-person"><option value="">— Person auswählen —</option></select>
+          </label>
+          <label class="field" id="erstverwandtschaft-familie-wrap" hidden><span>Gemeinsame Elternfamilie</span>
+            <select id="erstverwandtschaft-familie"><option value="">— Elternfamilie auswählen —</option></select>
+          </label>
+          <label class="field" id="erstverwandtschaft-elternteil-wrap" hidden><span>Gemeinsamer Elternteil</span>
+            <select id="erstverwandtschaft-elternteil"><option value="">— Mutter oder Vater auswählen —</option></select>
+          </label>
+          <p id="erstverwandtschaft-hinweis" class="capture-status" aria-live="polite"></p>
+        </fieldset>
 
         <div class="field-row source-links-row">
           <label class="field source-link-field">
@@ -553,6 +575,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=197"></script>
+<script src="app.js?v=198"></script>
 </body>
 </html>

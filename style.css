@@ -596,3 +596,6 @@
 .tree-classic-node--children .tree-node{min-height:76px}
 .tree-classic-svg .tree-classic-family{stroke:var(--accent);stroke-width:2}
 .tree-classic-svg .tree-classic-spouse{stroke:var(--accent);stroke-width:2.5}
+
+/* Versteckte Formularbereiche bei der Verwandtschaftsauswahl zuverlässig ausblenden. */
+[hidden] { display: none !important; }
