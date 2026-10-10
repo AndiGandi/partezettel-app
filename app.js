@@ -277,12 +277,14 @@ async function ladeFotoBilder(dateipfade) {
 }
 async function ladeFotoBild(dateipfad) {
   if (!dateipfad) return null;
-  const bestehend = fotoBildLadePromises.get(dateipfad);
-  if (bestehend) return bestehend;
-  const promise = ladeFotoBilder([dateipfad]).then(map => map.get(dateipfad) || null);
-  fotoBildLadePromises.set(dateipfad, promise);
-  try { return await promise; }
-  finally { fotoBildLadePromises.delete(dateipfad); }
+  // Wichtig: ladeFotoBilder verwaltet selbst die Request-Promises.
+  // Hier darf vorher kein Promise unter demselben Pfad eingetragen werden,
+  // sonst erkennt ladeFotoBilder den eigenen Aufruf als bereits laufend und
+  // wartet auf sich selbst (Deadlock: Anzeige bleibt bei „Foto wird geladen“).
+  const laufendes = fotoBildLadePromises.get(dateipfad);
+  if (laufendes) return laufendes;
+  const map = await ladeFotoBilder([dateipfad]);
+  return map.get(dateipfad) || fotoBildMemoryCache.get(dateipfad) || null;
 }
 
 function speichereEgressMessung() {
