@@ -2820,9 +2820,12 @@ async function loadDetailFotos(personId) {
     verknuepfte = data || [];
   }
   const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
-  const fotoUrls = await ladeFotoBilder(fotos.map(f => f.dateipfad));
+  // Beim Öffnen der Details nur Schlüsselfotos laden. Alle übrigen Fotos
+  // werden erst nach einem bewussten Tippen auf das jeweilige Foto geladen.
+  const schluesselfotoPfade = fotos.filter(f => f.ist_schluesselfoto).map(f => f.dateipfad);
+  const fotoUrls = await ladeFotoBilder(schluesselfotoPfade);
   for (const foto of fotos) {
-    const fotoUrl = fotoUrls.get(foto.dateipfad) || "";
+    const fotoUrl = foto.ist_schluesselfoto ? (fotoUrls.get(foto.dateipfad) || "") : "";
     const { data: markierungen } = await sb.from("foto_personen")
       .select("id, personen_id, nummer, position_x, position_y, position_format")
       .eq("foto_id", foto.id)
@@ -2862,23 +2865,41 @@ async function loadDetailFotos(personId) {
         entry.textContent = `#${row.nummer} ${fotoPersonName(row.personen_id)}`;
         legendEl.appendChild(entry);
       });
-      wrap.addEventListener("click", (event) => {
+      const gruppenfotoOeffnen = async (event) => {
         event.stopPropagation();
-        openGruppenfotoViewer(fotoUrl, markierungen || [], foto);
-      });
+        let url = fotoUrl || fotoBildMemoryCache.get(foto.dateipfad) || null;
+        if (!url) url = await ladeFotoBild(foto.dateipfad);
+        if (!url) {
+          document.getElementById("d-foto-message").textContent = "Foto konnte nicht geladen werden.";
+          return;
+        }
+        const img = wrap.querySelector("img");
+        if (img && !img.src) img.src = url;
+        openGruppenfotoViewer(url, markierungen || [], foto);
+      };
+      wrap.addEventListener("click", gruppenfotoOeffnen);
     } else {
       div.innerHTML = `<img src="${fotoUrl}" alt="Foto"><span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto" : "Foto"}</span><button class="key-photo-btn" type="button" title="Als Schlüsselfoto festlegen" ${foto.ist_schluesselfoto ? "disabled" : ""}>⭐ Schlüssel</button><button class="del-btn" title="Löschen">🗑️</button>`;
       const fotoImg = div.querySelector("img");
-      const openFoto = (event) => {
+      if (fotoUrl) fotoImg.dataset.fotoLoaded = "true";
+      const openFoto = async (event) => {
         if (event) event.stopPropagation();
+        let url = fotoImg.dataset.fotoLoaded === "true" ? fotoImg.src : null;
+        if (!url) url = await ladeFotoBild(foto.dateipfad);
+        if (!url) {
+          document.getElementById("d-foto-message").textContent = "Foto konnte nicht geladen werden.";
+          return;
+        }
+        fotoImg.src = url;
+        fotoImg.dataset.fotoLoaded = "true";
         const viewer = document.getElementById("detail-photo-viewer");
         const viewerImg = document.getElementById("detail-photo-viewer-img");
-        if (!viewer || !viewerImg || !fotoImg.src) return;
-        viewerImg.src = fotoImg.src;
+        if (!viewer || !viewerImg) return;
+        viewerImg.src = url;
         viewer.hidden = false;
       };
       fotoImg.addEventListener("click", openFoto);
-      fotoImg.addEventListener("pointerup", openFoto);
+      fotoImg.addEventListener("pointerup", (event) => { if (event.pointerType === "touch") openFoto(event); });
     }
     div.querySelector(".foto-personen-open-btn")?.addEventListener("click", (event) => { event.stopPropagation(); openFotoPersonenModal(foto); });
     div.querySelector(".key-photo-btn").addEventListener("click", async () => {
@@ -3019,11 +3040,11 @@ async function ladeGruppenfotoListe() {
   gruppenfotoListe.innerHTML = "";
   gruppenfotoLeer.hidden = !!(data && data.length);
   for (const foto of (data || [])) {
-    const fotoUrl = await ladeFotoBild(foto.dateipfad);
+    // Die Übersicht lädt keine Gruppenbilder im Hintergrund. Erst die
+    // ausdrückliche Aktion öffnet das Foto und lädt es bei Cache-Miss.
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<img src="${fotoUrl || ""}" alt="Foto"><span class="beziehung-text">Foto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">👥 Personen</button>`;
-    div.querySelector("img")?.addEventListener("click", () => openFotoPersonenModal(foto));
+    div.innerHTML = `<span class="beziehung-text">📷 Gruppenfoto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">Foto öffnen / Personen</button>`;
     div.querySelector(".gruppenfoto-personen-btn").addEventListener("click", () => openFotoPersonenModal(foto));
     gruppenfotoListe.appendChild(div);
   }

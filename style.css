@@ -56,7 +56,7 @@
 }
 
 
-/* v188: Klassischer Stammbaum – gemeinsames Koordinatensystem */
+/* v189: Klassischer Stammbaum – familiengenaue SVG-Verbindungen */
 .tree-view-switch{display:flex;gap:.45rem;align-items:center;margin:.35rem 0 .65rem;flex-wrap:wrap}
 .tree-view-switch .btn{min-height:42px}
 .tree-view-switch .btn.is-active{background:var(--ink);color:var(--paper);border-color:var(--ink)}
@@ -589,3 +589,10 @@
   font-size: .8rem;
   word-break: break-all;
 }
+
+/* v189: Familienäste */
+.tree-classic-node--family-root .tree-node{border:2px solid var(--accent)}
+.tree-classic-node--spouse .tree-node{border-color:var(--accent-soft)}
+.tree-classic-node--children .tree-node{min-height:76px}
+.tree-classic-svg .tree-classic-family{stroke:var(--accent);stroke-width:2}
+.tree-classic-svg .tree-classic-spouse{stroke:var(--accent);stroke-width:2.5}
