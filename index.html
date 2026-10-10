@@ -148,6 +148,11 @@
         <div class="capture-row">
           <span id="foto-status" class="capture-status">Kein Foto ausgewählt</span>
         </div>
+        <label class="field" id="schluesselfoto-auswahl-wrap" hidden>
+          <span>Schlüsselfoto für den Stammbaum</span>
+          <select id="schluesselfoto-auswahl" aria-label="Schlüsselfoto für den Stammbaum auswählen"></select>
+          <small>Dieses Foto wird nach dem Speichern als Personenfoto im Stammbaum verwendet.</small>
+        </label>
         <img id="foto-preview" class="preview-img" hidden>
       </fieldset>
 
@@ -190,7 +195,7 @@
       <summary>Temporäre Egress-Messung</summary>
       <div id="egress-debug-status" class="egress-debug-status" aria-live="polite"></div>
       <button type="button" id="egress-debug-reset" class="btn btn--ghost">Messung zurücksetzen</button>
-      <p class="egress-debug-hint">Testanzeige v195: unterscheidet lokale Arbeitsspeicher-Treffer, Browser-Cache-Treffer und erfolgreiche Supabase-Bild-fetchs samt empfangenen Bildbytes. Die Bytes sind Bilddaten, nicht der exakte Abrechnungswert des Supabase-Dashboards.</p>
+      <p class="egress-debug-hint">Testanzeige v196: unterscheidet lokale Arbeitsspeicher-Treffer, Browser-Cache-Treffer und erfolgreiche Supabase-Bild-fetchs samt empfangenen Bildbytes. Die Bytes sind Bilddaten, nicht der exakte Abrechnungswert des Supabase-Dashboards.</p>
     </details>
 
     <div class="personen-sortierung">

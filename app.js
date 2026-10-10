@@ -1,4 +1,4 @@
-// v195: Egress-Messung mit Quellenklassifizierung, Zugriffen/Dateien getrennt und Bild-Load-Erfassung für alle Ansichten. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v197: Bei der Personenerstellung das Schlüsselfoto direkt auswählen; gewähltes Foto wird beim Upload markiert. // v196: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -21,7 +21,7 @@ function debugLog(msg) {
 // bleibt unverändert. Die Messung wird in sessionStorage fortgeführt, damit
 // ein versehentliches Neuladen derselben Safari-Registerkarte die Zähler nicht
 // auf 0 zurücksetzt.
-const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v195";
+const EGRESS_DEBUG_KEY = "partezettel-egress-debug-v196";
 
 function neuesEgressMessObjekt() {
   return {
@@ -383,7 +383,7 @@ function aktualisiereEgressMessung() {
       ).join("\n")
     : "";
   el.textContent =
-    `Messcode: v195 aktiv · Messung seit: ${seit}\n` +
+    `Messcode: v196 aktiv · Messung seit: ${seit}\n` +
     `ARBEITSSPEICHER: ${egressMessung.fotoMemoryCacheTreffer || 0} Cache-Zugriffe · ${egressMessung.fotoMemoryCachePfade?.length || 0} Dateien · ${egressMessung.fotoMemoryLoadEvents || 0} angezeigte Bilder\n` +
     `BROWSER-CACHE: ${egressMessung.fotoBrowserCacheZugriffe || 0} Cache-Zugriffe · ${egressMessung.fotoBrowserCachePfade?.length || 0} Dateien · ${egressMessung.fotoBrowserLoadEvents || 0} angezeigte Bilder\n` +
     `SUPABASE: ${egressMessung.fotoSupabaseDownloads || 0} erfolgreiche fetch-Downloads · ${egressMessung.fotoSupabasePfade?.length || 0} Dateien · ${formatBytesDebug(egressMessung.fotoSupabaseBytes || 0)} empfangene Bilddaten · ${egressMessung.fotoSupabaseLoadEvents || 0} angezeigte Bilder\n` +
@@ -448,6 +448,7 @@ try {
 }
 
 let currentFotoBlobs = [];
+let currentSchluesselfotoIndex = 0;
 let currentAudioBlob = null;
 let mediaRecorder = null;
 let audioChunks = [];
@@ -777,6 +778,7 @@ async function handleFotoAuswahl(files) {
   const bearbeitet = await bearbeiteFotos(auswahl);
   if (!bearbeitet.length) return;
   currentFotoBlobs.push(...bearbeitet);
+  aktualisiereSchluesselfotoAuswahl();
   fotoStatus.textContent = currentFotoBlobs.length === 1 ? "1 Foto ausgewählt ✓" : `${currentFotoBlobs.length} Fotos ausgewählt ✓`;
   if (fotoWeiterBtn) fotoWeiterBtn.hidden = false;
   const url = URL.createObjectURL(currentFotoBlobs[0]);
@@ -785,6 +787,22 @@ async function handleFotoAuswahl(files) {
   fotoPreview.style.display = "block";
 }
 
+const schluesselfotoAuswahl = document.getElementById("schluesselfoto-auswahl");
+const schluesselfotoAuswahlWrap = document.getElementById("schluesselfoto-auswahl-wrap");
+function aktualisiereSchluesselfotoAuswahl() {
+  if (!schluesselfotoAuswahl || !schluesselfotoAuswahlWrap) return;
+  schluesselfotoAuswahl.innerHTML = "";
+  currentFotoBlobs.forEach((foto, index) => {
+    const option = document.createElement("option");
+    option.value = String(index);
+    option.textContent = `Foto ${index + 1}${index === 0 ? " (erstes Foto)" : ""}`;
+    schluesselfotoAuswahl.appendChild(option);
+  });
+  currentSchluesselfotoIndex = Math.min(currentSchluesselfotoIndex, Math.max(0, currentFotoBlobs.length - 1));
+  schluesselfotoAuswahl.value = String(currentSchluesselfotoIndex);
+  schluesselfotoAuswahlWrap.hidden = currentFotoBlobs.length === 0;
+}
+schluesselfotoAuswahl?.addEventListener("change", () => { currentSchluesselfotoIndex = Number(schluesselfotoAuswahl.value) || 0; });
 fotoInput.addEventListener("change", async () => { await handleFotoAuswahl(fotoInput.files); fotoInput.value = ""; });
 const fotoWeiterBtn = document.getElementById("foto-weiter-btn");
 if (fotoWeiterBtn) fotoWeiterBtn.addEventListener("click", () => fotoInput.click());
@@ -1077,6 +1095,7 @@ form.addEventListener("submit", async (e) => {
     sterbebuch_zeile: document.getElementById("sterbebuch-zeile").value.trim() ? Number(document.getElementById("sterbebuch-zeile").value) : null,
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
+    schluesselfotoIndex: currentSchluesselfotoIndex,
     audio: currentAudioBlob,
     audio_dauer: audioPreview.hidden ? null : Math.round((audioPreview.duration || 0)),
   };
@@ -1127,6 +1146,8 @@ function resetForm() {
 
   // Neue Person beginnt nach dem Speichern garantiert ohne alte Medien.
   currentFotoBlobs = [];
+  currentSchluesselfotoIndex = 0;
+  aktualisiereSchluesselfotoAuswahl();
   if (fotoWeiterBtn) fotoWeiterBtn.hidden = true;
   if (fotoPreview) {
     const oldUrl = fotoPreview.src;
@@ -1214,7 +1235,8 @@ async function sendEintrag(eintrag, onProgress) {
           "Zeitüberschreitung beim Foto-Upload (Netzwerk antwortet nicht)"
         );
         if (uploadError) throw uploadError;
-        const { error: insertError } = await sb.from("fotos").insert({ personen_id: eintrag.id, dateipfad: path });
+        const istSchluesselfoto = eintrag.fotos.indexOf(foto) === eintrag.schluesselfotoIndex;
+        const { error: insertError } = await sb.from("fotos").insert({ personen_id: eintrag.id, dateipfad: path, ist_schluesselfoto: istSchluesselfoto });
         if (insertError) throw insertError;
       }
     }
@@ -6321,7 +6343,10 @@ function renderKlassischerStammbaum(rootId){
   row(middle,ym,info.siblingIds.length?"Ausgangsperson und Geschwister":"Ausgangsperson","middle","tree-classic-nodes--middle");
 
   if(families.length===1){
-    const f=families[0],re=canvas.querySelector(`[data-classic-key="person:${rootId}:middle"]`); if(f.spouseId&&re){const rx=parseFloat(re.style.left),right=rx+card+gap,left=rx-card-gap,sx=right+card<=width-24?right:left;node(f.spouseId,`family:${f.id}:spouse`,sx,ym,"tree-classic-node--spouse");}
+    label("Eigener Familienzweig",yf);
+    const f=families[0],re=canvas.querySelector(`[data-classic-key="person:${rootId}:middle"]`);
+    // Der eigene Familienzweig liegt bewusst unterhalb der Geschwisterzeile.
+    if(f.spouseId&&re){const rx=parseFloat(re.style.left),right=rx+card+gap,left=rx-card-gap,sx=right+card<=width-24?right:left;node(f.spouseId,`family:${f.id}:spouse`,sx,yf,"tree-classic-node--spouse");}
     if(f.childIds.length){label("Kinder",ycSingle);const total=rowW(f.childIds);let x=(width-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,x,ycSingle,"tree-classic-node--children");x+=card+gap;});}
   } else if(families.length>1){
     label("Partnerschaften",yf);let x=(width-familyW)/2;
@@ -6332,7 +6357,7 @@ function renderKlassischerStammbaum(rootId){
   requestAnimationFrame(()=>{
     const pos=treeClassicPositions(canvas);svg.innerHTML="";svg.setAttribute("viewBox",`0 0 ${canvas.clientWidth} ${canvas.clientHeight}`);svg.setAttribute("width",canvas.clientWidth);svg.setAttribute("height",canvas.clientHeight);
     for(const f of info.parentFamilies){f.rootId=rootId;f.targetIds=info.siblingIds;treeClassicConnectParents(svg,pos,f);}
-    if(families.length===1){const f=families[0],r=pos.get(`person:${rootId}:middle`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&s){const l=r.centerX<s.centerX?r:s,q=l===r?s:r,y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse");if(cs.length){const j=(l.right+q.left)/2,pb=Math.max(r.bottom,s.bottom),ct=Math.min(...cs.map(p=>p.top)),by=pb+Math.max(22,Math.min(46,(ct-pb)*.42));treeClassicLine(svg,j,pb,j,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}else if(families.length===1&&f.childIds.length){const r=pos.get(`person:${rootId}:middle`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&cs.length){const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42));treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}}
+    if(families.length===1){const f=families[0],r=pos.get(`person:${rootId}:middle`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&s){const l=r.centerX<s.centerX?r:s,q=l===r?s:r,y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse");const j=(r.centerX+s.centerX)/2;treeClassicLine(svg,r.centerX,r.bottom,r.centerX,y);if(cs.length){const pb=Math.max(r.bottom,s.bottom),ct=Math.min(...cs.map(p=>p.top)),by=pb+Math.max(22,Math.min(46,(ct-pb)*.42));treeClassicLine(svg,j,y,j,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}else if(families.length===1&&f.childIds.length){const r=pos.get(`person:${rootId}:middle`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&cs.length){const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42));treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}}
     if(families.length>1)families.forEach(f=>treeClassicConnectFamily(svg,pos,f));
   });
   canvas.querySelectorAll("[data-classic-person]").forEach(el=>{el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;renderKlassischerStammbaum(id);});el.addEventListener("dblclick",async e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;await openPersonDetail(id,{fromTree:true});});});
