@@ -614,3 +614,8 @@
 .detail-event-source > span { font-size:.9rem; color:var(--text-muted, #68645d); }
 .detail-event-source .source-link-inline { display:grid; grid-template-columns:minmax(0,1fr) auto 4rem; gap:.35rem; align-items:center; }
 .detail-event-source input { min-width:0; width:100%; box-sizing:border-box; }
+
+/* v206: Trauungsbuch-Link kompakt direkt im Ehe-/Partnerschaftsblock */
+.familie-trauungsbuch { display:flex; flex-wrap:wrap; align-items:center; gap:.3rem; margin:.35rem 0 .5rem; font-size:.88rem; line-height:1.25; min-width:0; }
+.familie-trauungsbuch > span:first-child { color:var(--text-muted, #68645d); }
+.familie-trauungsbuch-link { display:inline-block; max-width:100%; overflow-wrap:anywhere; }

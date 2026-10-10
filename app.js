@@ -1,4 +1,4 @@
-// v205: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+// v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
 // ==========================================================
@@ -4176,11 +4176,8 @@ async function loadDetailFamilie(personId) {
             <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
           </div>
           <div class="familie-auto-ende"></div>
-          <fieldset class="field-group familie-quellen"><legend>Trauungsbuch-Quellen dieser Ehe/Partnerschaft</legend>
-            <div class="familie-quellen-liste"></div>
-            <button type="button" class="btn btn--secondary familie-quelle-add">＋ Weiteren Trauungsbuch-Link hinzufügen</button>
-          </fieldset>
-          <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft und Quellen speichern</button>
+          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span></div>
+          <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
         </div>
       </div>`;
 
@@ -4248,25 +4245,31 @@ async function loadDetailFamilie(personId) {
       await openPersonDetail(otherId);
     });
 
-    const quellenListe = div.querySelector(".familie-quellen-liste");
-    const renderFamilienQuellen = (quellen) => {
-      quellenListe.innerHTML = "";
-      const liste = Array.isArray(quellen) ? quellen : [];
-      for (const quelle of liste) addFamilienQuelleRow(quelle);
-      if (!quellenListe.children.length) addFamilienQuelleRow({ url: "", zeile: "" });
-    };
-    const addFamilienQuelleRow = (quelle = {}) => {
-      const row = document.createElement("div");
-      row.className = "source-link-inline familie-quelle-row";
-      const url = document.createElement("input"); url.type = "url"; url.placeholder = "Trauungsbuch-Link https://…"; url.inputMode = "url"; url.value = quelle.url || "";
-      const label = document.createElement("span"); label.className = "source-line-label"; label.textContent = "Zeile";
-      const zeile = document.createElement("input"); zeile.type = "number"; zeile.min = "1"; zeile.placeholder = "–"; zeile.value = quelle.zeile ?? "";
-      const remove = document.createElement("button"); remove.type = "button"; remove.className = "btn btn--ghost"; remove.textContent = "✕"; remove.title = "Quelle entfernen";
-      remove.addEventListener("click", () => { row.remove(); if (!quellenListe.children.length) addFamilienQuelleRow({}); });
-      row.append(url, label, zeile, remove); quellenListe.appendChild(row);
-    };
-    renderFamilienQuellen(f.trauungsbuch_quellen);
-    div.querySelector(".familie-quelle-add").addEventListener("click", () => addFamilienQuelleRow({}));
+    // Vorhandenen Trauungsbuch-Link eines der beiden Ehepartner anzeigen.
+    // Bei mehreren Ehen wird bewusst der erste vorhandene Link verwendet;
+    // die Zuordnung kann später manuell korrigiert werden.
+    const familienQuelleLink = div.querySelector(".familie-trauungsbuch-link");
+    const familienQuelleZeile = div.querySelector(".familie-trauungsbuch-zeile");
+    try {
+      const { data: quellenPersonen, error: quellenError } = await sb.from("personen")
+        .select("id, vorname, nachname, trauungsbuch_link, trauungsbuch_zeile")
+        .in("id", [personId, otherId]);
+      if (quellenError) throw quellenError;
+      const quelle = (quellenPersonen || []).find(p => String(p.trauungsbuch_link || "").trim());
+      if (quelle) {
+        familienQuelleLink.href = quelle.trauungsbuch_link;
+        familienQuelleLink.textContent = "Trauungsbuch öffnen";
+        familienQuelleLink.hidden = false;
+        familienQuelleZeile.textContent = quelle.trauungsbuch_zeile ? ` · Zeile ${quelle.trauungsbuch_zeile}` : "";
+      } else {
+        familienQuelleLink.hidden = true;
+        familienQuelleZeile.textContent = "Kein Link hinterlegt";
+      }
+    } catch (err) {
+      familienQuelleLink.hidden = true;
+      familienQuelleZeile.textContent = "Trauungsbuch-Link konnte nicht geladen werden";
+      debugLog(`⚠️ Trauungsbuch-Link anzeigen: ${err.message || err}`);
+    }
 
     div.querySelector(".familie-save-btn").addEventListener("click", async () => {
       let eingegebenesEnde = getDatum(endePrefix);
@@ -4289,10 +4292,6 @@ async function loadDetailFamilie(personId) {
         beginn: getDatum(beginnPrefix),
         ende: eingegebenesEnde,
         ende_automatik_ignorieren: automatikIgnorieren,
-        trauungsbuch_quellen: [...quellenListe.querySelectorAll(".familie-quelle-row")].map((row) => ({
-          url: row.querySelector('input[type="url"]').value.trim(),
-          zeile: row.querySelector('input[type="number"]').value.trim() ? Number(row.querySelector('input[type="number"]').value) : null,
-        })).filter((q) => q.url),
       };
       const msg = document.getElementById("d-familie-message");
       msg.textContent = "Partnerschaft wird gespeichert …";
