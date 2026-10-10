@@ -4296,24 +4296,42 @@ async function loadDetailFamilie(personId) {
       await openPersonDetail(otherId);
     });
 
-    // Vorhandenen Trauungsbuch-Link eines der beiden Ehepartner anzeigen.
-    // Bei mehreren Ehen wird bewusst der erste vorhandene Link verwendet;
-    // die Zuordnung kann später manuell korrigiert werden.
+    // Trauungsbuchquelle pro Ehe aus der neuen Familientabelle laden.
+    // Wenn dort noch kein Eintrag existiert, nur zur Anzeige auf alte Personendaten zurückfallen.
     const familienQuelleLink = div.querySelector(".familie-trauungsbuch-link");
     const familienQuelleZeile = div.querySelector(".familie-trauungsbuch-zeile");
+    const sourceEditor = div.querySelector(".familie-source-editor");
+    const sourceEditBtn = div.querySelector(".familie-source-edit");
+    const sourceUrlInput = div.querySelector(".familie-source-url");
+    const sourceRowInput = div.querySelector(".familie-source-row");
+    let eheQuelle = null;
     try {
-      const { data: quellenPersonen, error: quellenError } = await sb.from("personen")
-        .select("id, vorname, nachname, trauungsbuch_link, trauungsbuch_zeile")
-        .in("id", [personId, otherId]);
-      if (quellenError) throw quellenError;
-      const quelle = (quellenPersonen || []).find(p => String(p.trauungsbuch_link || "").trim());
-      if (quelle) {
-        familienQuelleLink.href = quelle.trauungsbuch_link;
+      const { data: eheQuelleData, error: eheQuelleError } = await sb
+        .from("familien_trauungsbuch_quellen")
+        .select("familie_id, trauungsbuch_link, trauungsbuch_zeile")
+        .eq("familie_id", f.id)
+        .maybeSingle();
+      if (eheQuelleError) throw eheQuelleError;
+      eheQuelle = eheQuelleData || null;
+      if (!eheQuelle) {
+        const { data: quellenPersonen, error: quellenError } = await sb.from("personen")
+          .select("id, vorname, nachname, trauungsbuch_link, trauungsbuch_zeile")
+          .in("id", [personId, otherId]);
+        if (quellenError) throw quellenError;
+        const legacyQuelle = (quellenPersonen || []).find(p => String(p.trauungsbuch_link || "").trim());
+        if (legacyQuelle) eheQuelle = {
+          familie_id: f.id,
+          trauungsbuch_link: legacyQuelle.trauungsbuch_link || "",
+          trauungsbuch_zeile: legacyQuelle.trauungsbuch_zeile || null
+        };
+      }
+      if (eheQuelle?.trauungsbuch_link) {
+        familienQuelleLink.href = eheQuelle.trauungsbuch_link;
         familienQuelleLink.textContent = "Trauungsbuch öffnen";
         familienQuelleLink.hidden = false;
         familienQuelleLink.classList.add("btn--link-present");
         familienQuelleLink.removeAttribute("aria-disabled");
-        familienQuelleZeile.textContent = quelle.trauungsbuch_zeile ? `Zeile ${quelle.trauungsbuch_zeile}` : "Zeile –";
+        familienQuelleZeile.textContent = eheQuelle.trauungsbuch_zeile ? `Zeile ${eheQuelle.trauungsbuch_zeile}` : "Zeile –";
       } else {
         familienQuelleLink.hidden = false;
         familienQuelleLink.href = "#";
@@ -4325,18 +4343,14 @@ async function loadDetailFamilie(personId) {
     } catch (err) {
       familienQuelleLink.hidden = false;
       familienQuelleLink.href = "#";
-      familienQuelleLink.textContent = "Trauungsbuch-Link nicht verfügbar";
+      familienQuelleLink.textContent = "Trauungsbuch-Quelle nicht verfügbar";
       familienQuelleLink.classList.remove("btn--link-present");
       familienQuelleZeile.textContent = "";
-      debugLog(`⚠️ Trauungsbuch-Link anzeigen: ${err.message || err}`);
+      debugLog(`⚠️ Trauungsbuchquelle anzeigen: ${err.message || err}`);
     }
 
-    const sourceEditor = div.querySelector(".familie-source-editor");
-    const sourceEditBtn = div.querySelector(".familie-source-edit");
-    const sourceUrlInput = div.querySelector(".familie-source-url");
-    const sourceRowInput = div.querySelector(".familie-source-row");
-    sourceUrlInput.value = (typeof quelle !== "undefined" && quelle?.trauungsbuch_link) || "";
-    sourceRowInput.value = (typeof quelle !== "undefined" && quelle?.trauungsbuch_zeile) || "";
+    sourceUrlInput.value = eheQuelle?.trauungsbuch_link || "";
+    sourceRowInput.value = eheQuelle?.trauungsbuch_zeile ?? "";
     sourceEditBtn.addEventListener("click", () => { sourceEditor.hidden = !sourceEditor.hidden; });
     div.querySelector(".familie-source-save").addEventListener("click", async () => {
       const url = sourceUrlInput.value.trim();
@@ -4347,12 +4361,13 @@ async function loadDetailFamilie(personId) {
         sourceRowInput.focus();
         return;
       }
-      const zielPersonId = (typeof quelle !== "undefined" && quelle?.id) || personId;
-      // Eine Zeilennummer darf auch allein geändert werden. Ein leeres URL-Feld
-      // bedeutet hier nicht, dass ein bestehender Link gelöscht werden soll.
-      const updateDaten = { trauungsbuch_zeile: row };
-      if (url) updateDaten.trauungsbuch_link = url;
-      const { error } = await sb.from("personen").update(updateDaten).eq("id", zielPersonId);
+      const updateDaten = {
+        familie_id: f.id,
+        trauungsbuch_link: url || eheQuelle?.trauungsbuch_link || null,
+        trauungsbuch_zeile: row,
+        geaendert_am: new Date().toISOString()
+      };
+      const { error } = await sb.from("familien_trauungsbuch_quellen").upsert(updateDaten, { onConflict: "familie_id" });
       if (error) { alert(`Trauungsbuch-Quelle konnte nicht gespeichert werden: ${error.message}`); return; }
       await loadDetailFamilie(currentDetailPersonId);
     });
