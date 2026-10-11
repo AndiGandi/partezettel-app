@@ -787,3 +787,12 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 .person-keyphoto-preview img{display:block;width:100%;height:100%;object-fit:cover}
 .person-keyphoto-placeholder{font-size:2rem;color:var(--ink-soft);opacity:.65}
 @media(max-width:420px){.person-name-keyphoto-row{grid-template-columns:minmax(0,1fr) 68px;gap:.5rem}.person-keyphoto-preview{width:68px;height:68px}}
+
+
+/* v231: Gruppenfoto-Metadaten unter dem Bild und gut erreichbarer Bearbeiten-Stift */
+.gruppenfoto-uebersicht-beschriftung{display:flex;flex-direction:column;gap:.15rem;min-width:0;flex:1}
+.gruppenfoto-datum{display:block;font-size:.88rem;color:var(--ink-soft)}
+.gruppenfoto-uebersicht-aktionen{display:flex;align-items:center;gap:.35rem;flex-wrap:wrap}
+.gruppenfoto-metadaten-edit-btn{min-width:42px;min-height:40px;font-size:1.05rem}
+.gruppenfoto-uebersicht-item{align-items:center;gap:.65rem}
+.person-card__photo{width:84px;height:84px;flex:0 0 84px}

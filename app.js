@@ -3376,10 +3376,11 @@ async function ladeGruppenfotoListe() {
     const titel = String(foto.titel || "").trim();
     const datum = [foto.aufnahme_tag, foto.aufnahme_monat, foto.aufnahme_jahr].filter(v => v !== null && v !== undefined && v !== "").map((v, i) => String(v).padStart(i < 2 ? 2 : 4, "0"));
     const datumText = foto.aufnahme_jahr ? (foto.aufnahme_tag && foto.aufnahme_monat ? `${String(foto.aufnahme_tag).padStart(2,"0")}.${String(foto.aufnahme_monat).padStart(2,"0")}.${foto.aufnahme_jahr}` : foto.aufnahme_monat ? `${String(foto.aufnahme_monat).padStart(2,"0")}.${foto.aufnahme_jahr}` : String(foto.aufnahme_jahr)) : "";
-    div.innerHTML = `<img class="gruppenfoto-miniatur" alt="Gruppenfoto" loading="eager"><span class="beziehung-text">📷 ${escapeHtml(titel || "Gruppenfoto")}${datumText ? `<small class="gruppenfoto-datum">${escapeHtml(datumText)}</small>` : ""}</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">Foto öffnen / Personen</button>`;
+    div.innerHTML = `<img class="gruppenfoto-miniatur" alt="Gruppenfoto" loading="eager"><div class="gruppenfoto-uebersicht-beschriftung"><span class="beziehung-text">📷 ${escapeHtml(titel || "Gruppenfoto")}</span>${datumText ? `<small class="gruppenfoto-datum">${escapeHtml(datumText)}</small>` : ""}</div><div class="gruppenfoto-uebersicht-aktionen"><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">Foto öffnen / Personen</button><button type="button" class="btn btn--ghost gruppenfoto-metadaten-edit-btn" aria-label="Titel und Aufnahmedatum bearbeiten" title="Titel und Datum bearbeiten">✏️</button></div>`;
     const img = div.querySelector(".gruppenfoto-miniatur");
     if (url) img.src = url;
     div.querySelector(".gruppenfoto-personen-btn").addEventListener("click", () => openFotoPersonenModal(foto));
+    div.querySelector(".gruppenfoto-metadaten-edit-btn").addEventListener("click", () => openFotoPersonenModal(foto));
     gruppenfotoListe.appendChild(div);
   }
 }
@@ -3508,6 +3509,43 @@ async function openFotoPersonenModal(foto) {
   if (fotoMarkierbild.complete && fotoMarkierbild.naturalWidth) renderAfterLoad();
   else fotoMarkierbild.addEventListener("load", renderAfterLoad, { once: true });
 }
+
+
+gruppenfotoMetadatenSpeichern?.addEventListener("click", async () => {
+  if (!fotoPersonenAktuell?.id) {
+    if (gruppenfotoMetadatenMessage) gruppenfotoMetadatenMessage.textContent = "Kein Gruppenfoto ausgewählt.";
+    return;
+  }
+  const tag = gruppenfotoBearbeitenTag?.value ? Number(gruppenfotoBearbeitenTag.value) : null;
+  const monat = gruppenfotoBearbeitenMonat?.value ? Number(gruppenfotoBearbeitenMonat.value) : null;
+  const jahr = gruppenfotoBearbeitenJahr?.value ? Number(gruppenfotoBearbeitenJahr.value) : null;
+  if (tag !== null && (!monat || !jahr)) {
+    gruppenfotoMetadatenMessage.textContent = "Für einen Tag bitte auch Monat und Jahr angeben.";
+    return;
+  }
+  if (monat !== null && !jahr) {
+    gruppenfotoMetadatenMessage.textContent = "Für einen Monat bitte auch das Jahr angeben.";
+    return;
+  }
+  gruppenfotoMetadatenSpeichern.disabled = true;
+  gruppenfotoMetadatenMessage.textContent = "Speichere …";
+  try {
+    const { data, error } = await sb.from("fotos").update({
+      titel: gruppenfotoBearbeitenTitel?.value.trim() || null,
+      aufnahme_tag: tag,
+      aufnahme_monat: monat,
+      aufnahme_jahr: jahr
+    }).eq("id", fotoPersonenAktuell.id).select().single();
+    if (error) throw error;
+    fotoPersonenAktuell = data;
+    gruppenfotoMetadatenMessage.textContent = "Bezeichnung und Datum gespeichert ✓";
+    await ladeGruppenfotoListe();
+  } catch (err) {
+    gruppenfotoMetadatenMessage.textContent = `Speichern fehlgeschlagen: ${err.message || err}`;
+  } finally {
+    gruppenfotoMetadatenSpeichern.disabled = false;
+  }
+});
 
 
 function renderFotoPersonAuswahl() {
