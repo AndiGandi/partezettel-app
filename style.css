@@ -996,3 +996,46 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
     max-height: 74dvh !important;
   }
 }
+
+
+/* v242: Gruppenfoto im Nummerierungsdialog groß und über den Bedienelementen */
+.foto-personen-sheet {
+  width: min(1500px, 100%) !important;
+  max-width: 100% !important;
+}
+.foto-personen-body {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: .8rem !important;
+}
+#foto-markierflaeche {
+  grid-row: 1 !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+}
+#foto-markierbild-wrap {
+  width: 100% !important;
+}
+#foto-markierbild {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  max-height: 76dvh !important;
+  object-fit: contain !important;
+}
+.gruppenfoto-metadaten-editor {
+  grid-row: 2 !important;
+}
+.foto-personen-controls {
+  grid-row: 3 !important;
+  width: 100% !important;
+}
+@media (min-width: 761px) {
+  .foto-personen-body {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  #foto-markierbild {
+    max-height: 76dvh !important;
+  }
+}
