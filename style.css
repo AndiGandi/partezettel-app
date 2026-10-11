@@ -907,3 +907,92 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
   max-height: 100% !important;
   object-fit: cover;
 }
+
+
+/* v241: Schlüsselfoto in den freien Bereich links neben der bisherigen Position setzen.
+   Namensfelder werden schmaler, damit das Foto nicht über Eingaben liegt. */
+.person-name-keyphoto-row {
+  grid-template-columns: minmax(0, 1fr) 220px !important;
+  column-gap: 0 !important;
+  align-items: start;
+}
+.person-name-fields {
+  width: 68%;
+  max-width: 68%;
+  min-width: 0;
+}
+.person-name-fields .field,
+.person-name-fields input {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.person-keyphoto-preview {
+  width: 220px !important;
+  height: 220px !important;
+  margin-top: 1.25rem;
+  transform: translateX(-220px);
+  justify-self: start;
+}
+.person-keyphoto-preview img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: cover;
+}
+@media (max-width: 760px) {
+  .person-name-keyphoto-row {
+    grid-template-columns: minmax(0, 1fr) 180px !important;
+  }
+  .person-name-fields {
+    width: 66%;
+    max-width: 66%;
+  }
+  .person-keyphoto-preview {
+    width: 180px !important;
+    height: 180px !important;
+    transform: translateX(-180px);
+  }
+}
+@media (max-width: 500px) {
+  .person-name-keyphoto-row {
+    grid-template-columns: minmax(0, 1fr) 130px !important;
+  }
+  .person-name-fields {
+    width: 64%;
+    max-width: 64%;
+  }
+  .person-keyphoto-preview {
+    width: 130px !important;
+    height: 130px !important;
+    transform: translateX(-130px);
+  }
+}
+
+/* v241: größtmögliche Fläche für präzise Nummernplatzierung im Gruppenfoto-Dialog */
+.foto-personen-sheet {
+  width: min(1600px, 100%) !important;
+  max-width: 100% !important;
+  padding: .45rem !important;
+}
+.foto-personen-body {
+  grid-template-columns: minmax(0, 2.4fr) minmax(300px, .8fr) !important;
+  gap: .65rem !important;
+  padding: .5rem !important;
+}
+.foto-markierflaeche {
+  min-height: 300px !important;
+}
+.foto-markierflaeche img {
+  max-height: 82dvh !important;
+  width: 100% !important;
+  object-fit: contain !important;
+}
+@media (max-width: 760px) {
+  .foto-personen-body {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .foto-markierflaeche img {
+    max-height: 74dvh !important;
+  }
+}
