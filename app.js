@@ -1,3 +1,4 @@
+// v220: ein gemeinsames Such-/Auswahlfeld für die Ausgangsperson im Stammbaum.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
@@ -6541,20 +6542,29 @@ function treePersonSearchText(person) {
 
 function fillTreePersonSelect(searchValue = "", preferredId = "") {
   const select = document.getElementById("tree-person-select");
+  const search = document.getElementById("tree-person-search");
+  const options = document.getElementById("tree-person-options");
   if (!select) return "";
   const query = treeNormalizeName(searchValue);
   const previous = preferredId || select.value;
-  const matches = (treeData.personen || []).filter((p) => {
+  const people = [...(treeData.personen || [])].sort(personenAuswahlSortierung);
+  const matches = people.filter((p) => {
     if (!query) return true;
-    const haystack = treeNormalizeName(`${p.vorname || ""} ${p.nachname || ""} ${p.geburtsjahr || ""} ${p.geburtsdatum || ""}`);
+    const haystack = treeNormalizeName(`${p.vorname || ""} ${p.nachname || ""} ${p.geburtsjahr || ""} ${p.geburtsdatum || ""} ${p.sterbejahr || ""} ${p.sterbedatum || ""} ${p.Ledigenname || ""}`);
     return haystack.includes(query);
   });
-  select.innerHTML = `<option value="">— Person auswählen —</option>`;
+  select.innerHTML = '<option value="">— Person auswählen —</option>';
+  if (options) options.replaceChildren();
   for (const p of matches) {
     const opt = document.createElement("option");
     opt.value = p.id;
     opt.textContent = treePersonSearchText(p);
     select.appendChild(opt);
+    if (options) {
+      const suggestion = document.createElement("option");
+      suggestion.value = treePersonSearchText(p);
+      options.appendChild(suggestion);
+    }
   }
   if (previous && matches.some((p) => p.id === previous)) {
     select.value = previous;
@@ -6563,7 +6573,6 @@ function fillTreePersonSelect(searchValue = "", preferredId = "") {
   }
   return select.value;
 }
-
 
 function treeClassicPersonSort(aId, bId) {
   const a=treePerson(aId), b=treePerson(bId), da=a?.geburtsdatum||"", db=b?.geburtsdatum||"";
@@ -6716,10 +6725,24 @@ function updateTreeZoom() {
 
 const treeSelect = document.getElementById("tree-person-select");
 const treePersonSearch = document.getElementById("tree-person-search");
-if (treeSelect) treeSelect.addEventListener("change", () => { if (treeViewMode === "classic") renderKlassischerStammbaum(treeSelect.value); else renderStammbaum(treeSelect.value); });
+function setTreePersonSelection(id) {
+  if (!treeSelect || !id || !treePerson(id)) return;
+  treeSelect.value = id;
+  if (treePersonSearch) treePersonSearch.value = treePersonSearchText(treePerson(id));
+  if (treeViewMode === "classic") renderKlassischerStammbaum(id);
+  else renderStammbaum(id);
+}
+if (treeSelect) treeSelect.addEventListener("change", () => setTreePersonSelection(treeSelect.value));
 if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
-  const selected = fillTreePersonSelect(treePersonSearch.value, treeSelect?.value || "");
-  if (selected) { if (treeViewMode === "classic") renderKlassischerStammbaum(selected); else renderStammbaum(selected); }
+  const query = treePersonSearch.value;
+  fillTreePersonSelect(query, "");
+  const exact = (treeData.personen || []).find(p => treeNormalizeName(treePersonSearchText(p)) === treeNormalizeName(query));
+  if (exact) setTreePersonSelection(exact.id);
+  else if (!query.trim() && treeSelect?.value) {
+    const selected = treeSelect.value;
+    if (treeViewMode === "classic") renderKlassischerStammbaum(selected);
+    else renderStammbaum(selected);
+  }
 });
 const treeZoomIn = document.getElementById("tree-zoom-in");
 const treeZoomOut = document.getElementById("tree-zoom-out");

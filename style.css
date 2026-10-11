@@ -744,3 +744,23 @@
   .familie-trauungsbuch { flex-wrap: wrap; gap: .35rem; }
   .familie-trauungsbuch .familie-trauungsbuch-link { max-width: calc(100vw - 12rem); }
 }
+
+
+/* v220: Stammbaum-Personensuche als einheitliches Such- und Auswahlfeld. */
+.tree-person-select--single { display:block; min-width:0; max-width:38rem; }
+.tree-person-select--single .field { display:block; width:100%; }
+.tree-person-select--single input[type="search"] { width:100%; min-height:44px; }
+.tree-person-select--single .tree-person-hint { display:block; margin-top:.25rem; color:var(--ink-soft); font-size:.76rem; line-height:1.35; }
+@media(max-width:700px) { .tree-person-select--single { max-width:none; width:100%; } }
+
+/* v220: Einheitliche Grundgestaltung normaler Eingabefelder in allen Bereichen. */
+.field input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+.field select, .field textarea,
+input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="number"], input[type="date"], select, textarea {
+  min-height:44px; border:1px solid var(--line); border-radius:8px; padding:.55rem .7rem;
+  font:inherit; color:var(--ink); background:#fff; max-width:100%;
+}
+input[type="text"]:focus, input[type="search"]:focus, input[type="email"]:focus, input[type="password"]:focus,
+input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus, textarea:focus {
+  outline:2px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset:1px;
+}
