@@ -3141,7 +3141,10 @@ async function loadDetailFotos(personId) {
         </div>
         <div class="detail-group-photo-info">
           <div class="detail-group-photo-title-date">
-            ${foto.titel ? `<div class="detail-group-photo-title">${escapeHtml(String(foto.titel))}</div>` : ""}
+            <div class="detail-group-photo-title-row">
+              <div class="detail-group-photo-title">${foto.titel ? escapeHtml(String(foto.titel)) : ""}</div>
+              <button class="btn btn--ghost detail-group-photo-metadata-edit" type="button" title="Bezeichnung und Datum bearbeiten" aria-label="Bezeichnung und Datum bearbeiten">✏️</button>
+            </div>
             ${foto.aufnahme_jahr ? `<div class="detail-group-photo-year">${escapeHtml(String(foto.aufnahme_jahr))}</div>` : ""}
           </div>
           <span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto · Gruppenfoto" : "Gruppenfoto"}</span>
@@ -3153,6 +3156,10 @@ async function loadDetailFotos(personId) {
           </div>
         </div>`;
       const wrap = div.querySelector(".detail-group-photo-wrap");
+      div.querySelector(".detail-group-photo-metadata-edit").addEventListener("click", (event) => {
+        event.stopPropagation();
+        void openFotoPersonenModal(foto);
+      });
       const markerEl = div.querySelector(".detail-group-photo-markers");
       const legendEl = div.querySelector(".detail-group-photo-legend");
       (markierungen || []).forEach(row => {
