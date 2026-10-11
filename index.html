@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 228 -->
+    <!-- Version 227 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=228">
+<link rel="stylesheet" href="style.css?v=229">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 228</p>
+  <p id="app-version" class="app-header__version">Version 227</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -304,6 +304,20 @@
         <span>＋ Foto auswählen</span>
         <input type="file" id="gruppenfoto-input" accept="image/*" hidden>
       </label>
+      <label class="form-field" style="margin-top:.75rem;">Bezeichnung (optional)
+        <input type="text" id="gruppenfoto-titel" placeholder="z. B. Eiserne Hochzeit 1934" maxlength="200">
+      </label>
+      <div class="form-row" style="margin-top:.5rem;">
+        <label class="form-field">Aufnahmetag (optional)
+          <input type="number" id="gruppenfoto-tag" min="1" max="31" placeholder="TT">
+        </label>
+        <label class="form-field">Aufnahmemonat (optional)
+          <input type="number" id="gruppenfoto-monat" min="1" max="12" placeholder="MM">
+        </label>
+        <label class="form-field">Aufnahmejahr *
+          <input type="number" id="gruppenfoto-jahr" min="1500" max="2100" placeholder="z. B. 1934">
+        </label>
+      </div>
       <img id="gruppenfoto-preview" class="preview-img" hidden>
       <div id="gruppenfoto-status" class="capture-status" style="margin-top:.5rem;">Kein Foto ausgewählt</div>
       <div class="gruppenfoto-personen-auswahl" style="margin-top:.8rem;">
@@ -566,6 +580,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=228"></script>
+<script src="app.js?v=229"></script>
 </body>
 </html>

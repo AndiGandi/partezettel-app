@@ -1,4 +1,3 @@
-// v228: Schlüsselfoto-Vorschau neben den Namensfeldern leicht vergrößert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -3284,6 +3283,10 @@ function escapeHtml(value) {
 
 // ---- Zentrale Fotoübersicht ----
 const gruppenfotoInput = document.getElementById("gruppenfoto-input");
+const gruppenfotoTitel = document.getElementById("gruppenfoto-titel");
+const gruppenfotoTag = document.getElementById("gruppenfoto-tag");
+const gruppenfotoMonat = document.getElementById("gruppenfoto-monat");
+const gruppenfotoJahr = document.getElementById("gruppenfoto-jahr");
 const gruppenfotoPreview = document.getElementById("gruppenfoto-preview");
 const gruppenfotoStatus = document.getElementById("gruppenfoto-status");
 const gruppenfotoPersonenListe = document.getElementById("gruppenfoto-personen-liste");
@@ -3370,7 +3373,10 @@ async function ladeGruppenfotoListe() {
     const div = document.createElement("div");
     div.className = "detail-media-item gruppenfoto-uebersicht-item";
     const url = fotoUrls.get(foto.dateipfad) || "";
-    div.innerHTML = `<img class="gruppenfoto-miniatur" alt="Gruppenfoto" loading="eager"><span class="beziehung-text">📷 Gruppenfoto</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">Foto öffnen / Personen</button>`;
+    const titel = String(foto.titel || "").trim();
+    const datum = [foto.aufnahme_tag, foto.aufnahme_monat, foto.aufnahme_jahr].filter(v => v !== null && v !== undefined && v !== "").map((v, i) => String(v).padStart(i < 2 ? 2 : 4, "0"));
+    const datumText = foto.aufnahme_jahr ? (foto.aufnahme_tag && foto.aufnahme_monat ? `${String(foto.aufnahme_tag).padStart(2,"0")}.${String(foto.aufnahme_monat).padStart(2,"0")}.${foto.aufnahme_jahr}` : foto.aufnahme_monat ? `${String(foto.aufnahme_monat).padStart(2,"0")}.${foto.aufnahme_jahr}` : String(foto.aufnahme_jahr)) : "";
+    div.innerHTML = `<img class="gruppenfoto-miniatur" alt="Gruppenfoto" loading="eager"><span class="beziehung-text">📷 ${escapeHtml(titel || "Gruppenfoto")}${datumText ? `<small class="gruppenfoto-datum">${escapeHtml(datumText)}</small>` : ""}</span><button type="button" class="btn btn--secondary gruppenfoto-personen-btn">Foto öffnen / Personen</button>`;
     const img = div.querySelector(".gruppenfoto-miniatur");
     if (url) img.src = url;
     div.querySelector(".gruppenfoto-personen-btn").addEventListener("click", () => openFotoPersonenModal(foto));
@@ -3403,13 +3409,25 @@ gruppenfotoSpeichern?.addEventListener("click", async () => {
     gruppenfotoMessage.textContent = `Lade hoch … (${Math.round(optimiert.size / 1024)} KB)`;
     const { error: uploadError } = await sb.storage.from(BUCKET_FOTOS).upload(path, optimiert, { contentType: "image/jpeg", upsert: false });
     if (uploadError) throw uploadError;
-    const { data: foto, error: insertError } = await sb.from("fotos").insert({ personen_id: ids[0], dateipfad: path, ist_schluesselfoto: false, gruppenfoto: true }).select().single();
+    const tag = gruppenfotoTag?.value ? Number(gruppenfotoTag.value) : null;
+    const monat = gruppenfotoMonat?.value ? Number(gruppenfotoMonat.value) : null;
+    const jahr = gruppenfotoJahr?.value ? Number(gruppenfotoJahr.value) : null;
+    if (tag !== null && (!monat || !jahr)) throw new Error("Für einen Aufnahmetag bitte auch Monat und Jahr angeben.");
+    if (monat !== null && !jahr) throw new Error("Für einen Aufnahmemonat bitte auch das Jahr angeben.");
+    const { data: foto, error: insertError } = await sb.from("fotos").insert({
+      personen_id: ids[0], dateipfad: path, ist_schluesselfoto: false, gruppenfoto: true,
+      titel: gruppenfotoTitel?.value.trim() || null, aufnahme_tag: tag, aufnahme_monat: monat, aufnahme_jahr: jahr
+    }).select().single();
     if (insertError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); throw insertError; }
     const rows = ids.map((personen_id, index) => ({ foto_id: foto.id, personen_id, nummer: index + 1, position_x: 50, position_y: 50 }));
     const { error: linkError } = await sb.from("foto_personen").insert(rows);
     if (linkError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); await sb.from("fotos").delete().eq("id", foto.id); throw linkError; }
     gruppenfotoMessage.textContent = "Foto gespeichert ✓";
     gruppenfotoDatei = null; gruppenfotoInput.value = ""; gruppenfotoPreview.hidden = true; gruppenfotoStatus.textContent = "Kein Foto ausgewählt";
+    if (gruppenfotoTitel) gruppenfotoTitel.value = "";
+    if (gruppenfotoTag) gruppenfotoTag.value = "";
+    if (gruppenfotoMonat) gruppenfotoMonat.value = "";
+    if (gruppenfotoJahr) gruppenfotoJahr.value = "";
     gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
     if (gruppenfotoPersonenSuche) gruppenfotoPersonenSuche.value = "";
     aktualisiereGruppenfotoPersonenAnzahl();
