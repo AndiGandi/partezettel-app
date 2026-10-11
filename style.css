@@ -1019,8 +1019,9 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 }
 #foto-markierbild {
   display: block !important;
-  width: 100% !important;
+  width: auto !important;
   height: auto !important;
+  max-width: 100% !important;
   max-height: 76dvh !important;
   object-fit: contain !important;
 }
