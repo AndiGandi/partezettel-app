@@ -3128,7 +3128,10 @@ async function loadDetailFotos(personId) {
       .select("id, personen_id, nummer, position_x, position_y, position_format")
       .eq("foto_id", foto.id)
       .order("nummer", { ascending: true });
-    const istGruppenfoto = !!foto.gruppenfoto || (markierungen || []).length > 0;
+    // Nur ausdrücklich als Gruppenfoto gespeicherte Datensätze als Gruppenfoto
+    // darstellen. Eine vorhandene Personen-Verknüpfung allein darf normale Fotos
+    // nicht in die Gruppenfoto-Ansicht umleiten.
+    const istGruppenfoto = !!foto.gruppenfoto;
     const div = document.createElement("div");
     div.className = `detail-media-item${istGruppenfoto ? " detail-group-photo-item" : ""}`;
 
