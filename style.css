@@ -1111,3 +1111,93 @@ select[name*="Year"] {
     font-size: 16px;
   }
 }
+
+
+/* v246: Partnerschafts-Datumsfelder sauber ausrichten – keine verschachtelten Rahmen */
+.familie-edit-fields {
+  display: grid !important;
+  grid-template-columns: minmax(8.5rem, 1fr) minmax(17rem, 2fr) minmax(17rem, 2fr) minmax(7rem, .8fr) 2rem !important;
+  gap: 10px 12px !important;
+  align-items: end !important;
+}
+.familie-edit-fields .date-parts {
+  display: grid !important;
+  grid-template-columns: minmax(3.6rem, .72fr) minmax(7.4rem, 1.45fr) minmax(5.2rem, 1fr) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 6px !important;
+}
+.familie-edit-fields .date-parts select {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.familie-edit-fields .familie-typ-edit,
+.familie-edit-fields .familie-jahre-field,
+.familie-edit-fields .familie-jahre {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.familie-edit-fields .familie-actions {
+  justify-content: center !important;
+}
+.partner-new-fields {
+  display: grid !important;
+  grid-template-columns: minmax(8.5rem, 1fr) minmax(17rem, 2fr) minmax(17rem, 2fr) minmax(7rem, .8fr) !important;
+  gap: 10px 12px !important;
+  align-items: end !important;
+}
+.partner-new-fields .date-parts {
+  display: grid !important;
+  grid-template-columns: minmax(3.6rem, .72fr) minmax(7.4rem, 1.45fr) minmax(5.2rem, 1fr) !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  gap: 6px !important;
+}
+.partner-new-fields .date-parts select {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+@media (max-width: 1100px) {
+  .familie-edit-fields,
+  .partner-new-fields {
+    grid-template-columns: minmax(8rem, 1fr) minmax(0, 2fr) !important;
+  }
+  .familie-edit-fields .familie-jahre-field,
+  .familie-edit-fields .familie-actions {
+    grid-column: auto;
+  }
+  .familie-edit-fields .familie-auto-ende,
+  .familie-edit-fields .familie-save-btn {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 650px) {
+  .familie-edit-fields,
+  .partner-new-fields {
+    grid-template-columns: minmax(0, 1fr) !important;
+    gap: 10px !important;
+  }
+  .familie-edit-fields .date-parts,
+  .partner-new-fields .date-parts {
+    grid-template-columns: minmax(3.6rem, .72fr) minmax(7.4rem, 1.45fr) minmax(5.2rem, 1fr) !important;
+  }
+  .familie-edit-fields .familie-auto-ende,
+  .familie-edit-fields .familie-save-btn {
+    grid-column: 1;
+  }
+}
+
+/* Version 248: direkte Live-Suche für die Personenzuordnung */
+.foto-person-suchergebnisse{display:grid;gap:.4rem;margin-top:.45rem;max-height:35vh;overflow:auto}
+.foto-person-suchergebnis{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap;width:100%;text-align:left;padding:.75rem .85rem;border:1px solid var(--border,#d9d2c6);border-radius:.65rem;background:var(--surface,#fff);color:inherit;cursor:pointer}
+.foto-person-suchergebnis strong{font-weight:600}
+.foto-person-suchergebnis small{display:block;color:var(--muted,#777);font-size:.88em}
+.foto-person-suchergebnis span{font-size:.9em;color:var(--accent,#6b7a4b);white-space:nowrap}
+.foto-person-suchergebnis:disabled{opacity:.65;cursor:default}
+.foto-person-suche-hinweis{margin:.45rem 0;color:var(--muted,#777);font-size:.9em}

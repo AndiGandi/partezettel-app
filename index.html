@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 245 -->
+    <!-- Version 248 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=245">
+<link rel="stylesheet" href="style.css?v=248">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 245</p>
+  <p id="app-version" class="app-header__version">Version 248</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -554,10 +554,11 @@
       </div>
       <div class="foto-personen-controls">
         <label class="field"><span>Person hinzufügen</span>
-          <input type="search" id="foto-person-suche" class="foto-person-suche" placeholder="Name suchen …" autocomplete="off">
-          <select id="foto-person-auswahl"><option value="">— Person auswählen —</option></select>
+          <input type="search" id="foto-person-suche" class="foto-person-suche" placeholder="Name tippen – Treffer antippen zum Hinzufügen …" autocomplete="off">
+          <div id="foto-person-suchergebnisse" class="foto-person-suchergebnisse" role="listbox" aria-label="Personen suchen"></div>
+          <select id="foto-person-auswahl" hidden aria-hidden="true"><option value="">— Person auswählen —</option></select>
         </label>
-        <button type="button" id="foto-person-hinzufuegen" class="btn btn--secondary">＋ Person hinzufügen</button>
+        <button type="button" id="foto-person-hinzufuegen" class="btn btn--secondary" hidden>＋ Person hinzufügen</button>
         <button type="button" id="foto-unbekannt-hinzufuegen" class="btn btn--ghost">＋ Unbekannte Person</button>
         <p class="capture-status">Nummern und Positionen können jederzeit geändert werden.</p>
         <div id="foto-personen-liste" class="foto-personen-liste"></div>
@@ -593,6 +594,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=245"></script>
+<script src="app.js?v=248"></script>
 </body>
 </html>

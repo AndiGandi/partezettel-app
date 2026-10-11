@@ -3369,20 +3369,29 @@ function fotoPersonAnzeige(person) {
   return { name: nameMitLedigenname, daten: fotoPersonJahrDatumAnzeige(person) };
 }
 
+// Auswahl bleibt beim Ändern des Suchbegriffs erhalten, auch wenn markierte
+// Personen gerade nicht in der gefilterten Ergebnisliste sichtbar sind.
+const gruppenfotoAuswahlIds = new Set();
+
 function gruppenfotoAusgewaehltePersonen() {
-  return [...(gruppenfotoPersonenListe?.querySelectorAll('input[type="checkbox"]:checked') || [])].map(el => el.value).filter(Boolean);
+  return [...gruppenfotoAuswahlIds];
 }
 
 function aktualisiereGruppenfotoPersonenAnzahl() {
   if (gruppenfotoPersonenAnzahl) {
-    const n = gruppenfotoAusgewaehltePersonen().length;
+    const n = gruppenfotoAuswahlIds.size;
     gruppenfotoPersonenAnzahl.textContent = `${n} ${n === 1 ? "Person ausgewählt" : "Personen ausgewählt"}`;
   }
 }
 
 function fuelleGruppenfotoPersonen() {
   if (!gruppenfotoPersonenListe) return;
-  const bisher = new Set(gruppenfotoAusgewaehltePersonen());
+  // Checkboxen vor dem Neuaufbau in den dauerhaften Auswahlzustand übernehmen.
+  gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+    if (cb.checked) gruppenfotoAuswahlIds.add(cb.value);
+    else gruppenfotoAuswahlIds.delete(cb.value);
+  });
+  const bisher = gruppenfotoAuswahlIds;
   const suchtext = (gruppenfotoPersonenSuche?.value || "").trim().toLocaleLowerCase("de");
   const personen = (personenCache || []).slice().sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
   const gefiltert = personen.filter(p => {
@@ -3397,7 +3406,11 @@ function fuelleGruppenfotoPersonen() {
       <span class="gruppenfoto-person-option__text"><strong>${escapeHtml(anzeige.name)}</strong>${anzeige.daten ? `<small>${escapeHtml(anzeige.daten)}</small>` : ""}</span>
     </label>`;
   }).join("");
-  gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener("change", aktualisiereGruppenfotoPersonenAnzahl));
+  gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.addEventListener("change", () => {
+    if (cb.checked) gruppenfotoAuswahlIds.add(cb.value);
+    else gruppenfotoAuswahlIds.delete(cb.value);
+    aktualisiereGruppenfotoPersonenAnzahl();
+  }));
   aktualisiereGruppenfotoPersonenAnzahl();
 }
 
@@ -3473,6 +3486,7 @@ gruppenfotoSpeichern?.addEventListener("click", async () => {
     if (gruppenfotoTag) gruppenfotoTag.value = "";
     if (gruppenfotoMonat) gruppenfotoMonat.value = "";
     if (gruppenfotoJahr) gruppenfotoJahr.value = "";
+    gruppenfotoAuswahlIds.clear();
     gruppenfotoPersonenListe.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
     if (gruppenfotoPersonenSuche) gruppenfotoPersonenSuche.value = "";
     aktualisiereGruppenfotoPersonenAnzahl();
@@ -3496,6 +3510,7 @@ const fotoMarkierungenEl = document.getElementById("foto-markierungen");
 const fotoPersonenListe = document.getElementById("foto-personen-liste");
 const fotoPersonAuswahl = document.getElementById("foto-person-auswahl");
 const fotoPersonSuche = document.getElementById("foto-person-suche");
+const fotoPersonSuchergebnisse = document.getElementById("foto-person-suchergebnisse");
 const fotoPersonenMessage = document.getElementById("foto-personen-message");
 const gruppenfotoBearbeitenTitel = document.getElementById("gruppenfoto-bearbeiten-titel");
 
@@ -3617,26 +3632,54 @@ gruppenfotoMetadatenSpeichern?.addEventListener("click", async () => {
 
 
 function renderFotoPersonAuswahl() {
-  if (!fotoPersonAuswahl) return;
+  if (!fotoPersonAuswahl || !fotoPersonSuchergebnisse) return;
   const alle = fotoPersonAuswahl._alleVerfuegbarenPersonen || [];
   const suchtext = (fotoPersonSuche?.value || "").trim().toLocaleLowerCase("de");
   const gefiltert = suchtext ? alle.filter(p => {
     const a = fotoPersonAnzeige(p);
     return `${a.name} ${a.daten || ""}`.toLocaleLowerCase("de").includes(suchtext);
-  }) : alle;
+  }).slice(0, 30) : [];
   const belegteNummern = new Map(
-    fotoMarkierungen
-      .filter(r => r.personen_id)
-      .map(r => [r.personen_id, r.nummer])
+    fotoMarkierungen.filter(r => r.personen_id).map(r => [r.personen_id, r.nummer])
   );
-  fotoPersonAuswahl.innerHTML = '<option value="">— Person auswählen —</option>' + gefiltert.map(p => {
-    const anzeige = fotoPersonAnzeige(p);
-    const nr = belegteNummern.get(p.id);
-    return `<option value="${p.id}" ${nr ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${nr ? ` — bereits Nr. ${nr}` : ""}</option>`;
-  }).join("");
+  fotoPersonSuchergebnisse.innerHTML = !suchtext
+    ? '<p class="foto-person-suche-hinweis">Name eingeben; passende Personen erscheinen hier.</p>'
+    : gefiltert.length ? gefiltert.map(p => {
+        const anzeige = fotoPersonAnzeige(p);
+        const nr = belegteNummern.get(p.id);
+        return `<button type="button" class="foto-person-suchergebnis" data-person-id="${escapeHtml(String(p.id))}" ${nr ? "disabled" : ""} role="option">
+          <strong>${escapeHtml(anzeige.name)}</strong>
+          ${anzeige.daten ? `<small>${escapeHtml(anzeige.daten)}</small>` : ""}
+          ${nr ? `<small>Bereits auf dem Foto (Nr. ${nr})</small>` : `<span>＋ Hinzufügen</span>`}
+        </button>`;
+      }).join("")
+    : '<p class="foto-person-suche-hinweis">Keine passende Person gefunden.</p>';
 }
 
 fotoPersonSuche?.addEventListener("input", renderFotoPersonAuswahl);
+fotoPersonSuchergebnisse?.addEventListener("click", async (event) => {
+  const button = event.target.closest("button[data-person-id]");
+  if (!button || button.disabled || !fotoPersonenAktuell) return;
+  const personenId = button.dataset.personId;
+  if (fotoMarkierungen.some(r => r.personen_id === personenId)) return;
+  button.disabled = true;
+  fotoPersonenMessage.textContent = "Person wird hinzugefügt …";
+  const maxNr = Math.max(0, ...fotoMarkierungen.map(r => Number(r.nummer) || 0));
+  const { data, error } = await sb.from("foto_personen").insert({
+    foto_id: fotoPersonenAktuell.id, personen_id: personenId, nummer: maxNr + 1,
+    position_x: 50, position_y: 50, position_format: "bild"
+  }).select().single();
+  if (error) {
+    fotoPersonenMessage.textContent = `Fehler: ${error.message}`;
+    button.disabled = false;
+    return;
+  }
+  fotoMarkierungen.push(data);
+  fotoPersonSuche.value = "";
+  renderFotoPersonAuswahl();
+  renderFotoMarkierungen();
+  fotoPersonenMessage.textContent = "Person hinzugefügt ✓";
+});
 
 async function migriereAlteFotoPositionen() {
   if (!fotoMarkierbildWrap || !fotoMarkierbild.naturalWidth) return;
