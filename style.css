@@ -796,4 +796,19 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 .gruppenfoto-metadaten-edit-btn{min-width:42px;min-height:40px;font-size:1.05rem}
 .gruppenfoto-uebersicht-item{align-items:center;gap:.65rem}
 .person-card__photo{width:84px;height:84px;flex:0 0 84px}
-\n/* v232: Gruppenfoto-Name und Aufnahmejahr direkt unter dem Bild */\n.detail-group-photo-caption{font-weight:600;font-size:.95rem;margin:.15rem 0 .4rem;color:var(--ink);overflow-wrap:anywhere}\n
+
+
+/* v233: Gruppenfoto-Titel und Aufnahmejahr direkt unter dem Bild */
+.detail-group-photo-title-date {
+  margin: 8px 0 6px;
+  line-height: 1.35;
+}
+.detail-group-photo-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.detail-group-photo-year {
+  color: var(--muted, #6b6258);
+  font-size: 0.92em;
+  margin-top: 2px;
+}
