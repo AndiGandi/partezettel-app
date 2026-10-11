@@ -778,10 +778,9 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 @media(min-width:701px){.foto-personen-body{grid-template-columns:minmax(0,1.4fr) minmax(320px,.9fr)}.foto-person-zeile__name{flex-basis:calc(100% - 3rem)}}
 @media(max-width:700px){.foto-personen-sheet{width:100%;padding:.6rem;box-sizing:border-box}.foto-personen-body{grid-template-columns:minmax(0,1fr);padding:.4rem;gap:.65rem}.foto-person-zeile{gap:.4rem}.foto-person-zeile__name{flex-basis:calc(100% - 3rem);font-size:1rem}.foto-person-zeile button{font-size:.92rem;padding:.45rem .55rem}}
 
-/* v226: Personendaten und Schlüsselfoto nebeneinander */
-.person-edit-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(280px,.95fr);gap:.85rem;align-items:start}.person-edit-grid>.field-group{min-width:0;margin-bottom:.85rem}.person-edit-fields .field{max-width:100%}.person-edit-grid #d-fotos-list{max-height:58vh;overflow-y:auto}.person-edit-grid .detail-media-item{align-items:flex-start}.person-edit-grid .detail-group-photo-wrap img{max-width:100%;height:auto;object-fit:contain}@media(max-width:760px){.person-edit-grid{grid-template-columns:minmax(0,1fr)}.person-edit-grid #d-fotos-list{max-height:none}}
-
-/* v226: Nur das Schlüsselfoto als kleine Vorschau neben dem Namen; Fotoverwaltung bleibt darunter. */
+/* v227: Nur kleines Schlüsselfoto neben dem Namen; Fotoverwaltung bleibt darunter. */
+.person-edit-grid{display:block}
+.person-edit-fields{margin-bottom:.85rem}
 .person-name-keyphoto-row{display:grid;grid-template-columns:minmax(0,1fr) 84px;gap:.75rem;align-items:start;margin-bottom:.35rem}
 .person-name-fields{min-width:0}.person-name-fields .field{max-width:none}
 .person-keyphoto-preview{width:84px;height:84px;margin-top:1.25rem;border:1px solid var(--line);border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden}
