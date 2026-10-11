@@ -3452,6 +3452,12 @@ const fotoPersonenListe = document.getElementById("foto-personen-liste");
 const fotoPersonAuswahl = document.getElementById("foto-person-auswahl");
 const fotoPersonSuche = document.getElementById("foto-person-suche");
 const fotoPersonenMessage = document.getElementById("foto-personen-message");
+const gruppenfotoBearbeitenTitel = document.getElementById("gruppenfoto-bearbeiten-titel");
+const gruppenfotoBearbeitenTag = document.getElementById("gruppenfoto-bearbeiten-tag");
+const gruppenfotoBearbeitenMonat = document.getElementById("gruppenfoto-bearbeiten-monat");
+const gruppenfotoBearbeitenJahr = document.getElementById("gruppenfoto-bearbeiten-jahr");
+const gruppenfotoMetadatenSpeichern = document.getElementById("gruppenfoto-metadaten-speichern");
+const gruppenfotoMetadatenMessage = document.getElementById("gruppenfoto-metadaten-message");
 
 function fotoPersonName(id) {
   if (!id) return "unbekannte Person";
@@ -3471,6 +3477,12 @@ async function openFotoPersonenModal(foto) {
   fotoPersonenAktuell = foto;
   fotoAktiveMarkierungId = null;
   fotoPersonenMessage.textContent = "Lade …";
+  // Metadaten bei jedem Öffnen aus dem aktuellen Datensatz befüllen.
+  if (gruppenfotoBearbeitenTitel) gruppenfotoBearbeitenTitel.value = foto.titel || "";
+  if (gruppenfotoBearbeitenTag) gruppenfotoBearbeitenTag.value = foto.aufnahme_tag ?? "";
+  if (gruppenfotoBearbeitenMonat) gruppenfotoBearbeitenMonat.value = foto.aufnahme_monat ?? "";
+  if (gruppenfotoBearbeitenJahr) gruppenfotoBearbeitenJahr.value = foto.aufnahme_jahr ?? "";
+  if (gruppenfotoMetadatenMessage) gruppenfotoMetadatenMessage.textContent = "";
   const { data: rows, error } = await sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", foto.id).order("nummer", { ascending: true });
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen = rows || [];
@@ -3805,6 +3817,35 @@ document.getElementById("foto-unbekannt-hinzufuegen")?.addEventListener("click",
   const { data, error } = await sb.from("foto_personen").insert({ foto_id: fotoPersonenAktuell.id, personen_id: null, nummer: maxNr + 1, position_x: 50, position_y: 50, position_format: "bild" }).select().single();
   if (error) { fotoPersonenMessage.textContent = `Fehler: ${error.message}`; return; }
   fotoMarkierungen.push(data); renderFotoMarkierungen();
+});
+
+gruppenfotoMetadatenSpeichern?.addEventListener("click", async () => {
+  if (!fotoPersonenAktuell) return;
+  gruppenfotoMetadatenSpeichern.disabled = true;
+  if (gruppenfotoMetadatenMessage) gruppenfotoMetadatenMessage.textContent = "Speichere …";
+  try {
+    const tag = gruppenfotoBearbeitenTag?.value ? Number(gruppenfotoBearbeitenTag.value) : null;
+    const monat = gruppenfotoBearbeitenMonat?.value ? Number(gruppenfotoBearbeitenMonat.value) : null;
+    const jahr = gruppenfotoBearbeitenJahr?.value ? Number(gruppenfotoBearbeitenJahr.value) : null;
+    if (tag !== null && (!monat || !jahr)) throw new Error("Für einen Aufnahmetag bitte auch Monat und Jahr angeben.");
+    if (monat !== null && !jahr) throw new Error("Für einen Aufnahmemonat bitte auch das Jahr angeben.");
+    if (tag !== null && (tag < 1 || tag > 31)) throw new Error("Der Tag muss zwischen 1 und 31 liegen.");
+    if (monat !== null && (monat < 1 || monat > 12)) throw new Error("Der Monat muss zwischen 1 und 12 liegen.");
+    if (jahr !== null && (jahr < 1500 || jahr > 2100)) throw new Error("Das Jahr muss zwischen 1500 und 2100 liegen.");
+    const changes = {
+      titel: gruppenfotoBearbeitenTitel?.value.trim() || null,
+      aufnahme_tag: tag,
+      aufnahme_monat: monat,
+      aufnahme_jahr: jahr
+    };
+    const { data, error } = await sb.from("fotos").update(changes).eq("id", fotoPersonenAktuell.id).select().single();
+    if (error) throw error;
+    Object.assign(fotoPersonenAktuell, data || changes);
+    if (gruppenfotoMetadatenMessage) gruppenfotoMetadatenMessage.textContent = "Bezeichnung und Aufnahmedatum gespeichert ✓";
+    await ladeGruppenfotoListe();
+  } catch (err) {
+    if (gruppenfotoMetadatenMessage) gruppenfotoMetadatenMessage.textContent = `Fehler: ${err.message || err}`;
+  } finally { gruppenfotoMetadatenSpeichern.disabled = false; }
 });
 
 document.getElementById("foto-personen-close")?.addEventListener("click", () => { fotoPersonenModal.hidden = true; fotoPersonenAktuell = null; fotoMarkierungen = []; fotoAktiveMarkierungId = null; });

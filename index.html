@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 229 -->
+    <!-- Version 230 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=229">
+<link rel="stylesheet" href="style.css?v=230">
 </head>
 <body>
 
@@ -533,6 +533,19 @@
       <button type="button" id="foto-personen-close" class="btn btn--ghost">✕</button>
     </div>
     <div class="foto-personen-body">
+      <fieldset class="field-group gruppenfoto-metadaten-editor">
+        <legend>Gruppenfoto – Bezeichnung und Aufnahmedatum</legend>
+        <label class="form-field">Bezeichnung
+          <input type="text" id="gruppenfoto-bearbeiten-titel" maxlength="200" placeholder="z. B. Eiserne Hochzeit 1934">
+        </label>
+        <div class="form-row">
+          <label class="form-field">Tag (optional)<input type="number" id="gruppenfoto-bearbeiten-tag" min="1" max="31" placeholder="TT"></label>
+          <label class="form-field">Monat (optional)<input type="number" id="gruppenfoto-bearbeiten-monat" min="1" max="12" placeholder="MM"></label>
+          <label class="form-field">Jahr (optional)<input type="number" id="gruppenfoto-bearbeiten-jahr" min="1500" max="2100" placeholder="JJJJ"></label>
+        </div>
+        <button type="button" id="gruppenfoto-metadaten-speichern" class="btn btn--primary">Bezeichnung / Datum speichern</button>
+        <p id="gruppenfoto-metadaten-message" class="form-message" aria-live="polite"></p>
+      </fieldset>
       <div id="foto-markierflaeche" class="foto-markierflaeche">
         <div id="foto-markierbild-wrap" class="foto-markierbild-wrap">
           <img id="foto-markierbild" alt="Gruppenfoto">
@@ -580,6 +593,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=229"></script>
+<script src="app.js?v=230"></script>
 </body>
 </html>
