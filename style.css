@@ -829,3 +829,6 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
   min-height: 30px;
   line-height: 1;
 }
+
+/* v235: Altersangaben direkt bei den Personen im Gruppenfoto */
+.detail-group-photo-legend-item { white-space: normal; }

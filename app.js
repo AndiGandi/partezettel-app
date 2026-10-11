@@ -3172,7 +3172,9 @@ async function loadDetailFotos(personId) {
         markerEl.appendChild(marker);
         const entry = document.createElement("span");
         entry.className = "detail-group-photo-legend-item";
-        entry.textContent = `#${row.nummer} ${fotoPersonName(row.personen_id)}`;
+        const name = fotoPersonName(row.personen_id);
+        const alter = gruppenfotoPersonenAlter(row.personen_id, foto);
+        entry.textContent = `#${row.nummer} ${name}${alter ? ` · ${alter}` : ""}`;
         legendEl.appendChild(entry);
       });
       const gruppenfotoOeffnen = async (event) => {
@@ -3475,6 +3477,30 @@ function fotoPersonName(id) {
   if (!id) return "unbekannte Person";
   const p = personenCache.find(x => x.id === id);
   return p ? `${p.vorname || ""} ${p.nachname || ""}`.trim() : "unbekannte Person";
+}
+
+function gruppenfotoPersonenAlter(id, foto) {
+  const p = personenCache.find(x => x.id === id);
+  if (!p || (!p.geburtsdatum && !p.geburtsjahr) || !foto) return "";
+  const birth = p.geburtsdatum ? new Date(`${p.geburtsdatum}T00:00:00`) : null;
+  const year = Number(foto.aufnahme_jahr || 0);
+  if (!year) return "";
+  let years;
+  let ungefaehr = false;
+  if (birth && Number.isFinite(birth.getTime())) {
+    const photoDate = foto.aufnahme_tag && foto.aufnahme_monat
+      ? new Date(year, Number(foto.aufnahme_monat) - 1, Number(foto.aufnahme_tag))
+      : new Date(year, 6, 1);
+    years = photoDate.getFullYear() - birth.getFullYear();
+    if (photoDate.getMonth() < birth.getMonth() ||
+        (photoDate.getMonth() === birth.getMonth() && photoDate.getDate() < birth.getDate())) years--;
+    if (!(foto.aufnahme_tag && foto.aufnahme_monat)) ungefaehr = true;
+  } else {
+    years = year - Number(p.geburtsjahr);
+    ungefaehr = true;
+  }
+  if (!Number.isFinite(years) || years < 0 || years > 125) return "";
+  return `${ungefaehr ? "ca. " : ""}${years}J`;
 }
 
 async function openFotoPersonenModal(foto) {
