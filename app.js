@@ -3712,9 +3712,66 @@ function renderFotoMarkierungen() {
     m.style.left = `${Number(row.position_x ?? 50)}%`;
     m.style.top = `${Number(row.position_y ?? 50)}%`;
     m.title = `${row.nummer}: ${fotoPersonName(row.personen_id)}`;
-    m.addEventListener("click", (e) => {
+    // Nummern können direkt mit Finger/Maus fein positioniert werden.
+    // Pointer-Capture verhindert, dass die Markierung beim Ziehen verloren geht.
+    let markerDragging = false;
+    let markerMoved = false;
+    let markerStartX = 0;
+    let markerStartY = 0;
+    m.style.touchAction = "none";
+    m.style.cursor = "grab";
+    m.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
-      fotoAktiveMarkierungId = row.id;
+      markerDragging = true;
+      markerMoved = false;
+      markerStartX = e.clientX;
+      markerStartY = e.clientY;
+      m.style.cursor = "grabbing";
+      m.setPointerCapture?.(e.pointerId);
+      e.preventDefault();
+    });
+    m.addEventListener("pointermove", (e) => {
+      if (!markerDragging || !fotoMarkierbild.naturalWidth) return;
+      e.stopPropagation();
+      const dx = e.clientX - markerStartX;
+      const dy = e.clientY - markerStartY;
+      if (Math.abs(dx) + Math.abs(dy) > 2) markerMoved = true;
+      const rect = fotoMarkierbild.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+      const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
+      m.style.left = `${x}%`;
+      m.style.top = `${y}%`;
+      row._pendingPosition = { x, y };
+    });
+    m.addEventListener("pointerup", async (e) => {
+      if (!markerDragging) return;
+      e.stopPropagation();
+      markerDragging = false;
+      m.style.cursor = "grab";
+      if (row._pendingPosition && markerMoved) {
+        const { x, y } = row._pendingPosition;
+        const { error } = await sb.from("foto_personen").update({
+          position_x: x, position_y: y, position_format: "bild"
+        }).eq("id", row.id);
+        if (error) {
+          fotoPersonenMessage.textContent = `Fehler beim Speichern der Position: ${error.message}`;
+          renderFotoMarkierungen();
+        } else {
+          row.position_x = x;
+          row.position_y = y;
+          row.position_format = "bild";
+          fotoPersonenMessage.textContent = `Position von Nr. ${row.nummer} gespeichert ✓`;
+        }
+        delete row._pendingPosition;
+      } else {
+        fotoAktiveMarkierungId = row.id;
+        renderFotoMarkierungen();
+      }
+    });
+    m.addEventListener("pointercancel", () => {
+      markerDragging = false;
+      delete row._pendingPosition;
       renderFotoMarkierungen();
     });
     fotoMarkierungenEl.appendChild(m);
