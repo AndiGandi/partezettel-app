@@ -1,4 +1,4 @@
-// v221: ein gemeinsames Such-/Auswahlfeld für die Ausgangsperson im Stammbaum.
+// v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
@@ -3566,7 +3566,14 @@ function renderFotoMarkierungen() {
     assignBtn.addEventListener("click", () => {
       if (line.querySelector(".foto-person-change-wrap")) return;
 
+      // Beim Tauschen ausschließlich Personen anbieten, die diesem Foto
+      // bereits zugeordnet sind. Unbekannte/freie Archivpersonen gehören nicht
+      // in die Tauschauswahl.
+      const zugeordneteIds = new Set(
+        fotoMarkierungen.map(x => x.personen_id).filter(Boolean)
+      );
       const verfuegbar = (personenCache || [])
+        .filter(p => zugeordneteIds.has(p.id))
         .slice()
         .sort((a,b) =>
           `${a.nachname || ""} ${a.vorname || ""}`.localeCompare(

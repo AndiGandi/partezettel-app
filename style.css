@@ -471,8 +471,9 @@
 
 /* v142: eindeutige Nachbearbeitung der Personen-Zuordnung im Gruppenfoto */
 .foto-person-zeile{align-items:flex-start;flex-wrap:wrap}
-.foto-person-zeile__num{padding-top:.45rem}
-.foto-person-zeile__name{padding-top:.45rem}
+.foto-person-zeile__num{padding-top:.45rem;flex:0 0 2.5rem}
+/* Der Name erhält eine eigene volle Zeile, damit er auf iPad nicht abgeschnitten wird. */
+.foto-person-zeile__name{padding:.45rem 0;flex:1 1 calc(100% - 3rem);min-width:calc(100% - 3rem);white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.35}
 .foto-person-change-wrap{
   flex:1 1 100%;
   display:grid;
