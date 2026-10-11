@@ -832,3 +832,16 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 
 /* v235: Altersangaben direkt bei den Personen im Gruppenfoto */
 .detail-group-photo-legend-item { white-space: normal; }
+
+/* v237: Schlüsselfoto in der Personenbearbeitung deutlich größer */
+#d-keyphoto-preview img,
+#keyphoto-preview img,
+.keyphoto-preview img,
+.person-keyphoto-preview img {
+  width: 104px;
+  height: 104px;
+  max-width: 104px;
+  max-height: 104px;
+  object-fit: cover;
+  border-radius: 8px;
+}
