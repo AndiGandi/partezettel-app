@@ -3566,14 +3566,14 @@ function renderFotoMarkierungen() {
     assignBtn.addEventListener("click", () => {
       if (line.querySelector(".foto-person-change-wrap")) return;
 
-      // Beim Tauschen ausschließlich Personen anbieten, die diesem Foto
-      // bereits zugeordnet sind. Unbekannte/freie Archivpersonen gehören nicht
-      // in die Tauschauswahl.
+      // Für eine bereits zugeordnete Person ist dies ein Tausch: nur Personen
+      // dieses Fotos anbieten. Bei einer unbekannten Person muss dagegen das
+      // gesamte Archiv auswählbar bleiben.
       const zugeordneteIds = new Set(
         fotoMarkierungen.map(x => x.personen_id).filter(Boolean)
       );
       const verfuegbar = (personenCache || [])
-        .filter(p => zugeordneteIds.has(p.id))
+        .filter(p => !row.personen_id || zugeordneteIds.has(p.id))
         .slice()
         .sort((a,b) =>
           `${a.nachname || ""} ${a.vorname || ""}`.localeCompare(
