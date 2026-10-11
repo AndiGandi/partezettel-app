@@ -3147,7 +3147,7 @@ async function loadDetailFotos(personId) {
               <div class="detail-group-photo-title">${foto.titel ? escapeHtml(String(foto.titel)) : ""}</div>
               <button class="btn btn--ghost detail-group-photo-metadata-edit" type="button" title="Bezeichnung und Datum bearbeiten" aria-label="Bezeichnung und Datum bearbeiten">✏️</button>
             </div>
-            ${foto.aufnahme_jahr ? `<div class="detail-group-photo-year">${escapeHtml(String(foto.aufnahme_jahr))}</div>` : ""}
+            ${foto.aufnahme_jahr ? `<div class="detail-group-photo-year">${escapeHtml(foto.aufnahme_tag && foto.aufnahme_monat ? `${String(foto.aufnahme_tag).padStart(2, "0")}. ${["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"][Number(foto.aufnahme_monat) - 1]} ${foto.aufnahme_jahr}` : foto.aufnahme_monat ? `${["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"][Number(foto.aufnahme_monat) - 1]} ${foto.aufnahme_jahr}` : String(foto.aufnahme_jahr))}</div>` : ""}
           </div>
           <span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto · Gruppenfoto" : "Gruppenfoto"}</span>
           <div class="detail-group-photo-legend"></div>
@@ -3302,6 +3302,35 @@ const gruppenfotoTitel = document.getElementById("gruppenfoto-titel");
 const gruppenfotoTag = document.getElementById("gruppenfoto-tag");
 const gruppenfotoMonat = document.getElementById("gruppenfoto-monat");
 const gruppenfotoJahr = document.getElementById("gruppenfoto-jahr");
+const gruppenfotoBearbeitenTag = document.getElementById("gruppenfoto-bearbeiten-tag");
+const gruppenfotoBearbeitenMonat = document.getElementById("gruppenfoto-bearbeiten-monat");
+const gruppenfotoBearbeitenJahr = document.getElementById("gruppenfoto-bearbeiten-jahr");
+
+function fuelleGruppenfotoDatumsfelder() {
+  const monate = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  const fuelle = (el, typ) => {
+    if (!el || el.tagName !== "SELECT" || el.dataset.optionsReady === "true") return;
+    const aktuell = el.value;
+    el.innerHTML = "";
+    const leer = document.createElement("option");
+    leer.value = "";
+    leer.textContent = typ === "tag" ? "Tag" : typ === "monat" ? "Monat" : "Jahr";
+    el.appendChild(leer);
+    if (typ === "tag") {
+      for (let n = 1; n <= 31; n++) { const o = document.createElement("option"); o.value = String(n); o.textContent = String(n); el.appendChild(o); }
+    } else if (typ === "monat") {
+      monate.forEach((name, i) => { const o = document.createElement("option"); o.value = String(i + 1); o.textContent = name; el.appendChild(o); });
+    } else {
+      for (let n = 2100; n >= 1500; n--) { const o = document.createElement("option"); o.value = String(n); o.textContent = String(n); el.appendChild(o); }
+    }
+    el.dataset.optionsReady = "true";
+    if (aktuell) el.value = aktuell;
+  };
+  [[gruppenfotoTag, "tag"], [gruppenfotoMonat, "monat"], [gruppenfotoJahr, "jahr"],
+   [gruppenfotoBearbeitenTag, "tag"], [gruppenfotoBearbeitenMonat, "monat"], [gruppenfotoBearbeitenJahr, "jahr"]]
+    .forEach(([el, typ]) => fuelle(el, typ));
+}
+fuelleGruppenfotoDatumsfelder();
 const gruppenfotoPreview = document.getElementById("gruppenfoto-preview");
 const gruppenfotoStatus = document.getElementById("gruppenfoto-status");
 const gruppenfotoPersonenListe = document.getElementById("gruppenfoto-personen-liste");
@@ -3469,9 +3498,9 @@ const fotoPersonAuswahl = document.getElementById("foto-person-auswahl");
 const fotoPersonSuche = document.getElementById("foto-person-suche");
 const fotoPersonenMessage = document.getElementById("foto-personen-message");
 const gruppenfotoBearbeitenTitel = document.getElementById("gruppenfoto-bearbeiten-titel");
-const gruppenfotoBearbeitenTag = document.getElementById("gruppenfoto-bearbeiten-tag");
-const gruppenfotoBearbeitenMonat = document.getElementById("gruppenfoto-bearbeiten-monat");
-const gruppenfotoBearbeitenJahr = document.getElementById("gruppenfoto-bearbeiten-jahr");
+
+
+
 const gruppenfotoMetadatenSpeichern = document.getElementById("gruppenfoto-metadaten-speichern");
 const gruppenfotoMetadatenMessage = document.getElementById("gruppenfoto-metadaten-message");
 

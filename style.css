@@ -850,3 +850,60 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 .detail-media-item > img { object-fit: cover; }
 
 /* v239: normale Fotos bleiben als einzelne Fotos dargestellt */
+
+/* v240: Schlüsselfoto näher an die Namensfelder, mit ausreichend Platz für Doppelnamen */
+.person-name-keyphoto-row {
+  grid-template-columns: minmax(0, 1fr) 190px;
+  max-width: 900px;
+  gap: 14px;
+}
+.person-name-fields { min-width: 0; }
+.person-name-fields input { width: 100%; box-sizing: border-box; }
+.person-keyphoto-preview {
+  width: 180px;
+  height: 180px;
+  margin-top: 1.25rem;
+}
+@media (max-width: 700px) {
+  .person-name-keyphoto-row { grid-template-columns: minmax(0, 1fr) 132px; gap: 10px; max-width: 100%; }
+  .person-keyphoto-preview { width: 124px; height: 124px; }
+}
+@media (max-width: 430px) {
+  .person-name-keyphoto-row { grid-template-columns: minmax(0, 1fr) 96px; gap: 8px; }
+  .person-keyphoto-preview { width: 90px; height: 90px; }
+}
+/* v240: Datumsfelder vollständig lesbar */
+.date-parts--with-year {
+  grid-template-columns: 4.8rem 8.8rem 6.2rem minmax(10.5rem, 1fr);
+  gap: .45rem;
+}
+.date-parts--with-year select { min-width: 0; font-size: .95rem; padding: .55rem .45rem; }
+@media (max-width: 700px) {
+  .date-parts--with-year { grid-template-columns: 4.2rem 7.6rem 5.5rem minmax(9.5rem, 1fr); gap: .3rem; }
+}
+/* v240: Gruppenfoto im Zuordnungsdialog deutlich größer */
+.foto-personen-sheet { width: min(1200px, 100%); }
+.foto-personen-body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.1rem; }
+.foto-markierflaeche { min-height: 320px; }
+.foto-markierflaeche img { max-height: 78dvh; object-fit: contain; }
+@media (max-width: 760px) {
+  .foto-personen-body { grid-template-columns: minmax(0, 1fr); }
+  .foto-markierflaeche { min-height: 240px; }
+  .foto-markierflaeche img { max-height: 72dvh; }
+}
+/* v240: lesbare Auswahlfelder für Gruppenfoto-Metadaten */
+.gruppenfoto-metadaten-editor .form-row { display: grid; grid-template-columns: minmax(5rem, .65fr) minmax(10rem, 1.5fr) minmax(7rem, 1fr); gap: .6rem; align-items: end; }
+.gruppenfoto-metadaten-editor select { width: 100%; min-width: 0; box-sizing: border-box; }
+@media (max-width: 600px) {
+  .gruppenfoto-metadaten-editor .form-row { grid-template-columns: 1fr 1.5fr; }
+  .gruppenfoto-metadaten-editor .form-row .form-field:last-child { grid-column: 1 / -1; }
+}
+
+/* v240 final: das Bild füllt den vergrößerten Schlüsselfoto-Platz aus */
+.person-keyphoto-preview img {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  object-fit: cover;
+}
