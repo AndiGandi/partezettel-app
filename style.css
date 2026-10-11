@@ -1289,3 +1289,10 @@ select[name*="Year"] {
 .foto-markierung{touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;z-index:5}
 .foto-markierung:active{cursor:grabbing}
 .foto-markierung.is-active{z-index:6;box-shadow:0 0 0 3px rgba(93,125,68,.35);transform:translate(-50%,-50%) scale(1.08)}
+
+/* v251: Markierungskoordinaten in Vorschau und Bearbeitung auf dasselbe Bildmaß beziehen.
+   Keine Höhenbegrenzung im Kartenbild, die das Bild gegenüber der Markierungsfläche
+   verkleinern bzw. Letterboxing erzeugen kann. */
+.detail-group-photo-wrap{width:min(100%,520px);height:auto;aspect-ratio:auto}
+.detail-group-photo-wrap>img{display:block;width:100%;height:auto;max-height:none;object-fit:contain}
+.detail-group-photo-markers{position:absolute;inset:0;width:100%;height:100%}

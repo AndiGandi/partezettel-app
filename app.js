@@ -3477,7 +3477,7 @@ gruppenfotoSpeichern?.addEventListener("click", async () => {
       titel: gruppenfotoTitel?.value.trim() || null, aufnahme_tag: tag, aufnahme_monat: monat, aufnahme_jahr: jahr
     }).select().single();
     if (insertError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); throw insertError; }
-    const rows = ids.map((personen_id, index) => ({ foto_id: foto.id, personen_id, nummer: index + 1, position_x: 50, position_y: 50 }));
+    const rows = ids.map((personen_id, index) => ({ foto_id: foto.id, personen_id, nummer: index + 1, position_x: 50, position_y: 50, position_format: "bild" }));
     const { error: linkError } = await sb.from("foto_personen").insert(rows);
     if (linkError) { await sb.storage.from(BUCKET_FOTOS).remove([path]); await sb.from("fotos").delete().eq("id", foto.id); throw linkError; }
     gruppenfotoMessage.textContent = "Foto gespeichert ✓";
@@ -3584,8 +3584,10 @@ async function openFotoPersonenModal(foto) {
     !fotoMarkierungen.some(r => r.personen_id === p.id)
   );
   fotoPersonenModal.hidden = false;
-  const renderAfterLoad = async () => {
-    await migriereAlteFotoPositionen();
+  const renderAfterLoad = () => {
+    // Bestehende gespeicherte Bildkoordinaten beim Öffnen niemals automatisch
+    // umrechnen oder in Supabase überschreiben. Erstellen, Bearbeiten und
+    // Anzeigen verwenden dieselben position_x-/position_y-Prozentwerte.
     renderFotoMarkierungen();
     fotoPersonenMessage.textContent = "";
   };
