@@ -3705,6 +3705,23 @@ async function migriereAlteFotoPositionen() {
 function renderFotoMarkierungen() {
   fotoMarkierungenEl.innerHTML = "";
   fotoPersonenListe.innerHTML = "";
+
+  // Markierungsfläche exakt auf das sichtbare Bild legen, nicht auf schwarze Seitenränder.
+  if (fotoMarkierbild?.naturalWidth && fotoMarkierbildWrap && fotoMarkierungenEl) {
+    const wrapRect = fotoMarkierbildWrap.getBoundingClientRect();
+    const imageRect = fotoMarkierbild.getBoundingClientRect();
+    if (wrapRect.width && wrapRect.height && imageRect.width && imageRect.height) {
+      Object.assign(fotoMarkierungenEl.style, {
+        position: "absolute",
+        left: `${imageRect.left - wrapRect.left}px`,
+        top: `${imageRect.top - wrapRect.top}px`,
+        width: `${imageRect.width}px`,
+        height: `${imageRect.height}px`,
+        right: "auto",
+        bottom: "auto"
+      });
+    }
+  }
   const sorted = [...fotoMarkierungen].sort((a,b) => Number(a.nummer)-Number(b.nummer));
 
   for (const row of sorted) {
