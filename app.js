@@ -6747,6 +6747,23 @@ function treePersonSearchText(person) {
   return personenAuswahlText(person);
 }
 
+let treePersonSearchIndexSource = null;
+let treePersonSearchIndex = [];
+
+function getTreePersonSearchIndex() {
+  const people = treeData.personen || [];
+  if (treePersonSearchIndexSource !== people) {
+    treePersonSearchIndexSource = people;
+    treePersonSearchIndex = people
+      .map((person) => ({
+        person,
+        search: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.geburtsjahr || ""} ${person.geburtsdatum || ""} ${person.sterbejahr || ""} ${person.sterbedatum || ""} ${person.Ledigenname || ""}`)
+      }))
+      .sort((a, b) => personenAuswahlSortierung(a.person, b.person));
+  }
+  return treePersonSearchIndex;
+}
+
 function fillTreePersonSelect(searchValue = "", preferredId = "") {
   const select = document.getElementById("tree-person-select");
   const search = document.getElementById("tree-person-search");
@@ -6754,26 +6771,32 @@ function fillTreePersonSelect(searchValue = "", preferredId = "") {
   if (!select) return "";
   const query = treeNormalizeName(searchValue);
   const previous = preferredId || select.value;
-  const people = [...(treeData.personen || [])].sort(personenAuswahlSortierung);
-  const matches = people.filter((p) => {
-    if (!query) return true;
-    const haystack = treeNormalizeName(`${p.vorname || ""} ${p.nachname || ""} ${p.geburtsjahr || ""} ${p.geburtsdatum || ""} ${p.sterbejahr || ""} ${p.sterbedatum || ""} ${p.Ledigenname || ""}`);
-    return haystack.includes(query);
-  });
-  select.innerHTML = '<option value="">— Person auswählen —</option>';
+  const index = getTreePersonSearchIndex();
+  // Begrenzte Ergebnisliste hält das native Auswahlmenü auf iPad und iPhone flüssig.
+  const limit = query ? 120 : 80;
+  const matches = [];
+  for (const entry of index) {
+    if (!query || entry.search.includes(query)) matches.push(entry.person);
+    if (matches.length >= limit) break;
+  }
+  select.replaceChildren(new Option("— Person auswählen —", ""));
   if (options) options.replaceChildren();
-  for (const p of matches) {
+  const datalistFragment = options ? document.createDocumentFragment() : null;
+  const selectFragment = document.createDocumentFragment();
+  for (const person of matches) {
     const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = treePersonSearchText(p);
-    select.appendChild(opt);
-    if (options) {
+    opt.value = person.id;
+    opt.textContent = treePersonSearchText(person);
+    selectFragment.appendChild(opt);
+    if (datalistFragment) {
       const suggestion = document.createElement("option");
-      suggestion.value = treePersonSearchText(p);
-      options.appendChild(suggestion);
+      suggestion.value = treePersonSearchText(person);
+      datalistFragment.appendChild(suggestion);
     }
   }
-  if (previous && matches.some((p) => p.id === previous)) {
+  select.appendChild(selectFragment);
+  if (options && datalistFragment) options.appendChild(datalistFragment);
+  if (previous && matches.some((person) => person.id === previous)) {
     select.value = previous;
   } else if (matches.length === 1) {
     select.value = matches[0].id;
