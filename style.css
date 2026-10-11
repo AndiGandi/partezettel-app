@@ -845,3 +845,6 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
   object-fit: cover;
   border-radius: 8px;
 }
+
+/* v238: normale Fotos erhalten wieder eine sichtbare Vorschau */
+.detail-media-item > img { object-fit: cover; }

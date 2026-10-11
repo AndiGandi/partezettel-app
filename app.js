@@ -3118,13 +3118,12 @@ async function loadDetailFotos(personId) {
       if (keyUrl) keyPreview.innerHTML = `<img src="${keyUrl}" alt="Schlüsselfoto">`;
     }
   }
-  // Schlüsselfotos UND Gruppenfotos beim Öffnen der Details laden, damit
-  // Gruppenbilder samt Markierungen sofort sichtbar sind. Normale Fotos bleiben
-  // weiterhin bis zum bewussten Antippen ungeladen.
-  const direktLadenPfade = fotos.filter(f => f.ist_schluesselfoto || f.gruppenfoto).map(f => f.dateipfad);
+  // Alle Fotos beim Öffnen der Personendetails laden, damit auch normale
+  // Fotos (nicht nur Schlüsselfotos und Gruppenfotos) als Vorschaubilder erscheinen.
+  const direktLadenPfade = fotos.filter(f => f.dateipfad).map(f => f.dateipfad);
   const fotoUrls = await ladeFotoBilder(direktLadenPfade);
   for (const foto of fotos) {
-    const fotoUrl = (foto.ist_schluesselfoto || foto.gruppenfoto) ? (fotoUrls.get(foto.dateipfad) || "") : "";
+    const fotoUrl = foto.dateipfad ? (fotoUrls.get(foto.dateipfad) || "") : "";
     const { data: markierungen } = await sb.from("foto_personen")
       .select("id, personen_id, nummer, position_x, position_y, position_format")
       .eq("foto_id", foto.id)
