@@ -1201,3 +1201,86 @@ select[name*="Year"] {
 .foto-person-suchergebnis span{font-size:.9em;color:var(--accent,#6b7a4b);white-space:nowrap}
 .foto-person-suchergebnis:disabled{opacity:.65;cursor:default}
 .foto-person-suche-hinweis{margin:.45rem 0;color:var(--muted,#777);font-size:.9em}
+
+
+/* v249: Partnerschaft kompakt – Art und Dauer oben, Beginn und Ende darunter */
+.familie-edit-fields {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto !important;
+  grid-template-areas:
+    "typ jahre actions"
+    "beginn ende ende"
+    "auto auto auto"
+    "quelle quelle quelle"
+    "save save save" !important;
+  gap: 10px 12px !important;
+  align-items: end !important;
+}
+.familie-edit-fields > label.field:has(.familie-typ-edit) {
+  grid-area: typ;
+}
+.familie-edit-fields > label.field:has(.familie-beginn-edit) {
+  grid-area: beginn;
+}
+.familie-edit-fields > label.field:has(.familie-ende-edit) {
+  grid-area: ende;
+}
+.familie-edit-fields > .familie-jahre-field {
+  grid-area: jahre;
+}
+.familie-edit-fields > .familie-actions {
+  grid-area: actions;
+  align-self: end;
+}
+.familie-edit-fields > .familie-auto-ende {
+  grid-area: auto;
+  margin: 0 !important;
+}
+.familie-edit-fields > .familie-trauungsbuch {
+  grid-area: quelle;
+  margin-top: 2px;
+}
+.familie-edit-fields > .familie-save-btn {
+  grid-area: save;
+  width: 100%;
+}
+.familie-edit-fields .date-parts {
+  display: grid !important;
+  grid-template-columns: minmax(3.2rem, .65fr) minmax(6.5rem, 1.35fr) minmax(4.8rem, 1fr) !important;
+  gap: 6px !important;
+  width: 100% !important;
+}
+.familie-edit-fields .date-parts select {
+  width: 100% !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+.familie-edit-fields .familie-typ-edit,
+.familie-edit-fields .familie-jahre {
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.familie-edit-fields .familie-jahre-field .field,
+.familie-edit-fields .familie-jahre-field {
+  margin: 0 !important;
+}
+@media (max-width: 600px) {
+  .familie-edit-fields {
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-areas:
+      "typ"
+      "jahre"
+      "beginn"
+      "ende"
+      "actions"
+      "auto"
+      "quelle"
+      "save" !important;
+    gap: 8px !important;
+  }
+  .familie-edit-fields .date-parts {
+    grid-template-columns: minmax(3.2rem, .65fr) minmax(6.5rem, 1.35fr) minmax(4.8rem, 1fr) !important;
+  }
+}
