@@ -3141,6 +3141,7 @@ async function loadDetailFotos(personId) {
         </div>
         <div class="detail-group-photo-info">
           <span class="beziehung-text">${foto.ist_schluesselfoto ? "⭐ Schlüsselfoto · Gruppenfoto" : "Gruppenfoto"}</span>
+          <div class="detail-group-photo-caption">${escapeHtml(String(foto.titel || "").trim() || "Gruppenfoto")}${foto.aufnahme_jahr ? ` · ${escapeHtml(String(foto.aufnahme_jahr))}` : ""}</div>
           <div class="detail-group-photo-legend"></div>
           <div class="detail-group-photo-actions">
             <button class="foto-personen-open-btn btn btn--secondary" type="button">👥 Personen</button>

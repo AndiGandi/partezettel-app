@@ -796,3 +796,4 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 .gruppenfoto-metadaten-edit-btn{min-width:42px;min-height:40px;font-size:1.05rem}
 .gruppenfoto-uebersicht-item{align-items:center;gap:.65rem}
 .person-card__photo{width:84px;height:84px;flex:0 0 84px}
+\n/* v232: Gruppenfoto-Name und Aufnahmejahr direkt unter dem Bild */\n.detail-group-photo-caption{font-weight:600;font-size:.95rem;margin:.15rem 0 .4rem;color:var(--ink);overflow-wrap:anywhere}\n
