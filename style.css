@@ -765,3 +765,15 @@ input[type="text"]:focus, input[type="search"]:focus, input[type="email"]:focus,
 input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus, textarea:focus {
   outline:2px solid color-mix(in srgb, var(--accent) 35%, transparent); outline-offset:1px;
 }
+
+
+/* v223: Gruppenfoto-Zeilen auf iPad lesbar halten */
+.foto-person-zeile{flex-wrap:wrap;align-items:center;row-gap:.45rem}
+.foto-person-zeile__num{flex:0 0 2.2rem}
+.foto-person-zeile__name{flex:1 1 calc(100% - 3rem);min-width:0;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.3}
+.foto-person-zeile button{flex:0 0 auto;max-width:100%}
+.foto-person-change-wrap{flex:1 1 100%;min-width:0;display:grid;grid-template-columns:minmax(0,1fr);gap:.45rem}
+.foto-person-change-wrap input,.foto-person-change-wrap select{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+.foto-person-change-wrap .btn{width:100%;white-space:normal}
+@media(min-width:701px){.foto-personen-body{grid-template-columns:minmax(0,1.4fr) minmax(320px,.9fr)}.foto-person-zeile__name{flex-basis:calc(100% - 3rem)}}
+@media(max-width:700px){.foto-personen-sheet{width:100%;padding:.6rem;box-sizing:border-box}.foto-personen-body{grid-template-columns:minmax(0,1fr);padding:.4rem;gap:.65rem}.foto-person-zeile{gap:.4rem}.foto-person-zeile__name{flex-basis:calc(100% - 3rem);font-size:1rem}.foto-person-zeile button{font-size:.92rem;padding:.45rem .55rem}}
