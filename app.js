@@ -1,4 +1,4 @@
-// v220: ein gemeinsames Such-/Auswahlfeld für die Ausgangsperson im Stammbaum.
+// v221: ein gemeinsames Such-/Auswahlfeld für die Ausgangsperson im Stammbaum.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
 // v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
@@ -3304,8 +3304,11 @@ function fotoPersonJahrDatumAnzeige(person) {
 
 function fotoPersonAnzeige(person) {
   if (!person) return { name: "Unbekannte Person", daten: "" };
-  const name = [person.vorname, person.nachname].filter(Boolean).join(" " ) || "Unbekannte Person";
-  return { name, daten: fotoPersonJahrDatumAnzeige(person) };
+  const name = [person.vorname, person.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
+  const ledigenname = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
+  const nameMitLedigenname = ledigenname && ledigenname.toLocaleLowerCase("de") !== String(person.nachname || "").trim().toLocaleLowerCase("de")
+    ? `${name} (geb. ${ledigenname})` : name;
+  return { name: nameMitLedigenname, daten: fotoPersonJahrDatumAnzeige(person) };
 }
 
 function gruppenfotoAusgewaehltePersonen() {
@@ -3326,7 +3329,7 @@ function fuelleGruppenfotoPersonen() {
   const personen = (personenCache || []).slice().sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
   const gefiltert = personen.filter(p => {
     if (!suchtext) return true;
-    return `${p.vorname || ""} ${p.nachname || ""}`.toLocaleLowerCase("de").includes(suchtext);
+    return `${p.vorname || ""} ${p.nachname || ""} ${p.Ledigenname || p.ledigenname || p.geburtsname || ""}`.toLocaleLowerCase("de").includes(suchtext);
   });
   gruppenfotoPersonenListe.innerHTML = gefiltert.map(p => {
     const anzeige = fotoPersonAnzeige(p);
@@ -3609,8 +3612,8 @@ function renderFotoMarkierungen() {
             const anzeige = fotoPersonAnzeige(p);
             const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === p.id);
             const istAktuell = p.id === row.personen_id;
-            const status = belegung && !istAktuell ? ` — bereits Nr. ${belegung.nummer}` : "";
-            return `<option value="${escapeHtml(p.id)}" ${istAktuell ? "selected" : ""} ${belegung && !istAktuell ? "disabled" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${status}</option>`;
+            const status = belegung && !istAktuell ? ` — tauschen mit Nr. ${belegung.nummer}` : "";
+            return `<option value="${escapeHtml(p.id)}" ${istAktuell ? "selected" : ""}>${escapeHtml(anzeige.name)}${anzeige.daten ? ` — ${escapeHtml(anzeige.daten)}` : ""}${status}</option>`;
           }).join("");
 
         save.disabled = !select.value;
@@ -3643,27 +3646,48 @@ function renderFotoMarkierungen() {
         }
 
         const belegung = fotoMarkierungen.find(x => x.id !== row.id && x.personen_id === neueId);
-        if (belegung) {
-          fotoPersonenMessage.textContent = `Diese Person ist bereits Nr. ${belegung.nummer} zugeordnet.`;
-          return;
-        }
-
         save.disabled = true;
-        save.textContent = "Speichere …";
+        save.textContent = belegung ? "Tausche …" : "Speichere …";
 
-        const { error } = await sb.from("foto_personen")
-          .update({ personen_id: neueId })
-          .eq("id", row.id);
-
-        if (error) {
-          save.disabled = false;
-          save.textContent = "Zuordnung speichern";
-          fotoPersonenMessage.textContent = `Fehler beim Speichern: ${error.message}`;
-          return;
+        if (belegung) {
+          // Tausch ohne Löschen/Neuanlegen: beide vorhandenen Markierungen bleiben
+          // mit ihren Nummern und Bildpositionen bestehen; nur die Personen-IDs wechseln.
+          const alteId = row.personen_id || null;
+          const freigabe = await sb.from("foto_personen").update({ personen_id: null }).eq("id", row.id);
+          if (freigabe.error) {
+            save.disabled = false; save.textContent = "Zuordnung speichern";
+            fotoPersonenMessage.textContent = `Tausch nicht möglich: ${freigabe.error.message}`;
+            return;
+          }
+          const zweite = await sb.from("foto_personen").update({ personen_id: alteId }).eq("id", belegung.id);
+          if (zweite.error) {
+            // Best effort rollback, damit die ursprüngliche Zuordnung erhalten bleibt.
+            await sb.from("foto_personen").update({ personen_id: alteId }).eq("id", row.id);
+            save.disabled = false; save.textContent = "Zuordnung speichern";
+            fotoPersonenMessage.textContent = `Tausch fehlgeschlagen: ${zweite.error.message}`;
+            return;
+          }
+          const erste = await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", row.id);
+          if (erste.error) {
+            await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", belegung.id);
+            await sb.from("foto_personen").update({ personen_id: alteId }).eq("id", row.id);
+            save.disabled = false; save.textContent = "Zuordnung speichern";
+            fotoPersonenMessage.textContent = `Tausch fehlgeschlagen: ${erste.error.message}`;
+            return;
+          }
+          row.personen_id = neueId;
+          belegung.personen_id = alteId;
+          fotoPersonenMessage.textContent = `Personen zwischen Nr. ${row.nummer} und Nr. ${belegung.nummer} getauscht ✓`;
+        } else {
+          const { error } = await sb.from("foto_personen").update({ personen_id: neueId }).eq("id", row.id);
+          if (error) {
+            save.disabled = false; save.textContent = "Zuordnung speichern";
+            fotoPersonenMessage.textContent = `Fehler beim Speichern: ${error.message}`;
+            return;
+          }
+          row.personen_id = neueId;
+          fotoPersonenMessage.textContent = `Nr. ${row.nummer}: ${fotoPersonName(neueId)} gespeichert ✓`;
         }
-
-        row.personen_id = neueId;
-        fotoPersonenMessage.textContent = `Nr. ${row.nummer}: ${fotoPersonName(neueId)} gespeichert ✓`;
         renderFotoMarkierungen();
       });
 
