@@ -781,9 +781,9 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
 /* v227: Nur kleines Schlüsselfoto neben dem Namen; Fotoverwaltung bleibt darunter. */
 .person-edit-grid{display:block}
 .person-edit-fields{margin-bottom:.85rem}
-.person-name-keyphoto-row{display:grid;grid-template-columns:minmax(0,1fr) 84px;gap:.75rem;align-items:start;margin-bottom:.35rem}
+.person-name-keyphoto-row{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:.75rem;align-items:start;margin-bottom:.35rem}
 .person-name-fields{min-width:0}.person-name-fields .field{max-width:none}
-.person-keyphoto-preview{width:84px;height:84px;margin-top:1.25rem;border:1px solid var(--line);border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden}
+.person-keyphoto-preview{width:96px;height:96px;margin-top:1.25rem;border:1px solid var(--line);border-radius:8px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;overflow:hidden}
 .person-keyphoto-preview img{display:block;width:100%;height:100%;object-fit:cover}
 .person-keyphoto-placeholder{font-size:2rem;color:var(--ink-soft);opacity:.65}
-@media(max-width:420px){.person-name-keyphoto-row{grid-template-columns:minmax(0,1fr) 68px;gap:.5rem}.person-keyphoto-preview{width:68px;height:68px}}
+@media(max-width:420px){.person-name-keyphoto-row{.person-name-keyphoto-row{grid-template-columns:minmax(0,1fr) 76px;gap:.5rem}.person-keyphoto-preview{width:76px;height:76px}}
