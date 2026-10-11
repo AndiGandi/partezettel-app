@@ -1039,3 +1039,75 @@ input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, s
     max-height: 76dvh !important;
   }
 }
+
+
+/* v245: Datums-Auswahlfelder überall vollständig lesbar halten */
+input[type="number"],
+select {
+  box-sizing: border-box;
+}
+
+/* Tag-, Monats- und Jahresfelder in Personen, Partnerschaften und Gruppenfotos */
+.person-form select,
+.person-edit-form select,
+.partner-form select,
+.partnership-form select,
+.date-fields select,
+.date-row select,
+.birth-date select,
+.death-date select,
+.foto-personen-sheet select {
+  min-width: 76px;
+  max-width: 100%;
+}
+
+/* Tages- und Monatsfelder brauchen genug Platz für vollständige Werte */
+select[id*="tag"],
+select[id*="Tag"],
+select[id*="day"],
+select[id*="Day"],
+select[name*="tag"],
+select[name*="Tag"],
+select[name*="day"],
+select[name*="Day"] {
+  min-width: 84px;
+}
+select[id*="monat"],
+select[id*="Monat"],
+select[id*="month"],
+select[id*="Month"],
+select[name*="monat"],
+select[name*="Monat"],
+select[name*="month"],
+select[name*="Month"] {
+  min-width: 126px;
+}
+select[id*="jahr"],
+select[id*="Jahr"],
+select[id*="year"],
+select[id*="Year"],
+select[name*="jahr"],
+select[name*="Jahr"],
+select[name*="year"],
+select[name*="Year"] {
+  min-width: 96px;
+}
+
+/* In kompakten Partnerschaftszeilen etwas größere, aber flexible Felder */
+.partner-form select,
+.partnership-form select {
+  flex-shrink: 0;
+}
+@media (max-width: 760px) {
+  .person-form select,
+  .person-edit-form select,
+  .partner-form select,
+  .partnership-form select,
+  .date-fields select,
+  .date-row select,
+  .birth-date select,
+  .death-date select,
+  .foto-personen-sheet select {
+    font-size: 16px;
+  }
+}
