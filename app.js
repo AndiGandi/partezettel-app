@@ -3108,6 +3108,16 @@ async function loadDetailFotos(personId) {
     verknuepfte = data || [];
   }
   const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+  // Kleine, reine Schlüsselfoto-Vorschau neben den Namensfeldern aktualisieren.
+  const keyPreview = document.getElementById("d-schluesselfoto-vorschau");
+  if (keyPreview) {
+    keyPreview.innerHTML = '<span class="person-keyphoto-placeholder" aria-hidden="true">👤</span>';
+    const keyFoto = fotos.find(f => f.ist_schluesselfoto && f.dateipfad);
+    if (keyFoto) {
+      const keyUrl = await ladeFotoBild(keyFoto.dateipfad);
+      if (keyUrl) keyPreview.innerHTML = `<img src="${keyUrl}" alt="Schlüsselfoto">`;
+    }
+  }
   // Schlüsselfotos UND Gruppenfotos beim Öffnen der Details laden, damit
   // Gruppenbilder samt Markierungen sofort sichtbar sind. Normale Fotos bleiben
   // weiterhin bis zum bewussten Antippen ungeladen.
