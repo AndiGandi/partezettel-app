@@ -1,4 +1,4 @@
-// v274: Personenansicht zeigt Trauungsbücher aus ehebezogenen Quellen und Altbestand, ohne doppelte Links. v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
+// v276: Kirchenbuchtypen stehen nebeneinander; die Zeilennummer steht jeweils darunter. v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2933,14 +2933,14 @@ async function openPersonDetail(personId, options = {}) {
       ["Sterbebuch", person.sterbebuch_link, person.sterbebuch_zeile]
     ];
     const angezeigteBuchLinks = new Set();
-    const fuegeBuchHinzu = (label, url, line, hinweis = "") => {
+    const fuegeBuchHinzu = (label, url, line) => {
       const saubereUrl = String(url || "").trim();
       if (!saubereUrl || angezeigteBuchLinks.has(saubereUrl)) return;
       angezeigteBuchLinks.add(saubereUrl);
       const row = document.createElement("div"); row.className = "person-view-book-row";
       const link = document.createElement("a");
       link.href = saubereUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
-      link.textContent = `📖 ${label} öffnen${hinweis ? ` (${hinweis})` : ""}`;
+      link.textContent = label;
       row.appendChild(link);
       if (line !== null && line !== undefined && String(line).trim() !== "") {
         const lineText = document.createElement("span");
@@ -2990,8 +2990,7 @@ async function openPersonDetail(personId, options = {}) {
           url = altQuelle?.trauungsbuch_link;
           line = altQuelle?.trauungsbuch_zeile;
         }
-        const eheHinweis = familie.beginn ? `Hochzeit ${personViewDatum(familie.beginn)}` : "Ehe";
-        fuegeBuchHinzu("Trauungsbuch", url, line, eheHinweis);
+        fuegeBuchHinzu("Trauungsbuch", url, line);
       }
     }
     booksSection.hidden = booksList.children.length === 0;

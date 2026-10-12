@@ -1329,9 +1329,10 @@ select[name*="Year"] {
 @media(max-width:480px){.person-view-header{flex-wrap:wrap}.person-view-keyphoto{width:104px;height:104px}.person-view-heading{flex-basis:calc(100% - 120px)}}
 
 
+/* v276: Kirchenbuchtypen nebeneinander, Zeilennummer jeweils darunter */
 /* v262: Kirchenbuchquellen, Fotogalerie und Stammbaum-Aktion in der Personenansicht */
-.person-view-books{display:grid;gap:.65rem}
-.person-view-book-row{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .8rem}
+.person-view-books{display:flex;align-items:flex-start;flex-wrap:wrap;gap:1rem 1.4rem}
+.person-view-book-row{display:flex;flex-direction:column;align-items:flex-start;gap:.2rem;min-width:max-content}
 .person-view-book-row a{font-weight:650;text-decoration:underline;text-underline-offset:3px}
 .person-view-book-line{font-size:.9rem;color:var(--muted,#746b62)}
 .person-view-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:.7rem}
