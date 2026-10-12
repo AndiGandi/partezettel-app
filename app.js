@@ -2841,7 +2841,72 @@ function aktualisiereLinkButton(id, wert) {
   }
 }
 
+
+function personViewDatum(value) {
+  if (!value) return "";
+  const d = new Date(String(value).length === 4 ? `${value}-01-01T00:00:00` : value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  if (/^\d{4}$/.test(String(value))) return String(value);
+  return new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
+}
+
 async function openPersonDetail(personId, options = {}) {
+  try {
+    await ensureSession();
+    const { data: person, error } = await sb.from("personen").select("*").eq("id", personId).single();
+    if (error || !person) {
+      debugLog(`❌ Fehler beim Laden der Person: ${error?.message || "Person nicht gefunden"}`);
+      return;
+    }
+    const overlay = document.getElementById("person-view-overlay");
+    const name = [person.vorname, person.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
+    document.getElementById("pv-name").textContent = name;
+    const birth = person.geburtsdatum || person.geburtsjahr;
+    const death = person.sterbedatum || person.sterbejahr;
+    const lifetime = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean).join(" – ");
+    document.getElementById("pv-lifetime").textContent = lifetime;
+    const facts = document.getElementById("pv-basics");
+    facts.replaceChildren();
+    const addFact = (label, value) => {
+      if (value === null || value === undefined || String(value).trim() === "") return;
+      const dt = document.createElement("dt"); dt.textContent = label;
+      const dd = document.createElement("dd"); dd.textContent = String(value);
+      facts.append(dt, dd);
+    };
+    addFact("Ledigenname", person.Ledigenname);
+    addFact("Geschlecht", person.geschlecht);
+    if (birth) addFact(person.geburtsdatum ? "Geboren" : "Geburtsjahr", personViewDatum(birth));
+    if (death) addFact(person.sterbedatum ? "Verstorben" : "Todesjahr", personViewDatum(death));
+    addFact("Taufbuch-Zeile", person.taufbuch_zeile);
+    addFact("Trauungsbuch-Zeile", person.trauungsbuch_zeile);
+    addFact("Sterbebuch-Zeile", person.sterbebuch_zeile);
+    const notes = String(person.Notiz || "").trim();
+    document.getElementById("pv-notes-section").hidden = !notes;
+    document.getElementById("pv-notes").textContent = notes;
+    document.getElementById("pv-edit").onclick = async () => {
+      overlay.hidden = true;
+      await openPersonEdit(personId, options);
+    };
+    overlay.hidden = false;
+    overlay.scrollTop = 0;
+    document.body.classList.add("person-view-open");
+  } catch (err) {
+    debugLog(`❌ Fehler beim Öffnen der Personenansicht: ${err?.message || err}`);
+  }
+}
+
+document.getElementById("pv-close")?.addEventListener("click", () => {
+  document.getElementById("person-view-overlay").hidden = true;
+  document.body.classList.remove("person-view-open");
+});
+document.getElementById("person-view-overlay")?.addEventListener("click", (event) => {
+  if (event.target.id === "person-view-overlay") {
+    event.currentTarget.hidden = true;
+    document.body.classList.remove("person-view-open");
+  }
+});
+
+async function openPersonEdit(personId, options = {}) {
   currentDetailPersonId = personId;
   detailOpenedFromTree = options.fromTree === true;
   detailReturnTreePersonId = detailOpenedFromTree ? personId : null;
