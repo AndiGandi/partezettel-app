@@ -2840,6 +2840,19 @@ function personViewDatum(value) {
   return new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
+function personViewAlter(person, bisDatum = null) {
+  const birthValue = person?.geburtsdatum || person?.geburtsjahr;
+  if (!birthValue) return "";
+  const birth = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${person.geburtsjahr}-07-01T00:00:00`);
+  if (!Number.isFinite(birth.getTime())) return "";
+  const end = bisDatum ? new Date(`${bisDatum}T00:00:00`) : new Date();
+  if (!Number.isFinite(end.getTime()) || end < birth) return "";
+  let years = end.getFullYear() - birth.getFullYear();
+  if (end.getMonth() < birth.getMonth() || (end.getMonth() === birth.getMonth() && end.getDate() < birth.getDate())) years--;
+  if (years < 0 || years > 125) return "";
+  return `${person.geburtsdatum ? "" : "ca. "}${years} ${years === 1 ? "Jahr" : "Jahre"}`;
+}
+
 async function openPersonDetail(personId, options = {}) {
   try {
     await ensureSession();
@@ -2853,7 +2866,12 @@ async function openPersonDetail(personId, options = {}) {
     document.getElementById("pv-name").textContent = name;
     const birth = person.geburtsdatum || person.geburtsjahr;
     const death = person.sterbedatum || person.sterbejahr;
-    document.getElementById("pv-lifetime").textContent = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean).join(" – ");
+    const lifeParts = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean);
+    const alter = personViewAlter(person, person.sterbedatum || (person.sterbejahr ? `${person.sterbejahr}-12-31` : null));
+    if (alter) lifeParts.push(death ? `† ${alter}` : `kein Sterbedatum erfasst · ${alter}`);
+    else if (death) lifeParts.push("verstorben");
+    else if (birth) lifeParts.push("kein Sterbedatum erfasst");
+    document.getElementById("pv-lifetime").textContent = lifeParts.join(" · ");
 
     const keyphoto = document.getElementById("pv-keyphoto");
     keyphoto.hidden = true; keyphoto.removeAttribute("src");
@@ -4254,6 +4272,18 @@ const detailPhotoViewerImg = document.getElementById("detail-photo-viewer-img");
 const detailPhotoViewerClose = document.getElementById("detail-photo-viewer-close");
 const detailPhotoViewerMarkers = document.getElementById("detail-photo-viewer-markers");
 const detailPhotoViewerLegend = document.getElementById("detail-photo-viewer-legend");
+const detailPhotoViewerToggleNumbers = document.getElementById("detail-photo-viewer-toggle-numbers");
+let detailPhotoViewerNumbersVisible = true;
+
+function setDetailPhotoViewerNumbersVisible(visible) {
+  detailPhotoViewerNumbersVisible = !!visible;
+  if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.hidden = !detailPhotoViewerNumbersVisible;
+  if (detailPhotoViewerToggleNumbers) {
+    detailPhotoViewerToggleNumbers.textContent = detailPhotoViewerNumbersVisible ? "Zahlen ausblenden" : "Zahlen einblenden";
+    detailPhotoViewerToggleNumbers.setAttribute("aria-pressed", String(detailPhotoViewerNumbersVisible));
+  }
+}
+detailPhotoViewerToggleNumbers?.addEventListener("click", () => setDetailPhotoViewerNumbersVisible(!detailPhotoViewerNumbersVisible));
 
 function closeDetailPhotoViewer() {
   if (!detailPhotoViewer) return;
@@ -4275,6 +4305,7 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
   detailPhotoViewerImg.src = url;
   if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
   if (detailPhotoViewerLegend) detailPhotoViewerLegend.innerHTML = "";
+  setDetailPhotoViewerNumbersVisible(true);
 
   const rows = [...(markierungen || [])].sort((a,b) => Number(a.nummer) - Number(b.nummer));
   rows.forEach(row => {
@@ -4294,7 +4325,9 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
     const name = document.createElement("button");
     name.type = "button";
     name.className = "detail-photo-viewer__legend-name";
-    name.textContent = fotoPersonName(row.personen_id);
+    const p = personenCache.find(person => person.id === row.personen_id);
+    const alterImBild = gruppenfotoPersonenAlter(row.personen_id, foto);
+    name.textContent = `${fotoPersonName(row.personen_id)}${alterImBild ? ` · ${alterImBild}` : ""}`;
     name.disabled = false;
     if (row.personen_id) {
       name.dataset.personId = row.personen_id;

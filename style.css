@@ -1340,3 +1340,10 @@ select[name*="Year"] {
 .person-view-photo-tile span{padding:0 .5rem .55rem;font-size:.82rem;overflow-wrap:anywhere}
 .person-view-action-row{display:grid;grid-template-columns:1fr 1fr;gap:.65rem}
 @media(max-width:480px){.person-view-action-row{grid-template-columns:1fr}.person-view-photo-tile img{height:90px}}
+
+/* v263: Bedienelemente im Foto-Viewer */
+.detail-photo-viewer__toolbar{position:absolute;top:max(1rem,env(safe-area-inset-top));right:max(4.5rem,calc(env(safe-area-inset-right) + 4.5rem));z-index:2;display:flex;align-items:center;gap:.5rem}
+.detail-photo-viewer__toolbar .btn{min-height:42px;padding:.5rem .75rem;background:rgba(255,255,255,.94);color:#171717;border:1px solid rgba(255,255,255,.7)}
+.detail-photo-viewer__toolbar .detail-photo-viewer__close{position:static;min-width:42px;min-height:42px}
+.detail-photo-viewer__markers[hidden]{display:none!important}
+@media(max-width:600px){.detail-photo-viewer__toolbar{top:max(.55rem,env(safe-area-inset-top));right:max(.55rem,env(safe-area-inset-right));gap:.35rem}.detail-photo-viewer__toolbar .btn{font-size:.78rem;padding:.4rem .55rem;min-height:40px}.detail-photo-viewer__toolbar .detail-photo-viewer__close{min-width:40px;min-height:40px}}
