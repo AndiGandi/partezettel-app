@@ -1,4 +1,4 @@
-// v271: Elternanzeige berücksichtigt auch Elternfamilien aus der Ersteingabe; v270: Eltern werden in der Bestand-Personenansicht angezeigt; v269: Ehedauer korrigiert, Fotosortierung und Suchleiste bleiben erhalten.
+// v272: Elternanzeige verwendet alle tatsächlich über familien_kinder verknüpften Familien, unabhängig vom Familientyp; Mehrfach-Elternlinks werden zusammengeführt. v271: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2953,10 +2953,11 @@ async function openPersonDetail(personId, options = {}) {
         .select("id, partner_a_id, partner_b_id, familientyp")
         .in("id", ownParentFamilyIds);
       if (parentFamilyError) debugLog(`⚠️ Eltern in Bestand laden: ${parentFamilyError.message}`);
-      ownParentFamilies = (parentFamilyData || []).filter(f => {
-        const typ = String(f.familientyp || "").trim().toLocaleLowerCase("de");
-        return typ === "eltern" || typ === "elternfamilie" || !typ;
-      });
+      // Entscheidend ist die tatsächliche Kind-Verknüpfung in familien_kinder,
+      // nicht der Text in familientyp. Ältere Datensätze können Eltern trotz
+      // anderer Familientyp-Bezeichnung enthalten. Der Filter nach Typ führte
+      // dazu, dass ein Elternteil oder beide Eltern in der Bestand-Ansicht fehlten.
+      ownParentFamilies = parentFamilyData || [];
     }
     const parentIds = [...new Set(ownParentFamilies.flatMap(f => [f.partner_a_id, f.partner_b_id]).filter(id => id && id !== personId))];
     const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean), ...parentIds])];
@@ -2976,17 +2977,27 @@ async function openPersonDetail(personId, options = {}) {
     const parentsSection = document.getElementById("pv-parents-section");
     const parentsList = document.getElementById("pv-parents-list");
     parentsList.replaceChildren();
+    // Eltern über sämtliche verknüpften Elternfamilien sammeln. So funktionieren
+    // auch Datensätze, in denen Vater und Mutter in getrennten Familienzeilen
+    // hinterlegt sind. IDs deduplizieren, ohne die gespeicherte Zuordnung zu ändern.
     const parentRoleSeen = new Set();
+    const orderedParentIds = [];
     for (const family of ownParentFamilies) {
-      for (const [role, parentId] of [["Elternteil", family.partner_a_id], ["Elternteil", family.partner_b_id]]) {
+      for (const parentId of [family.partner_a_id, family.partner_b_id]) {
         if (!parentId || parentId === personId || parentRoleSeen.has(parentId)) continue;
-        const parent = relatedMap.get(parentId);
-        if (!parent) continue;
         parentRoleSeen.add(parentId);
-        const row = document.createElement("div"); row.className = "person-view-relation-row";
-        addPersonLink(row, parent);
-        parentsList.appendChild(row);
+        orderedParentIds.push(parentId);
       }
+    }
+    for (const parentId of orderedParentIds) {
+      const parent = relatedMap.get(parentId);
+      if (!parent) {
+        debugLog(`⚠️ Elternteil ${parentId} ist verknüpft, aber konnte für die Bestand-Anzeige nicht geladen werden.`);
+        continue;
+      }
+      const row = document.createElement("div"); row.className = "person-view-relation-row";
+      addPersonLink(row, parent);
+      parentsList.appendChild(row);
     }
     parentsSection.hidden = !parentsList.children.length;
 
