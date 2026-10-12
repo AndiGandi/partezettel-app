@@ -1,4 +1,4 @@
-// v276: Kirchenbuchtypen stehen nebeneinander; die Zeilennummer steht jeweils darunter. v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
+// v277: Kirchenbuchlinks zeigen „öffnen“; Zeilennummern stehen jeweils darunter. v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2940,7 +2940,7 @@ async function openPersonDetail(personId, options = {}) {
       const row = document.createElement("div"); row.className = "person-view-book-row";
       const link = document.createElement("a");
       link.href = saubereUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
-      link.textContent = label;
+      link.textContent = `${label} öffnen`;
       row.appendChild(link);
       if (line !== null && line !== undefined && String(line).trim() !== "") {
         const lineText = document.createElement("span");
