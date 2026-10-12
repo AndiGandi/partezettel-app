@@ -1,4 +1,4 @@
-// v272: Elternanzeige verwendet alle tatsächlich über familien_kinder verknüpften Familien, unabhängig vom Familientyp; Mehrfach-Elternlinks werden zusammengeführt. v271: Elternanzeige erweitert.
+// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -6815,8 +6815,12 @@ function renderStammbaum(rootId) {
 }
 
 
-function treePersonGender(_person) {
-  // Geschlecht wird in der App nicht mehr ausgewertet.
+function treePersonGender(person) {
+  // Geschlecht ist optional. Vorhandene Werte werden für präzise
+  // Verwandtschaftsbezeichnungen genutzt; fehlende Werte bleiben neutral.
+  const raw = String(person?.geschlecht || "").trim().toLocaleLowerCase("de");
+  if (["m", "mann", "männlich", "maennlich", "männliches", "male"].includes(raw)) return "m";
+  if (["w", "f", "frau", "weiblich", "weibliches", "female"].includes(raw)) return "w";
   return "u";
 }
 
@@ -7084,22 +7088,26 @@ function treeInLawRelation(path) {
 
 function treeRelationshipStepWord(fromId, edgeType, toId) {
   if (edgeType === "sibling") {
-    return treeGenderWord(fromId, "Bruder", "Schwester") + " von";
+    return treeGenderWord(fromId, "Bruder", "Schwester", "Geschwister") + " von";
   }
 
   if (edgeType === "spouse") {
-    return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
+    return treeGenderWord(fromId, "Ehemann", "Ehefrau", "Partner/in") + " von";
   }
 
-  // parent: from = Kind, to = Elternteil
+  // parent: from = Kind, to = Elternteil. Das Geschlecht des Kindes
+  // bestimmt Sohn/Tochter; ohne Angabe bleibt die Formulierung sinnvoll.
   if (edgeType === "parent") {
-    return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+    return treeGenderWord(fromId, "Sohn", "Tochter", "Kind") + " von";
   }
 
-  // child: from = Elternteil, to = Kind
-  // Die Bezeichnung beschreibt die Beziehung der oberen Person zur
-  // Neutrale Bezeichnung: Geschlecht wird nicht ausgewertet.
-  return "Elternteil von";
+  // child: from = Elternteil, to = Kind. Das Geschlecht des Elternteils
+  // bestimmt Vater/Mutter; ohne Angabe wird neutral formuliert.
+  if (edgeType === "child") {
+    return treeGenderWord(fromId, "Vater", "Mutter", "Elternteil") + " von";
+  }
+
+  return "verwandt mit";
 }
 
 function treeBuildBloodPath(aId, bId, model, blood) {
