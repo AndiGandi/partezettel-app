@@ -1298,7 +1298,7 @@ select[name*="Year"] {
 .detail-group-photo-wrap>img{display:block;width:100%;height:auto;max-height:none;object-fit:contain}
 .detail-group-photo-markers{position:absolute;inset:0;width:100%;height:100%}
 
-/* Version 260: separate, read-only person view */
+/* Version 261: person view with key photo and family */
 .person-view-overlay{position:fixed;inset:0;z-index:1100;background:rgba(20,18,16,.58);overflow-y:auto;padding:clamp(.5rem,3vw,1.5rem)}
 .person-view-sheet{max-width:760px;margin:0 auto;background:var(--surface,#fff);color:var(--text,#25211e);border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,.28);overflow:hidden}
 .person-view-header{display:flex;align-items:flex-start;justify-content:space-between;gap:1rem;padding:1.25rem;border-bottom:1px solid var(--border,#e6e0da)}
@@ -1314,3 +1314,16 @@ select[name*="Year"] {
 .person-view-hint{font-size:.85rem;color:var(--muted,#746b62);margin:0}
 .person-view-actions{position:sticky;bottom:0;background:var(--surface,#fff);padding-top:.5rem}
 @media(max-width:480px){.person-view-facts{grid-template-columns:1fr;gap:.15rem}.person-view-facts dd{margin-bottom:.55rem}.person-view-overlay{padding:.35rem}.person-view-sheet{border-radius:14px}}
+
+/* Version 261: übersichtliche Personenansicht */
+.person-view-header{align-items:flex-start}
+.person-view-heading{flex:1;min-width:0}
+.person-view-keyphoto{width:clamp(100px,22vw,170px);height:clamp(100px,22vw,170px);object-fit:cover;border-radius:12px;flex:0 0 auto;margin-left:auto}
+.person-view-link-wrap{margin:.9rem 0 0}
+.person-view-link-wrap a{font-weight:650;text-decoration:underline;text-underline-offset:3px}
+.person-view-relations{display:grid;gap:.55rem}
+.person-view-relation-row{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem .8rem;padding:.45rem 0;border-bottom:1px solid var(--border,#e6e0da)}
+.person-view-relation-row:last-child{border-bottom:0}
+.person-view-person-link{appearance:none;border:0;background:transparent;color:var(--link,#315d85);font:inherit;font-weight:650;text-align:left;padding:.2rem 0;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.person-view-relation-date{font-size:.92rem;color:var(--muted,#746b62)}
+@media(max-width:480px){.person-view-header{flex-wrap:wrap}.person-view-keyphoto{width:104px;height:104px}.person-view-heading{flex-basis:calc(100% - 120px)}}

@@ -1183,7 +1183,6 @@ form.addEventListener("submit", async (e) => {
     id: crypto.randomUUID(),
     vorname: document.getElementById("vorname").value.trim(),
     nachname: document.getElementById("nachname").value.trim(),
-    geschlecht: document.getElementById("geschlecht").value || null,
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geburtsdatum: getDatum("geburtsdatum"),
     geburtsjahr: getDatum("geburtsdatum") ? null : (document.getElementById("geburtsjahr").value.trim() ? Number(document.getElementById("geburtsjahr").value.trim()) : null),
@@ -1213,14 +1212,6 @@ form.addEventListener("submit", async (e) => {
     return;
   }
 
-  const geschlechtFeld = document.getElementById("geschlecht");
-  if (!eintrag.geschlecht) {
-    formMessage.textContent = "Bitte Geschlecht auswählen.";
-    geschlechtFeld?.classList.add("feld-fehler");
-    geschlechtFeld?.focus();
-    return;
-  }
-  geschlechtFeld?.classList.remove("feld-fehler");
   if (eintrag.erstverwandtschaftTyp !== "keine") {
     if (!eintrag.erstverwandtschaftPerson) { formMessage.textContent = "Bitte die Bezugsperson auswählen."; return; }
     if (eintrag.erstverwandtschaftTyp === "voll" && !eintrag.erstverwandtschaftFamilie) { formMessage.textContent = "Bitte die gemeinsame Elternfamilie auswählen."; return; }
@@ -1319,7 +1310,6 @@ async function sendEintrag(eintrag, onProgress) {
         id: eintrag.id,
         vorname: eintrag.vorname,
         nachname: eintrag.nachname,
-        geschlecht: eintrag.geschlecht,
         "Ledigenname": eintrag.ledigenname,
         geburtsdatum: eintrag.geburtsdatum,
         geburtsjahr: eintrag.geburtsjahr,
@@ -1553,13 +1543,12 @@ async function zeigeQueueDiagnose() {
     const rows = queue.map((eintrag, index) => {
       const vorname = String(eintrag.vorname ?? "");
       const nachname = String(eintrag.nachname ?? "");
-      const geschlecht = eintrag.geschlecht == null || eintrag.geschlecht === "" ? "<strong>NULL / leer</strong>" : escapeHtml(String(eintrag.geschlecht));
       const id = escapeHtml(String(eintrag.id ?? ""));
-      return `<tr><td>${index + 1}</td><td>${escapeHtml(vorname)}</td><td>${escapeHtml(nachname)}</td><td>${geschlecht}</td><td><code>${id}</code></td></tr>`;
+      return `<tr><td>${index + 1}</td><td>${escapeHtml(vorname)}</td><td>${escapeHtml(nachname)}</td><td><code>${id}</code></td></tr>`;
     }).join("");
 
     output.innerHTML = `<p><strong>${queue.length} Einträge</strong> – nur Anzeige, keine Änderung.</p>
-      <table><thead><tr><th>#</th><th>Vorname</th><th>Nachname</th><th>Geschlecht</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <table><thead><tr><th>#</th><th>Vorname</th><th>Nachname</th><th>ID</th></tr></thead><tbody>${rows}</tbody></table>`;
   } catch (err) {
     output.textContent = `Fehler beim Lesen der lokalen Warteschlange: ${err.message || err}`;
   }
@@ -2153,7 +2142,7 @@ async function synchronisierePersonenDelta() {
 
     if (zuLadendePersonen.length) {
       const { data, error } = await sb.from("personen")
-        .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
+        .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
         .in("id", [...new Set(zuLadendePersonen)]);
       if (error) throw error;
       const byId = new Map(personenCache.map(p => [p.id, p]));
@@ -2287,7 +2276,7 @@ async function loadPersonen(force = false) {
     aktualisiereEgressMessung();
     const { data, error } = await sb
       .from("personen")
-      .select("id, vorname, nachname, geschlecht, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
       .order("nachname", { ascending: true });
 
     if (error) throw error;
@@ -2863,8 +2852,14 @@ async function openPersonDetail(personId, options = {}) {
     document.getElementById("pv-name").textContent = name;
     const birth = person.geburtsdatum || person.geburtsjahr;
     const death = person.sterbedatum || person.sterbejahr;
-    const lifetime = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean).join(" – ");
-    document.getElementById("pv-lifetime").textContent = lifetime;
+    document.getElementById("pv-lifetime").textContent = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean).join(" – ");
+
+    const keyphoto = document.getElementById("pv-keyphoto");
+    keyphoto.hidden = true; keyphoto.removeAttribute("src");
+    await ladeSchluesselfotos([person]);
+    const photo = schluesselfotoCache.get(person.id);
+    if (photo?.url) { keyphoto.src = photo.url; keyphoto.hidden = false; }
+
     const facts = document.getElementById("pv-basics");
     facts.replaceChildren();
     const addFact = (label, value) => {
@@ -2873,23 +2868,81 @@ async function openPersonDetail(personId, options = {}) {
       const dd = document.createElement("dd"); dd.textContent = String(value);
       facts.append(dt, dd);
     };
-    addFact("Ledigenname", person.Ledigenname);
-    addFact("Geschlecht", person.geschlecht);
+    addFact("Ledigenname", person.Ledigenname || person.ledigenname);
     if (birth) addFact(person.geburtsdatum ? "Geboren" : "Geburtsjahr", personViewDatum(birth));
     if (death) addFact(person.sterbedatum ? "Verstorben" : "Todesjahr", personViewDatum(death));
     addFact("Taufbuch-Zeile", person.taufbuch_zeile);
     addFact("Trauungsbuch-Zeile", person.trauungsbuch_zeile);
     addFact("Sterbebuch-Zeile", person.sterbebuch_zeile);
-    const notes = String(person.Notiz || "").trim();
+    const baptismWrap = document.getElementById("pv-baptism-link-wrap");
+    const baptismLink = String(person.taufbuch_link || "").trim();
+    if (baptismLink) {
+      const link = document.getElementById("pv-baptism-link");
+      link.href = baptismLink; link.textContent = "📖 Taufbuch öffnen"; baptismWrap.hidden = false;
+    } else baptismWrap.hidden = true;
+
+    const spouseSection = document.getElementById("pv-spouse-section");
+    const spouseList = document.getElementById("pv-spouse-list"); spouseList.replaceChildren();
+    const [{ data: familyRows, error: familyError }, { data: childLinks, error: childError }] = await Promise.all([
+      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
+      sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
+    ]);
+    if (familyError) debugLog(`⚠️ Ehepartner laden: ${familyError.message}`);
+    if (childError) debugLog(`⚠️ Kinder laden: ${childError.message}`);
+    const partnerFamilies = (familyRows || []).filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern");
+    const spouseIds = [...new Set(partnerFamilies.map(f => f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id).filter(Boolean))];
+    const childFamilyIds = new Set(partnerFamilies.map(f => f.id));
+    const childrenLinks = (childLinks || []).filter(link => childFamilyIds.has(link.familie_id));
+    const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean)])];
+    let relatedPeople = [];
+    if (relatedIds.length) {
+      const { data, error: relatedError } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", relatedIds);
+      if (relatedError) debugLog(`⚠️ Verwandte Personen laden: ${relatedError.message}`);
+      relatedPeople = data || [];
+    }
+    const relatedMap = new Map(relatedPeople.map(p => [p.id, p]));
+    const addPersonLink = (container, related, extra = "") => {
+      const button = document.createElement("button"); button.type = "button"; button.className = "person-view-person-link";
+      const life = [related.geburtsdatum || related.geburtsjahr, related.sterbedatum || related.sterbejahr].filter(Boolean).map(personViewDatum).join(" – ");
+      button.textContent = [ [related.vorname, related.nachname].filter(Boolean).join(" "), life, extra ].filter(Boolean).join(" · ");
+      button.addEventListener("click", () => openPersonDetail(related.id)); container.appendChild(button);
+    };
+    for (const family of partnerFamilies) {
+      const spouseId = family.partner_a_id === personId ? family.partner_b_id : family.partner_a_id;
+      const spouse = relatedMap.get(spouseId); if (!spouse) continue;
+      const row = document.createElement("div"); row.className = "person-view-relation-row";
+      addPersonLink(row, spouse);
+      const marriage = family.beginn ? personViewDatum(family.beginn) : "";
+      if (marriage) {
+        const date = document.createElement("span"); date.className = "person-view-relation-date";
+        let duration = "";
+        const startDate = new Date(family.beginn);
+        const endDate = family.ende ? new Date(family.ende) : new Date();
+        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+          let years = endDate.getFullYear() - startDate.getFullYear();
+          if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
+          if (years >= 0) duration = ` · ${years} ${years === 1 ? "Jahr" : "Jahre"}`;
+        }
+        date.textContent = `💍 Hochzeit: ${marriage}${duration}`; row.appendChild(date);
+      }
+      spouseList.appendChild(row);
+    }
+    spouseSection.hidden = !spouseList.children.length;
+
+    const childrenSection = document.getElementById("pv-children-section");
+    const childrenList = document.getElementById("pv-children-list"); childrenList.replaceChildren();
+    const uniqueChildIds = [...new Set(childrenLinks.map(x => x.kind_id).filter(id => id && id !== personId))];
+    uniqueChildIds.map(id => relatedMap.get(id)).filter(Boolean).sort((a,b) => String(a.geburtsdatum || a.geburtsjahr || "9999").localeCompare(String(b.geburtsdatum || b.geburtsjahr || "9999")) || `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de")).forEach(child => addPersonLink(childrenList, child));
+    childrenSection.hidden = !childrenList.children.length;
+
+    const notes = String(person.Notiz || person.notiz || "").trim();
     document.getElementById("pv-notes-section").hidden = !notes;
     document.getElementById("pv-notes").textContent = notes;
     document.getElementById("pv-edit").onclick = async () => {
-      overlay.hidden = true;
+      overlay.hidden = true; document.body.classList.remove("person-view-open");
       await openPersonEdit(personId, options);
     };
-    overlay.hidden = false;
-    overlay.scrollTop = 0;
-    document.body.classList.add("person-view-open");
+    overlay.hidden = false; overlay.scrollTop = 0; document.body.classList.add("person-view-open");
   } catch (err) {
     debugLog(`❌ Fehler beim Öffnen der Personenansicht: ${err?.message || err}`);
   }
@@ -2917,7 +2970,6 @@ async function openPersonEdit(personId, options = {}) {
 
   document.getElementById("d-vorname").value = person.vorname || "";
   document.getElementById("d-nachname").value = person.nachname || "";
-  document.getElementById("d-geschlecht").value = person.geschlecht || "";
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
   setDatum("d-geburtsdatum", person.geburtsdatum);
   setDatum("d-sterbedatum", person.sterbedatum);
@@ -3054,7 +3106,6 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   const { error } = await sb.from("personen").update({
     vorname,
     nachname,
-    geschlecht: document.getElementById("d-geschlecht").value || null,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
     geburtsdatum: getDatum("d-geburtsdatum"),
     geburtsjahr: getDatum("d-geburtsdatum") ? null : (document.getElementById("d-geburtsjahr").value.trim() ? Number(document.getElementById("d-geburtsjahr").value.trim()) : null),
@@ -4437,7 +4488,7 @@ async function loadDetailFamilie(personId) {
   if (personenCache.length < 2) {
     const { data: familienPersonen, error: familienPersonenError } = await sb
       .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, geschlecht, Notiz")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz")
       .order("nachname", { ascending: true });
     if (familienPersonenError) {
       debugLog(`❌ Personen für Familienauswahl laden: ${familienPersonenError.message}`);
@@ -4485,7 +4536,7 @@ async function loadDetailFamilie(personId) {
   if (detailPersonIds.size) {
     const { data: detailPersons, error: detailPersonsError } = await sb
       .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, geschlecht")
+      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr")
       .in("id", Array.from(detailPersonIds));
     if (detailPersonsError) {
       debugLog(`❌ Personendaten für Familienanzeige: ${detailPersonsError.message}`);
@@ -4508,21 +4559,9 @@ async function loadDetailFamilie(personId) {
     const a = detailPerson(aktuelleElternfamilie.partner_a_id);
     const b = detailPerson(aktuelleElternfamilie.partner_b_id);
 
-    for (const p of [a, b]) {
-      if (!p) continue;
-      if (p.geschlecht === "männlich") vaterId = p.id;
-      if (p.geschlecht === "weiblich") mutterId = p.id;
-    }
-
-    // Legacy-Daten ohne Geschlecht: A=Vater, B=Mutter.
-    if (a && b && !vaterId && !mutterId) {
-      vaterId = a.id;
-      mutterId = b.id;
-    } else if (a && b && !vaterId) {
-      vaterId = a.id === mutterId ? b.id : a.id;
-    } else if (a && b && !mutterId) {
-      mutterId = a.id === vaterId ? b.id : a.id;
-    }
+    // Elternzuordnung folgt der gespeicherten Partnerreihenfolge, nicht Geschlechtsdaten.
+    vaterId = a?.id || null;
+    mutterId = b?.id || null;
   }
 
   [parentSelectVater, parentSelectMutter].forEach((select) => {
@@ -5924,9 +5963,6 @@ document.getElementById("export-gedcom-btn").addEventListener("click", async () 
   for (const p of personen) {
     lines.push(`0 ${gidById.get(p.id)} INDI`);
     lines.push(`1 NAME ${clean(p.vorname)} /${clean(p.nachname)}/`);
-    if (p.geschlecht === "männlich") lines.push("1 SEX M");
-    else if (p.geschlecht === "weiblich") lines.push("1 SEX F");
-    else lines.push("1 SEX U");
     if (p.Ledigenname) lines.push(`1 NOTE Geburtsname: ${clean(p.Ledigenname)}`);
     if (p.geburtsdatum || p.geburtsjahr) {
       lines.push("1 BIRT");
@@ -5944,12 +5980,10 @@ document.getElementById("export-gedcom-btn").addEventListener("click", async () 
     const a = personById.get(f.partner_a_id);
     const b = f.partner_b_id ? personById.get(f.partner_b_id) : null;
     const partners = [a, b].filter(Boolean);
-    const male = partners.find((p) => p.geschlecht === "männlich");
-    const female = partners.find((p) => p.geschlecht === "weiblich");
-    if (male) lines.push(`1 HUSB ${gidById.get(male.id)}`);
-    if (female && (!male || female.id !== male.id)) lines.push(`1 WIFE ${gidById.get(female.id)}`);
-    if (!male && a) lines.push(`1 HUSB ${gidById.get(a.id)}`);
-    if (!female && b && (!male || b.id !== male.id)) lines.push(`1 WIFE ${gidById.get(b.id)}`);
+    // GEDCOM-Rollen werden nicht mehr aus einem Geschlechtsfeld abgeleitet.
+    // Für den Export werden vorhandene Partner in der gespeicherten Reihenfolge ausgegeben.
+    if (a) lines.push(`1 HUSB ${gidById.get(a.id)}`);
+    if (b) lines.push(`1 WIFE ${gidById.get(b.id)}`);
     if (f.beginn) {
       lines.push("1 MARR");
       lines.push(`2 DATE ${gedcomDate(f.beginn)}`);
@@ -6050,21 +6084,12 @@ function treeMaleAncestorSurname(personId, seen = new Set()) {
   seen.add(personId);
   const person = treePerson(personId);
   if (!person) return "";
-  const geschlecht = treeNormalizeName(person.geschlecht);
-  if (geschlecht === "m" || geschlecht === "mann" || geschlecht === "maennlich" || geschlecht === "männlich") {
-    return String(person.nachname || "").trim();
-  }
   const families = treeParentFamiliesForPerson(personId);
   for (const family of families) {
     const candidates = [family.partner_a_id, family.partner_b_id].filter(Boolean);
     for (const candidateId of candidates) {
-      const candidate = treePerson(candidateId);
-      if (!candidate) continue;
-      const candidateGender = treeNormalizeName(candidate.geschlecht);
-      if (candidateGender === "m" || candidateGender === "mann" || candidateGender === "maennlich" || candidateGender === "männlich") {
-        const surname = treeMaleAncestorSurname(candidateId, seen);
-        if (surname) return surname;
-      }
+      const surname = treeMaleAncestorSurname(candidateId, seen);
+      if (surname) return surname;
     }
   }
   return String(person.nachname || "").trim();
@@ -6130,7 +6155,7 @@ function treeParentFamiliesForPerson(id) {
 async function loadStammbaumData() {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
-    sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
+    sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
     sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
     sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
   ]);
@@ -6393,10 +6418,8 @@ function renderStammbaum(rootId) {
 }
 
 
-function treePersonGender(person) {
-  const g = String(person?.geschlecht || "").toLowerCase();
-  if (g.includes("weib")) return "w";
-  if (g.includes("männ") || g.includes("maenn") || g === "m") return "m";
+function treePersonGender(_person) {
+  // Geschlecht wird in der App nicht mehr ausgewertet.
   return "u";
 }
 
@@ -6678,13 +6701,7 @@ function treeRelationshipStepWord(fromId, edgeType, toId) {
 
   // child: from = Elternteil, to = Kind
   // Die Bezeichnung beschreibt die Beziehung der oberen Person zur
-  // darunterliegenden Person. Deshalb entscheidet das Geschlecht
-  // des Elternteils (fromId):
-  // Vater -> Tochter/Sohn = "Vater von"
-  // Mutter -> Tochter/Sohn = "Mutter von"
-  const fromGender = treePersonGender(treePerson(fromId));
-  if (fromGender === "m") return "Vater von";
-  if (fromGender === "w") return "Mutter von";
+  // Neutrale Bezeichnung: Geschlecht wird nicht ausgewertet.
   return "Elternteil von";
 }
 
