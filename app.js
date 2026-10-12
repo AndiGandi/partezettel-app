@@ -1,4 +1,4 @@
-// v268: Ehedauer endet am früheren Sterbedatum der Ehepartner, sofern kein Ehe-Ende gespeichert ist. Fotosortierung und Suchleiste bleiben erhalten.
+// v269: Ehedauer berücksichtigt das früheste bekannte Ehe-Ende oder Sterbedatum. Fotosortierung und Suchleiste bleiben erhalten.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2971,28 +2971,33 @@ async function openPersonDetail(personId, options = {}) {
         // hinterlegt ist – am früheren Sterbedatum der beiden Ehepartner.
         // So wird bei mehreren Ehen nicht versehentlich bis zum Tod eines
         // späteren Ehepartners weitergerechnet.
-        let endDate = null;
-        if (family.ende) {
-          endDate = new Date(`${String(family.ende).slice(0, 10)}T00:00:00`);
-        } else {
-          const peopleForDuration = [...relatedPeople, ...(Array.isArray(personenCache) ? personenCache : [])];
-          const couple = [personId, spouseId]
-            .map(id => personAusLookup(peopleForDuration, id))
-            .filter(Boolean);
-          const exactDeaths = couple
-            .map(p => p.sterbedatum ? String(p.sterbedatum).slice(0, 10) : "")
-            .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
-            .sort();
-          if (exactDeaths.length) {
-            endDate = new Date(`${exactDeaths[0]}T00:00:00`);
-          } else {
-            const deathYears = couple
-              .map(p => Number(p.sterbejahr))
-              .filter(y => Number.isFinite(y) && y > 0)
-              .sort((a, b) => a - b);
-            if (deathYears.length) endDate = new Date(`${deathYears[0]}-12-31T00:00:00`);
-          }
+        // Alle bekannten möglichen Enddaten berücksichtigen. Ein gespeichertes
+        // Familienende darf ein früheres Sterbedatum eines Ehepartners nicht
+        // übergehen (z. B. wenn das Familienende fälschlich auf den Tod des
+        // späteren Ehepartners gesetzt wurde).
+        const endCandidates = [];
+        const addEndCandidate = (value) => {
+          if (!value) return;
+          const dateText = String(value).slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return;
+          const parsed = new Date(`${dateText}T00:00:00`);
+          if (!Number.isNaN(parsed.getTime()) && parsed >= startDate) endCandidates.push(parsed);
+        };
+        addEndCandidate(family.ende);
+        const peopleForDuration = [...relatedPeople, ...(Array.isArray(personenCache) ? personenCache : [])];
+        const couple = [personId, spouseId]
+          .map(id => personAusLookup(peopleForDuration, id))
+          .filter(Boolean);
+        couple.forEach(p => addEndCandidate(p.sterbedatum));
+        // Ein Sterbejahr ohne genaues Datum bleibt ausdrücklich ungenau.
+        // Nur verwenden, wenn kein genaues Sterbedatum bekannt ist.
+        if (!endCandidates.length) {
+          couple.map(p => Number(p.sterbejahr))
+            .filter(y => Number.isFinite(y) && y > 0)
+            .forEach(y => addEndCandidate(`${y}-12-31`));
         }
+        endCandidates.sort((a, b) => a - b);
+        const endDate = endCandidates[0] || null;
         if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
           let years = endDate.getFullYear() - startDate.getFullYear();
           if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
