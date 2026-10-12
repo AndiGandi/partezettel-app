@@ -1,4 +1,4 @@
-// v270: Eltern werden in der Bestand-Personenansicht angezeigt; v269: Ehedauer korrigiert, Fotosortierung und Suchleiste bleiben erhalten.
+// v271: Elternanzeige berücksichtigt auch Elternfamilien aus der Ersteingabe; v270: Eltern werden in der Bestand-Personenansicht angezeigt; v269: Ehedauer korrigiert, Fotosortierung und Suchleiste bleiben erhalten.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2953,7 +2953,10 @@ async function openPersonDetail(personId, options = {}) {
         .select("id, partner_a_id, partner_b_id, familientyp")
         .in("id", ownParentFamilyIds);
       if (parentFamilyError) debugLog(`⚠️ Eltern in Bestand laden: ${parentFamilyError.message}`);
-      ownParentFamilies = (parentFamilyData || []).filter(f => f.familientyp === "Eltern" || !f.familientyp);
+      ownParentFamilies = (parentFamilyData || []).filter(f => {
+        const typ = String(f.familientyp || "").trim().toLocaleLowerCase("de");
+        return typ === "eltern" || typ === "elternfamilie" || !typ;
+      });
     }
     const parentIds = [...new Set(ownParentFamilies.flatMap(f => [f.partner_a_id, f.partner_b_id]).filter(id => id && id !== personId))];
     const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean), ...parentIds])];
