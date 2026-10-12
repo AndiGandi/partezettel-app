@@ -1,4 +1,4 @@
-// v262: Personenansicht mit Kirchenbuchlinks, Fotoübersicht und Stammbaum-Absprung.
+// v266: Fotosortierung pro Person in Supabase speichern, mit minimalen Metadaten-Updates.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2877,7 +2877,26 @@ async function openPersonDetail(personId, options = {}) {
     keyphoto.hidden = true; keyphoto.removeAttribute("src");
     await ladeSchluesselfotos([person]);
     const photo = schluesselfotoCache.get(person.id);
-    if (photo?.url) { keyphoto.src = photo.url; keyphoto.hidden = false; }
+    if (photo?.url) {
+      keyphoto.src = photo.url; keyphoto.hidden = false;
+      keyphoto.title = "Schlüsselfoto bildschirmfüllend öffnen";
+      keyphoto.style.cursor = "zoom-in";
+      keyphoto.onclick = () => {
+        const viewer = document.getElementById("detail-photo-viewer");
+        const viewerImg = document.getElementById("detail-photo-viewer-img");
+        if (!viewer || !viewerImg) return;
+        detailViewerFoto = null;
+        if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+        if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+        if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = true;
+        setDetailPhotoViewerNumbersVisible(false);
+        viewerImg.src = photo.url;
+        viewer.hidden = false;
+      };
+    } else {
+      keyphoto.onclick = null;
+      keyphoto.removeAttribute("title");
+    }
 
     const facts = document.getElementById("pv-basics");
     facts.replaceChildren();
@@ -2973,7 +2992,8 @@ async function openPersonDetail(personId, options = {}) {
     try {
       const [{ data: directPhotos, error: directPhotosError }, { data: photoLinks, error: photoLinksError }] = await Promise.all([
         sb.from("fotos").select("*").eq("personen_id", personId),
-        sb.from("foto_personen").select("foto_id").eq("personen_id", personId)
+        // Sortierwert und Verknüpfungs-ID werden in derselben ohnehin nötigen Abfrage geladen.
+        sb.from("foto_personen").select("id, foto_id, sortierung").eq("personen_id", personId)
       ]);
       if (directPhotosError) throw directPhotosError;
       if (photoLinksError) throw photoLinksError;
@@ -2984,28 +3004,200 @@ async function openPersonDetail(personId, options = {}) {
         if (photoError) throw photoError;
         photoRows = (data || []).filter(f => f.dateipfad);
       }
-      photoRows.sort((a,b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+      // Die Reihenfolge ist personenspezifisch: Verknüpfte Fotos verwenden
+      // foto_personen.sortierung; reine Eigentümerfotos verwenden fotos.sortierung.
+      // So beeinflusst das Sortieren bei einer Person keine andere Person.
+      const orderKey = `partezettel-foto-reihenfolge-${personId}`;
+      let legacyOrder = [];
+      try { legacyOrder = JSON.parse(localStorage.getItem(orderKey) || "[]"); } catch (_) {}
+      const legacyIndex = new Map(legacyOrder.map((id, index) => [String(id), index]));
+      const linkByPhotoId = new Map((photoLinks || []).map(link => [String(link.foto_id), link]));
+      const hasSort = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+      photoRows.forEach(photo => {
+        photo._personSortRow = linkByPhotoId.get(String(photo.id)) || null;
+        const row = photo._personSortRow;
+        photo._personSortValue = row ? row.sortierung : (photo.personen_id === personId ? photo.sortierung : null);
+      });
+      // Erst eine stabile Ausgangsreihenfolge bestimmen. Bereits lokal gespeicherte
+      // Reihenfolgen werden nur als Migrationshilfe für noch unsortierte Fotos genutzt.
+      photoRows.sort((a, b) => {
+        if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+        const ai = legacyIndex.has(String(a.id)) ? legacyIndex.get(String(a.id)) : Number.MAX_SAFE_INTEGER;
+        const bi = legacyIndex.has(String(b.id)) ? legacyIndex.get(String(b.id)) : Number.MAX_SAFE_INTEGER;
+        return ai - bi
+          || String(a.aufnahme_jahr || "9999").localeCompare(String(b.aufnahme_jahr || "9999"))
+          || String(a.created_at || "").localeCompare(String(b.created_at || ""))
+          || String(a.id).localeCompare(String(b.id));
+      });
+      const SORT_GAP = 100000;
+      let fallbackIndex = 0;
+      photoRows.forEach(photo => {
+        if (photo.ist_schluesselfoto) {
+          photo._personFallbackRank = -SORT_GAP;
+          photo._personSortRank = -SORT_GAP;
+          return;
+        }
+        photo._personFallbackRank = fallbackIndex++ * SORT_GAP;
+        photo._personSortRank = hasSort(photo._personSortValue) ? Number(photo._personSortValue) : photo._personFallbackRank;
+      });
+      photoRows.sort((a, b) => {
+        if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+        return a._personSortRank - b._personSortRank
+          || a._personFallbackRank - b._personFallbackRank
+          || String(a.id).localeCompare(String(b.id));
+      });
       const photoUrls = await ladeFotoBilder([...new Set(photoRows.map(f => f.dateipfad))]);
-      for (const photo of photoRows) {
-        const url = photoUrls.get(photo.dateipfad) || fotoBildMemoryCache.get(photo.dateipfad) || "";
-        if (!url) continue;
-        const tile = document.createElement("button"); tile.type = "button"; tile.className = "person-view-photo-tile";
-        const img = document.createElement("img"); img.src = url; img.alt = photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto");
-        const caption = document.createElement("span"); caption.textContent = `${photo.ist_schluesselfoto ? "⭐ " : ""}${photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto ansehen")}`;
-        tile.append(img, caption);
-        tile.addEventListener("click", async () => {
-          if (photo.gruppenfoto) {
-            const { data: markers, error: markersError } = await sb.from("foto_personen").select("id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", photo.id).order("nummer", { ascending: true });
-            if (markersError) debugLog(`⚠️ Gruppenfoto-Markierungen: ${markersError.message}`);
-            openGruppenfotoViewer(url, markers || [], photo);
-          } else {
-            const viewer = document.getElementById("detail-photo-viewer");
-            const viewerImg = document.getElementById("detail-photo-viewer-img");
-            if (viewer && viewerImg) { viewerImg.src = url; viewer.hidden = false; }
+      const writePersonSort = async (photo, rank) => {
+        const row = photo._personSortRow;
+        if (row) {
+          const { error } = await sb.from("foto_personen").update({ sortierung: rank }).eq("id", row.id);
+          if (error) throw error;
+          row.sortierung = rank;
+        } else if (photo.personen_id === personId) {
+          const { error } = await sb.from("fotos").update({ sortierung: rank }).eq("id", photo.id);
+          if (error) throw error;
+          photo.sortierung = rank;
+        } else {
+          throw new Error("Für dieses Foto fehlt die persönliche Fotozuordnung.");
+        }
+        photo._personSortValue = rank;
+        photo._personSortRank = rank;
+      };
+      const persistMovedPhoto = async (photo, orderedPhotos) => {
+        const sortable = orderedPhotos.filter(f => !f.ist_schluesselfoto);
+        const needsInitialization = legacyOrder.length > 0 && sortable.some(f => !hasSort(f._personSortValue));
+        if (needsInitialization) {
+          // Einmalige Initialisierung: Die aktuelle Reihenfolge (einschließlich
+          // einer eventuell vorhandenen lokalen Alt-Reihenfolge) wird für diese
+          // Person in die passenden Sortierfelder übernommen. Es werden nur
+          // kleine Integerwerte geschrieben, niemals Bilddateien übertragen.
+          const oldValues = new Map(sortable.map(f => [f.id, f._personSortValue]));
+          try {
+            for (let i = 0; i < sortable.length; i++) {
+              await writePersonSort(sortable[i], i * SORT_GAP);
+            }
+          } catch (saveError) {
+            let restoreError = null;
+            for (const row of sortable) {
+              try { await writePersonSort(row, oldValues.get(row.id) ?? null); }
+              catch (err) { restoreError = err; }
+            }
+            if (restoreError) {
+              throw new Error(`${saveError.message || saveError}; Wiederherstellung unvollständig: ${restoreError.message || restoreError}`);
+            }
+            throw saveError;
           }
+          return;
+        }
+        const index = sortable.findIndex(f => f.id === photo.id);
+        const left = index > 0 ? sortable[index - 1] : null;
+        const right = index < sortable.length - 1 ? sortable[index + 1] : null;
+        const leftRank = left ? left._personSortRank : null;
+        const rightRank = right ? right._personSortRank : null;
+        let rank;
+        if (leftRank === null) rank = rightRank - SORT_GAP;
+        else if (rightRank === null) rank = leftRank + SORT_GAP;
+        else if (rightRank - leftRank > 1) rank = Math.floor((leftRank + rightRank) / 2);
+        else {
+          // Nur wenn ein Sortierabstand aufgebraucht ist, werden die kleinen
+          // Metadatenwerte neu nummeriert. Bilddateien werden dabei nie übertragen.
+          const oldValues = new Map(sortable.map(f => [f.id, f._personSortValue]));
+          try {
+            for (let i = 0; i < sortable.length; i++) {
+              const normalizedRank = i * SORT_GAP;
+              await writePersonSort(sortable[i], normalizedRank);
+            }
+          } catch (saveError) {
+            let restoreError = null;
+            for (const row of sortable) {
+              try { await writePersonSort(row, oldValues.get(row.id) ?? null); }
+              catch (err) { restoreError = err; }
+            }
+            if (restoreError) {
+              throw new Error(`${saveError.message || saveError}; Wiederherstellung unvollständig: ${restoreError.message || restoreError}`);
+            }
+            throw saveError;
+          }
+          return;
+        }
+        await writePersonSort(photo, rank);
+      };
+      const openPhoto = async (photo, url) => {
+        if (photo.gruppenfoto) {
+          const { data: markers, error: markersError } = await sb.from("foto_personen").select("id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", photo.id).order("nummer", { ascending: true });
+          if (markersError) debugLog(`⚠️ Gruppenfoto-Markierungen: ${markersError.message}`);
+          openGruppenfotoViewer(url, markers || [], photo);
+        } else {
+          const viewer = document.getElementById("detail-photo-viewer");
+          const viewerImg = document.getElementById("detail-photo-viewer-img");
+          if (viewer && viewerImg) {
+            detailViewerFoto = null;
+            if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+            if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+            if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = true;
+            setDetailPhotoViewerNumbersVisible(false);
+            viewerImg.src = url; viewer.hidden = false;
+          }
+        }
+      };
+      let photoOrderSaving = false;
+      const renderPersonPhotos = () => {
+        photosList.replaceChildren();
+        photoRows.forEach((photo, index) => {
+          const url = photoUrls.get(photo.dateipfad) || fotoBildMemoryCache.get(photo.dateipfad) || "";
+          if (!url) return;
+          const tile = document.createElement("div"); tile.className = "person-view-photo-tile";
+          const open = document.createElement("button"); open.type = "button"; open.className = "person-view-photo-open";
+          open.setAttribute("aria-label", `${photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto ansehen")} groß öffnen`);
+          const img = document.createElement("img"); img.src = url; img.alt = photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto");
+          const caption = document.createElement("span"); caption.textContent = `${photo.ist_schluesselfoto ? "⭐ " : ""}${photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto ansehen")}`;
+          open.append(img, caption); open.addEventListener("click", () => openPhoto(photo, url));
+          const controls = document.createElement("div"); controls.className = "person-view-photo-order";
+          if (!photo.ist_schluesselfoto) {
+            const sortableRows = photoRows.filter(f => !f.ist_schluesselfoto);
+            const sortableIndex = sortableRows.findIndex(f => f.id === photo.id);
+            const up = document.createElement("button"); up.type = "button"; up.className = "btn btn--ghost"; up.textContent = "↑"; up.title = "Foto nach vorne verschieben"; up.setAttribute("aria-label", "Foto nach vorne verschieben"); up.disabled = photoOrderSaving || sortableIndex === 0;
+            const down = document.createElement("button"); down.type = "button"; down.className = "btn btn--ghost"; down.textContent = "↓"; down.title = "Foto nach hinten verschieben"; down.setAttribute("aria-label", "Foto nach hinten verschieben"); down.disabled = photoOrderSaving || sortableIndex === sortableRows.length - 1;
+            const move = async (delta) => {
+              if (photoOrderSaving) return;
+              const target = sortableIndex + delta;
+              if (target < 0 || target >= sortableRows.length) return;
+              const previousOrder = [...photoRows];
+              const previousRanks = new Map(photoRows.map(f => [f.id, { rank: f._personSortRank, value: f._personSortValue }]));
+              photoOrderSaving = true;
+              const [item] = photoRows.splice(photoRows.findIndex(f => f.id === photo.id), 1);
+              const targetPhoto = sortableRows[target];
+              const targetIndex = photoRows.findIndex(f => f.id === targetPhoto.id);
+              photoRows.splice(targetIndex + (delta > 0 ? 1 : 0), 0, item);
+              renderPersonPhotos();
+              try {
+                await persistMovedPhoto(item, photoRows);
+                // Erst nach bestätigtem Speichern lokale Alt-Reihenfolge entfernen.
+                try { localStorage.removeItem(orderKey); } catch (_) {}
+                photoOrderSaving = false;
+                renderPersonPhotos();
+              } catch (err) {
+                photoRows.splice(0, photoRows.length, ...previousOrder);
+                for (const row of photoRows) {
+                  const old = previousRanks.get(row.id);
+                  if (old) { row._personSortRank = old.rank; row._personSortValue = old.value; }
+                }
+                photoOrderSaving = false;
+                renderPersonPhotos();
+                debugLog(`❌ Foto-Reihenfolge konnte nicht in Supabase gespeichert werden: ${err.message || err}`);
+                alert(`Die Foto-Reihenfolge konnte nicht gespeichert werden. Die Anzeige wurde auf die vorherige Reihenfolge zurückgesetzt.\nBitte Verbindung und Berechtigungen prüfen.\n\n${err.message || err}`);
+              }
+            };
+            up.addEventListener("click", () => move(-1)); down.addEventListener("click", () => move(1));
+            controls.append(up, down);
+          } else {
+            controls.textContent = "Schlüsselfoto";
+            controls.setAttribute("aria-label", "Schlüsselfoto bleibt an erster Stelle");
+          }
+          tile.append(open, controls); photosList.appendChild(tile);
         });
-        photosList.appendChild(tile);
-      }
+      };
+      renderPersonPhotos();
     } catch (photoErr) {
       debugLog(`⚠️ Weitere Fotos konnten nicht geladen werden: ${photoErr.message || photoErr}`);
     }
@@ -3287,7 +3479,7 @@ async function loadDetailFotos(personId) {
   container.innerHTML = "";
   const [{ data: eigene, error: eigeneError }, { data: links, error: linksError }] = await Promise.all([
     sb.from("fotos").select("*").eq("personen_id", personId),
-    sb.from("foto_personen").select("foto_id").eq("personen_id", personId)
+    sb.from("foto_personen").select("id, foto_id, sortierung").eq("personen_id", personId)
   ]);
   if (eigeneError) { debugLog(`❌ Fotos laden: ${eigeneError.message}`); return; }
   if (linksError) { debugLog(`❌ Foto-Verknüpfungen laden: ${linksError.message}`); return; }
@@ -3298,7 +3490,38 @@ async function loadDetailFotos(personId) {
     if (error) { debugLog(`❌ Verknüpfte Fotos laden: ${error.message}`); return; }
     verknuepfte = data || [];
   }
-  const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+  const personLinkByPhotoId = new Map((links || []).map(link => [String(link.foto_id), link]));
+  const sortValue = foto => {
+    const link = personLinkByPhotoId.get(String(foto.id));
+    if (link) return link.sortierung;
+    return foto.personen_id === personId ? foto.sortierung : null;
+  };
+  const legacyOrderKey = `partezettel-foto-reihenfolge-${personId}`;
+  let legacyOrder = [];
+  try { legacyOrder = JSON.parse(localStorage.getItem(legacyOrderKey) || "[]"); } catch (_) {}
+  const legacyIndex = new Map(legacyOrder.map((id, index) => [String(id), index]));
+  const fotos = [...verknuepfte].sort((a, b) => {
+    if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+    const ai = legacyIndex.has(String(a.id)) ? legacyIndex.get(String(a.id)) : Number.MAX_SAFE_INTEGER;
+    const bi = legacyIndex.has(String(b.id)) ? legacyIndex.get(String(b.id)) : Number.MAX_SAFE_INTEGER;
+    return ai - bi
+      || String(a.aufnahme_jahr || "9999").localeCompare(String(b.aufnahme_jahr || "9999"))
+      || String(a.created_at || "").localeCompare(String(b.created_at || ""))
+      || String(a.id).localeCompare(String(b.id));
+  });
+  const DETAIL_SORT_GAP = 100000;
+  let detailFallbackIndex = 0;
+  fotos.forEach(foto => {
+    const value = sortValue(foto);
+    const hasValue = value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+    foto._personFallbackRank = foto.ist_schluesselfoto ? -DETAIL_SORT_GAP : detailFallbackIndex * DETAIL_SORT_GAP;
+    foto._personSortRank = foto.ist_schluesselfoto ? -DETAIL_SORT_GAP : (hasValue ? Number(value) : foto._personFallbackRank);
+    if (!foto.ist_schluesselfoto) detailFallbackIndex++;
+  });
+  fotos.sort((a, b) => {
+    if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+    return a._personSortRank - b._personSortRank || a._personFallbackRank - b._personFallbackRank || String(a.id).localeCompare(String(b.id));
+  });
   // Kleine, reine Schlüsselfoto-Vorschau neben den Namensfeldern aktualisieren.
   const keyPreview = document.getElementById("d-schluesselfoto-vorschau");
   if (keyPreview) {
@@ -4425,6 +4648,7 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
     detailPhotoViewerLegend?.appendChild(legend);
   });
   if (detailPhotoViewerLegend) detailPhotoViewerLegend.hidden = rows.length === 0;
+  if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = rows.length === 0;
   detailPhotoViewer.hidden = false;
 }
 

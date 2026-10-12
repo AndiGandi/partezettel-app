@@ -1,4 +1,4 @@
-const CACHE_NAME = "partezettel-shell-v263";
+const CACHE_NAME = "partezettel-shell-v266";
 const SHELL_FILES = [
   "./index.html",
   "./style.css",
