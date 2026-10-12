@@ -1,3 +1,4 @@
+// v262: Personenansicht mit Kirchenbuchlinks, Fotoübersicht und Stammbaum-Absprung.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2871,15 +2872,27 @@ async function openPersonDetail(personId, options = {}) {
     addFact("Ledigenname", person.Ledigenname || person.ledigenname);
     if (birth) addFact(person.geburtsdatum ? "Geboren" : "Geburtsjahr", personViewDatum(birth));
     if (death) addFact(person.sterbedatum ? "Verstorben" : "Todesjahr", personViewDatum(death));
-    addFact("Taufbuch-Zeile", person.taufbuch_zeile);
-    addFact("Trauungsbuch-Zeile", person.trauungsbuch_zeile);
-    addFact("Sterbebuch-Zeile", person.sterbebuch_zeile);
-    const baptismWrap = document.getElementById("pv-baptism-link-wrap");
-    const baptismLink = String(person.taufbuch_link || "").trim();
-    if (baptismLink) {
-      const link = document.getElementById("pv-baptism-link");
-      link.href = baptismLink; link.textContent = "📖 Taufbuch öffnen"; baptismWrap.hidden = false;
-    } else baptismWrap.hidden = true;
+    // Kirchenbücher nur zeigen, wenn mindestens ein Link vorhanden ist.
+    // Die Zeilennummer steht unmittelbar beim jeweiligen Link.
+    const booksSection = document.getElementById("pv-books-section");
+    const booksList = document.getElementById("pv-books-list");
+    booksList.replaceChildren();
+    const books = [
+      ["Taufbuch", person.taufbuch_link, person.taufbuch_zeile],
+      ["Trauungsbuch", person.trauungsbuch_link, person.trauungsbuch_zeile],
+      ["Sterbebuch", person.sterbebuch_link, person.sterbebuch_zeile]
+    ];
+    books.filter(([, link]) => String(link || "").trim()).forEach(([label, url, line]) => {
+      const row = document.createElement("div"); row.className = "person-view-book-row";
+      const link = document.createElement("a"); link.href = String(url).trim(); link.target = "_blank"; link.rel = "noopener noreferrer";
+      link.textContent = `📖 ${label} öffnen`;
+      row.appendChild(link);
+      if (line !== null && line !== undefined && String(line).trim() !== "") {
+        const lineText = document.createElement("span"); lineText.className = "person-view-book-line"; lineText.textContent = `Zeile ${line}`; row.appendChild(lineText);
+      }
+      booksList.appendChild(row);
+    });
+    booksSection.hidden = booksList.children.length === 0;
 
     const spouseSection = document.getElementById("pv-spouse-section");
     const spouseList = document.getElementById("pv-spouse-list"); spouseList.replaceChildren();
@@ -2935,9 +2948,62 @@ async function openPersonDetail(personId, options = {}) {
     uniqueChildIds.map(id => relatedMap.get(id)).filter(Boolean).sort((a,b) => String(a.geburtsdatum || a.geburtsjahr || "9999").localeCompare(String(b.geburtsdatum || b.geburtsjahr || "9999")) || `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de")).forEach(child => addPersonLink(childrenList, child));
     childrenSection.hidden = !childrenList.children.length;
 
+    // Weitere Fotos dieser Person inklusive Gruppenfotos, auf denen sie markiert ist.
+    const photosSection = document.getElementById("pv-photos-section");
+    const photosList = document.getElementById("pv-photos-list");
+    photosList.replaceChildren();
+    try {
+      const [{ data: directPhotos, error: directPhotosError }, { data: photoLinks, error: photoLinksError }] = await Promise.all([
+        sb.from("fotos").select("*").eq("personen_id", personId),
+        sb.from("foto_personen").select("foto_id").eq("personen_id", personId)
+      ]);
+      if (directPhotosError) throw directPhotosError;
+      if (photoLinksError) throw photoLinksError;
+      const photoIds = [...new Set([...(directPhotos || []).map(f => f.id), ...(photoLinks || []).map(x => x.foto_id)].filter(Boolean))];
+      let photoRows = [];
+      if (photoIds.length) {
+        const { data, error: photoError } = await sb.from("fotos").select("*").in("id", photoIds);
+        if (photoError) throw photoError;
+        photoRows = (data || []).filter(f => f.dateipfad);
+      }
+      photoRows.sort((a,b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+      const photoUrls = await ladeFotoBilder([...new Set(photoRows.map(f => f.dateipfad))]);
+      for (const photo of photoRows) {
+        const url = photoUrls.get(photo.dateipfad) || fotoBildMemoryCache.get(photo.dateipfad) || "";
+        if (!url) continue;
+        const tile = document.createElement("button"); tile.type = "button"; tile.className = "person-view-photo-tile";
+        const img = document.createElement("img"); img.src = url; img.alt = photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto");
+        const caption = document.createElement("span"); caption.textContent = `${photo.ist_schluesselfoto ? "⭐ " : ""}${photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto ansehen")}`;
+        tile.append(img, caption);
+        tile.addEventListener("click", async () => {
+          if (photo.gruppenfoto) {
+            const { data: markers, error: markersError } = await sb.from("foto_personen").select("id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", photo.id).order("nummer", { ascending: true });
+            if (markersError) debugLog(`⚠️ Gruppenfoto-Markierungen: ${markersError.message}`);
+            openGruppenfotoViewer(url, markers || [], photo);
+          } else {
+            const viewer = document.getElementById("detail-photo-viewer");
+            const viewerImg = document.getElementById("detail-photo-viewer-img");
+            if (viewer && viewerImg) { viewerImg.src = url; viewer.hidden = false; }
+          }
+        });
+        photosList.appendChild(tile);
+      }
+    } catch (photoErr) {
+      debugLog(`⚠️ Weitere Fotos konnten nicht geladen werden: ${photoErr.message || photoErr}`);
+    }
+    photosSection.hidden = photosList.children.length === 0;
+
     const notes = String(person.Notiz || person.notiz || "").trim();
     document.getElementById("pv-notes-section").hidden = !notes;
     document.getElementById("pv-notes").textContent = notes;
+    document.getElementById("pv-tree").onclick = async () => {
+      overlay.hidden = true; document.body.classList.remove("person-view-open");
+      const treeTab = document.querySelector('.tab-btn[data-tab="stammbaum"]');
+      if (treeTab) treeTab.click();
+      await loadStammbaum();
+      setTreePersonSelection(personId);
+      document.getElementById("tab-stammbaum")?.scrollIntoView({ block: "start", behavior: "auto" });
+    };
     document.getElementById("pv-edit").onclick = async () => {
       overlay.hidden = true; document.body.classList.remove("person-view-open");
       await openPersonEdit(personId, options);
