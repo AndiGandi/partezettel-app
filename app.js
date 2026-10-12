@@ -1,4 +1,4 @@
-// v267: Versionsanzeige korrigiert und Suchleiste im Bestand beim Scrollen sichtbar gehalten. Fotosortierung pro Person bleibt erhalten.
+// v268: Ehedauer endet am früheren Sterbedatum der Ehepartner, sofern kein Ehe-Ende gespeichert ist. Fotosortierung und Suchleiste bleiben erhalten.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2966,9 +2966,34 @@ async function openPersonDetail(personId, options = {}) {
       if (marriage) {
         const date = document.createElement("span"); date.className = "person-view-relation-date";
         let duration = "";
-        const startDate = new Date(family.beginn);
-        const endDate = family.ende ? new Date(family.ende) : new Date();
-        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+        const startDate = new Date(`${String(family.beginn).slice(0, 10)}T00:00:00`);
+        // Ehedauer endet am gespeicherten Ehe-Ende oder – falls keines
+        // hinterlegt ist – am früheren Sterbedatum der beiden Ehepartner.
+        // So wird bei mehreren Ehen nicht versehentlich bis zum Tod eines
+        // späteren Ehepartners weitergerechnet.
+        let endDate = null;
+        if (family.ende) {
+          endDate = new Date(`${String(family.ende).slice(0, 10)}T00:00:00`);
+        } else {
+          const peopleForDuration = [...relatedPeople, ...(Array.isArray(personenCache) ? personenCache : [])];
+          const couple = [personId, spouseId]
+            .map(id => personAusLookup(peopleForDuration, id))
+            .filter(Boolean);
+          const exactDeaths = couple
+            .map(p => p.sterbedatum ? String(p.sterbedatum).slice(0, 10) : "")
+            .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
+            .sort();
+          if (exactDeaths.length) {
+            endDate = new Date(`${exactDeaths[0]}T00:00:00`);
+          } else {
+            const deathYears = couple
+              .map(p => Number(p.sterbejahr))
+              .filter(y => Number.isFinite(y) && y > 0)
+              .sort((a, b) => a - b);
+            if (deathYears.length) endDate = new Date(`${deathYears[0]}-12-31T00:00:00`);
+          }
+        }
+        if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
           let years = endDate.getFullYear() - startDate.getFullYear();
           if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
           if (years >= 0) duration = ` · ${years} ${years === 1 ? "Jahr" : "Jahre"}`;
