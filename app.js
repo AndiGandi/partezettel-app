@@ -1,4 +1,4 @@
-// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
+// v274: Personenansicht zeigt Trauungsbücher aus ehebezogenen Quellen und Altbestand, ohne doppelte Links. v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2909,28 +2909,6 @@ async function openPersonDetail(personId, options = {}) {
     addFact("Ledigenname", person.Ledigenname || person.ledigenname);
     if (birth) addFact(person.geburtsdatum ? "Geboren" : "Geburtsjahr", personViewDatum(birth));
     if (death) addFact(person.sterbedatum ? "Verstorben" : "Todesjahr", personViewDatum(death));
-    // Kirchenbücher nur zeigen, wenn mindestens ein Link vorhanden ist.
-    // Die Zeilennummer steht unmittelbar beim jeweiligen Link.
-    const booksSection = document.getElementById("pv-books-section");
-    const booksList = document.getElementById("pv-books-list");
-    booksList.replaceChildren();
-    const books = [
-      ["Taufbuch", person.taufbuch_link, person.taufbuch_zeile],
-      ["Trauungsbuch", person.trauungsbuch_link, person.trauungsbuch_zeile],
-      ["Sterbebuch", person.sterbebuch_link, person.sterbebuch_zeile]
-    ];
-    books.filter(([, link]) => String(link || "").trim()).forEach(([label, url, line]) => {
-      const row = document.createElement("div"); row.className = "person-view-book-row";
-      const link = document.createElement("a"); link.href = String(url).trim(); link.target = "_blank"; link.rel = "noopener noreferrer";
-      link.textContent = `📖 ${label} öffnen`;
-      row.appendChild(link);
-      if (line !== null && line !== undefined && String(line).trim() !== "") {
-        const lineText = document.createElement("span"); lineText.className = "person-view-book-line"; lineText.textContent = `Zeile ${line}`; row.appendChild(lineText);
-      }
-      booksList.appendChild(row);
-    });
-    booksSection.hidden = booksList.children.length === 0;
-
     const spouseSection = document.getElementById("pv-spouse-section");
     const spouseList = document.getElementById("pv-spouse-list"); spouseList.replaceChildren();
     const [{ data: familyRows, error: familyError }, { data: childLinks, error: childError }] = await Promise.all([
@@ -2941,6 +2919,82 @@ async function openPersonDetail(personId, options = {}) {
     if (childError) debugLog(`⚠️ Kinder laden: ${childError.message}`);
     const partnerFamilies = (familyRows || []).filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern");
     const spouseIds = [...new Set(partnerFamilies.map(f => f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id).filter(Boolean))];
+
+    // Kirchenbücher anzeigen. Trauungsbücher können entweder noch als
+    // Personenfeld gespeichert sein (Altbestand) oder bereits ehebezogen in
+    // familien_trauungsbuch_quellen. Beide Speicherorte berücksichtigen, ohne
+    // Einträge doppelt anzuzeigen oder Daten in der Datenbank zu verändern.
+    const booksSection = document.getElementById("pv-books-section");
+    const booksList = document.getElementById("pv-books-list");
+    booksList.replaceChildren();
+    const books = [
+      ["Taufbuch", person.taufbuch_link, person.taufbuch_zeile],
+      ["Trauungsbuch", person.trauungsbuch_link, person.trauungsbuch_zeile],
+      ["Sterbebuch", person.sterbebuch_link, person.sterbebuch_zeile]
+    ];
+    const angezeigteBuchLinks = new Set();
+    const fuegeBuchHinzu = (label, url, line, hinweis = "") => {
+      const saubereUrl = String(url || "").trim();
+      if (!saubereUrl || angezeigteBuchLinks.has(saubereUrl)) return;
+      angezeigteBuchLinks.add(saubereUrl);
+      const row = document.createElement("div"); row.className = "person-view-book-row";
+      const link = document.createElement("a");
+      link.href = saubereUrl; link.target = "_blank"; link.rel = "noopener noreferrer";
+      link.textContent = `📖 ${label} öffnen${hinweis ? ` (${hinweis})` : ""}`;
+      row.appendChild(link);
+      if (line !== null && line !== undefined && String(line).trim() !== "") {
+        const lineText = document.createElement("span");
+        lineText.className = "person-view-book-line";
+        lineText.textContent = `Zeile ${line}`;
+        row.appendChild(lineText);
+      }
+      booksList.appendChild(row);
+    };
+    books.forEach(([label, url, line]) => fuegeBuchHinzu(label, url, line));
+
+    if (partnerFamilies.length) {
+      const familieIds = partnerFamilies.map(f => f.id).filter(Boolean);
+      let eheQuellen = [];
+      if (familieIds.length) {
+        const { data: quellenData, error: quellenError } = await sb
+          .from("familien_trauungsbuch_quellen")
+          .select("familie_id, trauungsbuch_link, trauungsbuch_zeile")
+          .in("familie_id", familieIds);
+        if (quellenError) {
+          debugLog(`⚠️ Trauungsbücher in Personenansicht laden: ${quellenError.message}`);
+        } else {
+          eheQuellen = quellenData || [];
+        }
+      }
+      const quellenNachFamilie = new Map(eheQuellen.map(q => [q.familie_id, q]));
+      const familienOhneQuelle = partnerFamilies.filter(f => !String(quellenNachFamilie.get(f.id)?.trauungsbuch_link || "").trim());
+      const altQuellenNachPerson = new Map();
+      if (familienOhneQuelle.length && spouseIds.length) {
+        const { data: altQuellen, error: altQuellenError } = await sb.from("personen")
+          .select("id, vorname, nachname, trauungsbuch_link, trauungsbuch_zeile")
+          .in("id", [...new Set([personId, ...spouseIds])]);
+        if (altQuellenError) {
+          debugLog(`⚠️ Alte Trauungsbuch-Links laden: ${altQuellenError.message}`);
+        } else {
+          (altQuellen || []).forEach(p => altQuellenNachPerson.set(p.id, p));
+        }
+      }
+      for (const familie of partnerFamilies) {
+        const eheQuelle = quellenNachFamilie.get(familie.id);
+        let url = eheQuelle?.trauungsbuch_link;
+        let line = eheQuelle?.trauungsbuch_zeile;
+        if (!String(url || "").trim()) {
+          const partnerId = familie.partner_a_id === personId ? familie.partner_b_id : familie.partner_a_id;
+          const altQuelle = [altQuellenNachPerson.get(personId) || person, altQuellenNachPerson.get(partnerId)]
+            .find(p => String(p?.trauungsbuch_link || "").trim());
+          url = altQuelle?.trauungsbuch_link;
+          line = altQuelle?.trauungsbuch_zeile;
+        }
+        const eheHinweis = familie.beginn ? `Hochzeit ${personViewDatum(familie.beginn)}` : "Ehe";
+        fuegeBuchHinzu("Trauungsbuch", url, line, eheHinweis);
+      }
+    }
+    booksSection.hidden = booksList.children.length === 0;
     const childFamilyIds = new Set(partnerFamilies.map(f => f.id));
     const childrenLinks = (childLinks || []).filter(link => childFamilyIds.has(link.familie_id));
 
