@@ -1,4 +1,4 @@
-// v269: Ehedauer berücksichtigt das früheste bekannte Ehe-Ende oder Sterbedatum. Fotosortierung und Suchleiste bleiben erhalten.
+// v270: Eltern werden in der Bestand-Personenansicht angezeigt; v269: Ehedauer korrigiert, Fotosortierung und Suchleiste bleiben erhalten.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -2943,7 +2943,20 @@ async function openPersonDetail(personId, options = {}) {
     const spouseIds = [...new Set(partnerFamilies.map(f => f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id).filter(Boolean))];
     const childFamilyIds = new Set(partnerFamilies.map(f => f.id));
     const childrenLinks = (childLinks || []).filter(link => childFamilyIds.has(link.familie_id));
-    const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean)])];
+
+    // Eltern der aktuellen Person: familien_kinder verknüpft das Kind mit seiner Elternfamilie.
+    // Familien und Personen werden nur für tatsächlich vorhandene Elternlinks nachgeladen.
+    const ownParentFamilyIds = [...new Set((childLinks || []).filter(link => link.kind_id === personId).map(link => link.familie_id).filter(Boolean))];
+    let ownParentFamilies = [];
+    if (ownParentFamilyIds.length) {
+      const { data: parentFamilyData, error: parentFamilyError } = await sb.from("familien")
+        .select("id, partner_a_id, partner_b_id, familientyp")
+        .in("id", ownParentFamilyIds);
+      if (parentFamilyError) debugLog(`⚠️ Eltern in Bestand laden: ${parentFamilyError.message}`);
+      ownParentFamilies = (parentFamilyData || []).filter(f => f.familientyp === "Eltern" || !f.familientyp);
+    }
+    const parentIds = [...new Set(ownParentFamilies.flatMap(f => [f.partner_a_id, f.partner_b_id]).filter(id => id && id !== personId))];
+    const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean), ...parentIds])];
     let relatedPeople = [];
     if (relatedIds.length) {
       const { data, error: relatedError } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", relatedIds);
@@ -2957,6 +2970,23 @@ async function openPersonDetail(personId, options = {}) {
       button.textContent = [ [related.vorname, related.nachname].filter(Boolean).join(" "), life, extra ].filter(Boolean).join(" · ");
       button.addEventListener("click", () => openPersonDetail(related.id)); container.appendChild(button);
     };
+    const parentsSection = document.getElementById("pv-parents-section");
+    const parentsList = document.getElementById("pv-parents-list");
+    parentsList.replaceChildren();
+    const parentRoleSeen = new Set();
+    for (const family of ownParentFamilies) {
+      for (const [role, parentId] of [["Elternteil", family.partner_a_id], ["Elternteil", family.partner_b_id]]) {
+        if (!parentId || parentId === personId || parentRoleSeen.has(parentId)) continue;
+        const parent = relatedMap.get(parentId);
+        if (!parent) continue;
+        parentRoleSeen.add(parentId);
+        const row = document.createElement("div"); row.className = "person-view-relation-row";
+        addPersonLink(row, parent);
+        parentsList.appendChild(row);
+      }
+    }
+    parentsSection.hidden = !parentsList.children.length;
+
     for (const family of partnerFamilies) {
       const spouseId = family.partner_a_id === personId ? family.partner_b_id : family.partner_a_id;
       const spouse = relatedMap.get(spouseId); if (!spouse) continue;

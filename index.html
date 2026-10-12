@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 269 -->
+    <!-- Version 270 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 269</p>
+  <p id="app-version" class="app-header__version">Version 270</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -371,6 +371,9 @@
         <h3>Person</h3>
         <dl class="person-view-facts" id="pv-basics"></dl>
       </section>
+      <section class="person-view-section" id="pv-parents-section" hidden>
+        <h3>Eltern</h3><div id="pv-parents-list" class="person-view-relations"></div>
+      </section>
       <section class="person-view-section person-view-sources" id="pv-books-section" hidden>
         <h3>Kirchenbücher</h3>
         <div id="pv-books-list" class="person-view-books"></div>
@@ -617,6 +620,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=269"></script>
+<script src="app.js?v=270"></script>
 </body>
 </html>
