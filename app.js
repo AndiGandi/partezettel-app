@@ -1565,15 +1565,6 @@ async function zeigeQueueDiagnose() {
   }
 }
 
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 async function flushQueue() {
   const queue = await getQueue();
   const banner = document.getElementById("pending-banner");
