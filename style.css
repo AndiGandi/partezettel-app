@@ -12,8 +12,8 @@
 
 /* ===================== Stammbaum v31 ===================== */
 .tree-panel{max-width:1200px !important}
-.tree-toolbar{display:flex;align-items:flex-end;gap:.75rem;margin-bottom:.55rem}
-.tree-person-select{flex:1;margin:0;display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr);gap:.55rem}.tree-person-select .field{margin:0}
+.tree-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem;margin-bottom:.55rem}
+.tree-person-select{flex:1 1 100%;min-width:0;width:100%;margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:.55rem}.tree-person-select .field{display:block;width:100%;min-width:0;margin:0}.tree-person-select input{display:block;width:100%;min-width:0;box-sizing:border-box}
 .tree-zoom-controls{display:flex;align-items:center;gap:.3rem;white-space:nowrap;padding-bottom:.05rem}
 .tree-zoom-controls .btn{min-width:42px;min-height:42px;padding:.45rem .65rem}
 #tree-zoom-value{min-width:48px;text-align:center;font-size:.8rem;color:var(--ink-soft)}
@@ -1348,3 +1348,10 @@ select[name*="Year"] {
 .tree-preset-branch{min-width:0;overflow-x:auto;border:1px solid var(--line, #d8d8d8);border-radius:.75rem;padding:.5rem;}
 .tree-preset-branch .tree-line-legend{position:static;margin-bottom:.5rem;}
 @media(max-width:900px){.tree-preset-combined{grid-template-columns:1fr;}}
+
+/* v284: Stammbaum-Werkzeugleiste auf iPad und schmalen Ansichten umbrechen; Suchfeld volle Breite */
+.tree-toolbar > .tree-person-select--single{flex:1 1 100%;width:100%;min-width:0;}
+.tree-toolbar > .tree-preset-field{flex:1 1 20rem;min-width:0;max-width:100%;}
+.tree-toolbar > .tree-relationship-open{flex:0 0 auto;}
+.tree-toolbar > .tree-zoom-controls{flex:0 0 auto;}
+@media(max-width:900px){.tree-toolbar{align-items:stretch}.tree-toolbar > .tree-person-select--single{flex-basis:100%;}.tree-toolbar > .tree-preset-field{flex:1 1 100%;}.tree-toolbar > .tree-relationship-open{align-self:flex-start;}}
