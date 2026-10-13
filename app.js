@@ -1,3 +1,4 @@
+// v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
 // v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
@@ -596,7 +597,14 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       fuelleGruppenfotoPersonen();
       await ladeGruppenfotoListe();
     }
-    if (btn.dataset.tab === "stammbaum") await loadStammbaum();
+    if (btn.dataset.tab === "stammbaum") {
+      // Wenn der Stammbaum aus der Bestand-Detailansicht geöffnet wird,
+      // übernimmt er die dort zuletzt ausgewählte Person als Ausgangspunkt.
+      await loadStammbaum();
+      if (currentDetailPersonId && treePerson(currentDetailPersonId)) {
+        setTreePersonSelection(currentDetailPersonId);
+      }
+    }
   });
 });
 
@@ -3003,7 +3011,13 @@ async function openPersonDetail(personId, options = {}) {
     ]);
     if (familyError) debugLog(`⚠️ Ehepartner laden: ${familyError.message}`);
     if (childError) debugLog(`⚠️ Kinder laden: ${childError.message}`);
-    const partnerFamilies = (familyRows || []).filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern");
+    const partnerFamilies = (familyRows || [])
+      .filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern")
+      .sort((a, b) => {
+        const da = String(a.beginn || "9999-99-99").slice(0, 10);
+        const db = String(b.beginn || "9999-99-99").slice(0, 10);
+        return da.localeCompare(db) || String(a.id || "").localeCompare(String(b.id || ""));
+      });
 
     // Trauungsbuchquellen gehören zur jeweiligen Ehe und werden deshalb
     // zusätzlich im Bereich „Kirchenbücher“ angezeigt – auch bei mehreren Ehen.
@@ -3023,7 +3037,8 @@ async function openPersonDetail(personId, options = {}) {
             return `${a.href}|${line}`;
           })
         );
-        for (const quelle of (eheQuellen || [])) {
+        const eheReihenfolge = new Map(partnerFamilies.map((familie, index) => [familie.id, index + 1]));
+        for (const quelle of [...(eheQuellen || [])].sort((a, b) => (eheReihenfolge.get(a.familie_id) || 999) - (eheReihenfolge.get(b.familie_id) || 999))) {
           const url = String(quelle.trauungsbuch_link || "").trim();
           if (!url) continue;
           const line = quelle.trauungsbuch_zeile;
@@ -3037,7 +3052,8 @@ async function openPersonDetail(personId, options = {}) {
           link.href = url;
           link.target = "_blank";
           link.rel = "noopener noreferrer";
-          link.textContent = "📖 Trauungsbuch öffnen";
+          const eheNummer = eheReihenfolge.get(quelle.familie_id);
+          link.textContent = `📖 ${eheNummer ? `${eheNummer}. Ehe – ` : ""}Trauungsbuch öffnen`;
           row.appendChild(link);
           if (lineLabel) {
             const lineText = document.createElement("span");
