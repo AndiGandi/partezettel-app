@@ -6670,7 +6670,7 @@ function treeParentFamiliesForPerson(id) {
 async function loadStammbaumData() {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
-    sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
+    sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
     sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
     sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
   ]);
