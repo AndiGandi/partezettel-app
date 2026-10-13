@@ -3134,32 +3134,39 @@ async function openPersonDetail(personId, options = {}) {
         // übergehen (z. B. wenn das Familienende fälschlich auf den Tod des
         // späteren Ehepartners gesetzt wurde).
         const endCandidates = [];
-        const addEndCandidate = (value) => {
+        const addEndCandidate = (value, approximate = false) => {
           if (!value) return;
           const dateText = String(value).slice(0, 10);
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return;
           const parsed = new Date(`${dateText}T00:00:00`);
-          if (!Number.isNaN(parsed.getTime()) && parsed >= startDate) endCandidates.push(parsed);
+          if (!Number.isNaN(parsed.getTime()) && parsed >= startDate) {
+            endCandidates.push({ date: parsed, approximate });
+          }
         };
         addEndCandidate(family.ende);
         const peopleForDuration = [...relatedPeople, ...(Array.isArray(personenCache) ? personenCache : [])];
         const couple = [personId, spouseId]
           .map(id => personAusLookup(peopleForDuration, id))
           .filter(Boolean);
-        couple.forEach(p => addEndCandidate(p.sterbedatum));
-        // Ein Sterbejahr ohne genaues Datum bleibt ausdrücklich ungenau.
-        // Nur verwenden, wenn kein genaues Sterbedatum bekannt ist.
-        if (!endCandidates.length) {
-          couple.map(p => Number(p.sterbejahr))
-            .filter(y => Number.isFinite(y) && y > 0)
-            .forEach(y => addEndCandidate(`${y}-12-31`));
-        }
-        endCandidates.sort((a, b) => a - b);
-        const endDate = endCandidates[0] || null;
+        // Beide Partner immer prüfen: Ein Sterbejahr des früher verstorbenen
+        // Partners zählt auch dann, wenn beim anderen ein genaues Sterbedatum
+        // vorhanden ist. Das Jahresende ist nur ein Vergleichsanker, kein
+        // behauptetes genaues Sterbedatum.
+        couple.forEach(p => {
+          if (p.sterbedatum) {
+            addEndCandidate(p.sterbedatum, false);
+          } else if (p.sterbejahr) {
+            const year = Number(p.sterbejahr);
+            if (Number.isInteger(year) && year > 0) addEndCandidate(`${year}-12-31`, true);
+          }
+        });
+        endCandidates.sort((a, b) => a.date - b.date);
+        const earliest = endCandidates[0] || null;
+        const endDate = earliest?.date || null;
         if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
           let years = endDate.getFullYear() - startDate.getFullYear();
           if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
-          if (years >= 0) duration = ` · ${years} ${years === 1 ? "Jahr" : "Jahre"}`;
+          if (years >= 0) duration = ` · ${earliest.approximate ? "ca. " : ""}${years} ${years === 1 ? "Jahr" : "Jahre"}`;
         }
         date.textContent = `💍 Hochzeit: ${marriage}${duration}`; row.appendChild(date);
       }
