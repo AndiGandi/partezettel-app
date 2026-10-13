@@ -571,6 +571,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", async () => {
+    // Beim Verlassen des Stammbaums die letzte Verwandtschaftsanfrage verwerfen,
+    // damit beim nächsten Öffnen keine alte Anfrage oder Ergebnisanzeige stehen bleibt.
+    const aktiverTab = document.querySelector(".tab-btn.is-active")?.dataset.tab;
+    if (aktiverTab === "stammbaum" && btn.dataset.tab !== "stammbaum") {
+      const relationA = document.getElementById("tree-relation-person-a");
+      const relationB = document.getElementById("tree-relation-person-b");
+      const relationResult = document.getElementById("tree-relationship-result");
+      const relationPanel = document.getElementById("tree-relationship-panel");
+      if (relationA) relationA.value = "";
+      if (relationB) relationB.value = "";
+      if (relationResult) relationResult.innerHTML = "";
+      if (relationPanel) relationPanel.hidden = true;
+      treeRelationshipSelection = { personAId: null, personBId: null };
+    }
     document.querySelectorAll(".tab-btn").forEach((b) => {
       b.classList.remove("is-active");
       b.setAttribute("aria-selected", "false");
