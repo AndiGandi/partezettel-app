@@ -3093,15 +3093,44 @@ async function openPersonDetail(personId, options = {}) {
     const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean), ...parentIds])];
     let relatedPeople = [];
     if (relatedIds.length) {
-      const { data, error: relatedError } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", relatedIds);
+      const { data, error: relatedError } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", relatedIds);
       if (relatedError) debugLog(`⚠️ Verwandte Personen laden: ${relatedError.message}`);
       relatedPeople = data || [];
     }
     const relatedMap = new Map(relatedPeople.map(p => [p.id, p]));
-    const addPersonLink = (container, related, extra = "") => {
+    const addPersonLink = (container, related, extra = "", options = {}) => {
       const button = document.createElement("button"); button.type = "button"; button.className = "person-view-person-link";
-      const life = [related.geburtsdatum || related.geburtsjahr, related.sterbedatum || related.sterbejahr].filter(Boolean).map(personViewDatum).join(" – ");
-      button.textContent = [ [related.vorname, related.nachname].filter(Boolean).join(" "), life, extra ].filter(Boolean).join(" · ");
+      const name = [related.vorname, related.nachname].filter(Boolean).join(" ");
+      const birth = related.geburtsdatum || related.geburtsjahr;
+      const death = related.sterbedatum || related.sterbejahr;
+      const life = [birth, death].filter(Boolean).map(personViewDatum).join(" – ");
+      const details = [name];
+      if (options.showMaidenName) {
+        const maiden = String(related.Ledigenname || "").trim();
+        if (maiden && maiden.toLocaleLowerCase() !== String(related.nachname || "").trim().toLocaleLowerCase()) details.push(`geb. ${maiden}`);
+      }
+      if (life) details.push(life);
+      // Das Alter wird nur für verstorbene Personen ergänzt. Bei unvollständigen
+      // Daten (nur Jahreszahlen) ist es ausdrücklich eine ungefähre Angabe.
+      if (death && birth) {
+        const birthDate = String(related.geburtsdatum || "").trim();
+        const deathDate = String(related.sterbedatum || "").trim();
+        const birthYear = Number(related.geburtsjahr || (birthDate.match(/^(\d{4})/) || [])[1] || (birthDate.match(/\.(\d{4})$/) || [])[1]);
+        const deathYear = Number(related.sterbejahr || (deathDate.match(/^(\d{4})/) || [])[1] || (deathDate.match(/\.(\d{4})$/) || [])[1]);
+        if (Number.isFinite(birthYear) && birthYear > 0 && Number.isFinite(deathYear) && deathYear >= birthYear) {
+          let age = deathYear - birthYear;
+          const parseDate = value => {
+            const m = String(value || "").match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+            return m ? { day:Number(m[1]), month:Number(m[2]), year:Number(m[3]) } : null;
+          };
+          const bd = parseDate(birthDate), dd = parseDate(deathDate);
+          if (bd && dd && (dd.month < bd.month || (dd.month === bd.month && dd.day < bd.day))) age--;
+          const exact = !!(bd && dd);
+          details.push(`${exact ? "" : "ca. "}${age} Jahre`);
+        }
+      }
+      if (extra) details.push(extra);
+      button.textContent = details.join(" · ");
       button.addEventListener("click", () => openPersonDetail(related.id)); container.appendChild(button);
     };
     const parentsSection = document.getElementById("pv-parents-section");
@@ -3126,7 +3155,7 @@ async function openPersonDetail(personId, options = {}) {
         continue;
       }
       const row = document.createElement("div"); row.className = "person-view-relation-row";
-      addPersonLink(row, parent);
+      addPersonLink(row, parent, "", { showMaidenName: true });
       parentsList.appendChild(row);
     }
     parentsSection.hidden = !parentsList.children.length;
