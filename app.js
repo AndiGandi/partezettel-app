@@ -1,3 +1,4 @@
+// v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
 // v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
 // v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
@@ -7765,8 +7766,10 @@ function applyTreeLinePreset(value) {
     const person = treeFindPresetPerson(["peter"], "Mangeng");
     if (person) targets = [person];
   } else if (value === "mangeng-johann-josef") {
-    const person = treeFindPresetPerson(["johann", "josef"], "Mangeng");
-    if (person) targets = [person];
+    const johannJosef = treeFindPresetPerson(["johann", "josef"], "Mangeng");
+    const annaMaria = treeFindPresetPerson(["anna", "maria"], "Mangeng");
+    if (johannJosef && annaMaria) targets = [johannJosef, annaMaria];
+    else if (johannJosef || annaMaria) targets = [johannJosef || annaMaria];
   }
   if (!targets.length) {
     if (message) message.textContent = "Die Person konnte nicht eindeutig gefunden werden. Bitte Namen in der normalen Personensuche auswählen.";
@@ -7794,7 +7797,7 @@ function applyTreeLinePreset(value) {
   }
   stage.innerHTML = `<div class="tree-preset-combined"><section class="tree-preset-branch">${originals[0]}</section><section class="tree-preset-branch">${originals[1]}</section></div>`;
   if (select) select.value = targets[0].id;
-  if (search) search.value = "Reinhard und Paula Ganahl";
+  if (search) search.value = value === "mangeng-johann-josef" ? "Johann Josef und Anna Maria Mangeng" : "Reinhard und Paula Ganahl";
   if (message) message.textContent = "Beide Vorfahrenzweige werden getrennt angezeigt. Für eine einzelne Person bitte wieder die normale Ausgangsperson wählen.";
   // Rendern der kombinierten Ansicht bindet die Klickaktionen erneut.
   stage.querySelectorAll("[data-tree-person]").forEach(el => el.addEventListener("click", () => {
