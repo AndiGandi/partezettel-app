@@ -1,4 +1,4 @@
-// v262: Personenansicht mit Kirchenbuchlinks, Fotoübersicht und Stammbaum-Absprung.
+// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -1082,16 +1082,42 @@ let erstRelationDaten = { personen: [], familien: [] };
 const erstPartnerVorhanden = document.getElementById("erst-partner-vorhanden");
 const erstPartnerschaftArt = document.getElementById("erst-partnerschaft-art");
 let erstPartnerPersonenGeladen = false;
+let erstPartnerFamilienCache = null;
 async function ladeErstPartnerPersonen() {
   if (!erstPartnerVorhanden || erstPartnerPersonenGeladen) return;
-  const { data, error } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname").limit(5000);
+  const { data, error } = await sb.from("personen")
+    .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr")
+    .order("nachname").limit(5000);
   if (error) throw error;
+
+  // Nur die kleinen Beziehungsfelder laden; keine Fotos oder Medien.
+  if (!Array.isArray(erstPartnerFamilienCache)) {
+    const { data: familien, error: familienError } = await sb.from("familien")
+      .select("id, partner_a_id, partner_b_id, familientyp, ende, ende_automatik_ignorieren");
+    if (familienError) throw familienError;
+    erstPartnerFamilienCache = familien || [];
+  }
+  const personenLookup = new Map([...(personenCache || []), ...(data || [])].map(p => [p.id, p]));
+  const belegt = new Set();
+  for (const familie of erstPartnerFamilienCache) {
+    const typ = String(familie.familientyp || "").trim().toLocaleLowerCase("de");
+    if (typ !== "ehe" && typ !== "partnerschaft") continue;
+    if (partnerschaftIstBeendet(familie, personenLookup)) continue;
+    if (familie.partner_a_id) belegt.add(familie.partner_a_id);
+    if (familie.partner_b_id) belegt.add(familie.partner_b_id);
+  }
+
   const aktuell = document.getElementById("erstverwandtschaft-person")?.value || "";
   erstPartnerVorhanden.innerHTML = '<option value="">— keinen Partner auswählen —</option>';
-  for (const person of data || []) {
-    if (person.id === aktuell) continue;
+  const kandidaten = (data || []).filter(person => person.id !== aktuell && !belegt.has(person.id))
+    .sort(personenAuswahlSortierung);
+  for (const person of kandidaten) {
     erstPartnerVorhanden.appendChild(new Option(personenAuswahlText(person), person.id));
   }
+  const hinweis = document.getElementById("erst-partner-hinweis");
+  if (hinweis) hinweis.textContent = kandidaten.length
+    ? `${kandidaten.length} verfügbare Personen – bereits verheiratete Personen werden ausgeblendet.`
+    : "Keine verfügbaren Personen gefunden. Personen mit laufender Ehe/Partnerschaft werden ausgeblendet.";
   erstPartnerPersonenGeladen = true;
 }
 if (erstPartnerVorhanden) {
@@ -1253,7 +1279,7 @@ function resetForm() {
   if (erstFamilie) erstFamilie.innerHTML = '<option value="">— Elternfamilie auswählen —</option>';
   if (erstElternteil) erstElternteil.innerHTML = '<option value="">— Mutter oder Vater auswählen —</option>';
   if (erstRelationHinweis) erstRelationHinweis.textContent = "";
-  if (erstPartnerVorhanden) { erstPartnerVorhanden.value = ""; erstPartnerVorhanden.innerHTML = '<option value="">— keinen Partner auswählen —</option>'; erstPartnerPersonenGeladen = false; }
+  if (erstPartnerVorhanden) { erstPartnerVorhanden.value = ""; erstPartnerVorhanden.innerHTML = '<option value="">— keinen Partner auswählen —</option>'; erstPartnerPersonenGeladen = false; erstPartnerFamilienCache = null; }
   const erstPartnerHinweis = document.getElementById("erst-partner-hinweis");
   if (erstPartnerHinweis) erstPartnerHinweis.textContent = "";
   document.getElementById("erstverwandtschaft-person-wrap").hidden = true;
@@ -1599,11 +1625,6 @@ function lebensalterInTagen(person) {
   if (!person?.geburtsdatum && !person?.geburtsjahr) return null;
   const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${person.geburtsjahr}-07-01T00:00:00`);
   if (Number.isNaN(geburt.getTime())) return null;
-
-  // Ein Sterbejahr ohne genaues Sterbedatum wird ebenfalls berücksichtigt.
-  // Fehlen Sterbedatum UND Sterbejahr, darf kein aktuelles Datum als Todestag
-  // angenommen werden – sonst entstehen bei historischen Personen falsche
-  // Altersangaben von weit über 100 Jahren.
   let ende = null;
   if (person.sterbedatum) {
     ende = new Date(`${person.sterbedatum}T00:00:00`);
@@ -1617,34 +1638,71 @@ function lebensalterInTagen(person) {
   if (Number.isNaN(ende.getTime()) || ende < geburt) return null;
   return Math.floor((ende - geburt) / 86400000);
 }
+function lebensalterSortierungInTagen(person) {
+  if (!person?.geburtsdatum && !person?.geburtsjahr) return null;
+  const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T12:00:00`) : new Date(`${person.geburtsjahr}-07-01T12:00:00`);
+  if (Number.isNaN(geburt.getTime())) return null;
+  let ende = null;
+  if (person.sterbedatum) ende = new Date(`${person.sterbedatum}T12:00:00`);
+  else if (person.sterbejahr) {
+    const jahr = Number(person.sterbejahr);
+    if (!Number.isInteger(jahr) || jahr < 1000 || jahr > 3000) return null;
+    ende = new Date(`${jahr}-12-31T12:00:00`);
+  } else {
+    // Ohne bekanntes Sterbedatum oder Sterbejahr ist das Lebensalter
+    // für diese genealogische Sortierung nicht verlässlich und bleibt außen vor.
+    return null;
+  }
+  if (Number.isNaN(ende.getTime()) || ende < geburt) return null;
+  return Math.floor((ende - geburt) / 86400000);
+}
 function lebensalterAnzeige(person) {
   const tage = lebensalterInTagen(person);
   if (tage === null) return "";
   const jahre = Math.floor(tage / 365.2425);
-  // Nur das Sterbejahr bekannt -> Alter ist nur ungefähr bestimmbar.
   const nurSterbejahr = !person.sterbedatum && !!person.sterbejahr;
   return `${nurSterbejahr ? "ca. " : ""}${jahre} Jahre`;
 }
-function personenVergleich(a,b) {
-  if (personenSortierung === "alter") {
-    const aa=lebensalterInTagen(a), ab=lebensalterInTagen(b);
-    if (aa===null && ab!==null) return 1; if (aa!==null && ab===null) return -1;
-    if (aa!==null && ab!==null && aa!==ab) return aa-ab;
-  } else if (personenSortierung === "geburtsjahr" || personenSortierung === "sterbejahr") {
-    const ay=sortierJahr(a,personenSortierung), by=sortierJahr(b,personenSortierung);
-    if (ay===null && by!==null) return 1; if (ay!==null && by===null) return -1;
-    if (ay!==null && by!==null && ay!==by) return ay-by;
-  } else if (personenSortierung === "erstellt") {
-    const at=new Date(a.created_at||a.erstellt_am||0).getTime(), bt=new Date(b.created_at||b.erstellt_am||0).getTime();
-    if (at!==bt) return bt-at;
-  } else if (personenSortierung === "familie") {
-    const af=String(a._familienSortKey||a.nachname||"").toLocaleLowerCase("de"), bf=String(b._familienSortKey||b.nachname||"").toLocaleLowerCase("de");
-    const fc=af.localeCompare(bf,"de"); if(fc) return fc;
-  }
-  const nc=String(a.nachname||"").localeCompare(String(b.nachname||""),"de",{sensitivity:"base"});
-  return nc || String(a.vorname||"").localeCompare(String(b.vorname||""),"de",{sensitivity:"base"});
+function sortierNameVergleich(a, b) {
+  const nc = String(a.nachname || "").localeCompare(String(b.nachname || ""), "de", { sensitivity: "base" });
+  return nc || String(a.vorname || "").localeCompare(String(b.vorname || ""), "de", { sensitivity: "base" }) || String(a.id || "").localeCompare(String(b.id || ""));
 }
-function sortierePersonen(personen) { return [...personen].sort((a,b)=>personenVergleich(a,b)*personenSortRichtung); }
+function personenVergleich(a, b) {
+  let av = null, bv = null, cmp = 0;
+  if (personenSortierung === "name") {
+    cmp = sortierNameVergleich(a, b) * personenSortRichtung;
+    return cmp;
+  }
+  if (personenSortierung === "alter") {
+    av = lebensalterSortierungInTagen(a); bv = lebensalterSortierungInTagen(b);
+  } else if (personenSortierung === "geburtsjahr" || personenSortierung === "sterbejahr") {
+    av = sortierJahr(a, personenSortierung); bv = sortierJahr(b, personenSortierung);
+  } else if (personenSortierung === "erstellt") {
+    const aRaw = a.erstellt_am || a.created_at;
+    const bRaw = b.erstellt_am || b.created_at;
+    av = aRaw ? new Date(aRaw).getTime() : null;
+    bv = bRaw ? new Date(bRaw).getTime() : null;
+  } else if (personenSortierung === "familie") {
+    av = String(a._familienSortKey || a.nachname || "").trim();
+    bv = String(b._familienSortKey || b.nachname || "").trim();
+    if (!av) av = null;
+    if (!bv) bv = null;
+  }
+
+  // Fehlende Werte bleiben immer am Ende – unabhängig von der Sortierrichtung.
+  const aMissing = av === null || av === undefined || av === "" || (typeof av === "number" && !Number.isFinite(av));
+  const bMissing = bv === null || bv === undefined || bv === "" || (typeof bv === "number" && !Number.isFinite(bv));
+  if (aMissing && !bMissing) return 1;
+  if (!aMissing && bMissing) return -1;
+  if (!aMissing && !bMissing) {
+    if (personenSortierung === "familie") cmp = String(av).localeCompare(String(bv), "de", { sensitivity: "base" });
+    else cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    if (cmp) return cmp * personenSortRichtung;
+  }
+  // Bei gleichen/fehlenden Sortierwerten bleibt eine nachvollziehbare Namensreihenfolge.
+  return sortierNameVergleich(a, b);
+}
+function sortierePersonen(personen) { return [...personen].sort(personenVergleich); }
 function personenAuswahlText(person) {
   if (!person) return "(unbekannte Person)";
   const nachname = String(person.nachname || "").trim();
@@ -2651,16 +2709,26 @@ let personenSucheLauf = 0;
 function normalizePersonenSuchtext(value) {
   return String(value ?? "")
     .toLocaleLowerCase("de-DE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .trim()
     .replace(/\s+/g, " ");
 }
 
-function personenSuchtext(p) {
+function personenSuchtext(p, extra = "") {
   return normalizePersonenSuchtext(
-    [p?.vorname, p?.nachname, p?.Ledigenname]
+    [p?.vorname, p?.nachname, p?.Ledigenname, p?.ledigenname, p?.geburtsname,
+      p?.geburtsdatum, p?.geburtsjahr, p?.sterbedatum, p?.sterbejahr, extra]
       .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
       .join(" ")
   );
+}
+
+function personenSuchTreffer(person, suchwert, extra = "") {
+  const tokens = normalizePersonenSuchtext(suchwert).split(" ").filter(Boolean);
+  if (!tokens.length) return true;
+  const haystack = personenSuchtext(person, extra);
+  return tokens.every(token => haystack.includes(token));
 }
 
 function wendePersonenSucheAn(suchwert) {
@@ -2692,8 +2760,7 @@ function wendePersonenSucheAn(suchwert) {
     // Mehrwortsuche: Jeder Suchbegriff muss als Teilstring im gemeinsamen
     // Namens-Suchraum vorkommen. Dadurch ist die Reihenfolge egal:
     // "Ganahl Alois" findet "Alois Ganahl" und umgekehrt.
-    const haystack = personenSuchtext(p);
-    const sichtbar = tokens.length === 0 || tokens.every(token => haystack.includes(token));
+    const sichtbar = tokens.length === 0 || personenSuchTreffer(p, q);
     karte.li.hidden = !sichtbar;
     if (sichtbar) treffer++;
   }
@@ -2723,15 +2790,12 @@ function filterePersonenListeLokal() {
   return window.partezettelPersonenSuche(feld?.value || "");
 }
 
-function aktualisierePersonenSortierung() {
+async function aktualisierePersonenSortierung() {
   aktualisierePersonenCacheStatus();
+  await renderPersonenList(personenCache);
   const feld = document.getElementById("search-input");
   const q = (feld?.value || "").trim();
-  if (q) {
-    window.partezettelPersonenSuche(q);
-    return;
-  }
-  renderPersonenList(personenCache);
+  if (q) window.partezettelPersonenSuche(q);
 }
 
 let egressSuchSchrittTimer = null;
@@ -2840,6 +2904,19 @@ function personViewDatum(value) {
   return new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
+function personViewAlter(person, bisDatum = null) {
+  const birthValue = person?.geburtsdatum || person?.geburtsjahr;
+  if (!birthValue) return "";
+  const birth = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${person.geburtsjahr}-07-01T00:00:00`);
+  if (!Number.isFinite(birth.getTime())) return "";
+  const end = bisDatum ? new Date(`${bisDatum}T00:00:00`) : new Date();
+  if (!Number.isFinite(end.getTime()) || end < birth) return "";
+  let years = end.getFullYear() - birth.getFullYear();
+  if (end.getMonth() < birth.getMonth() || (end.getMonth() === birth.getMonth() && end.getDate() < birth.getDate())) years--;
+  if (years < 0 || years > 125) return "";
+  return `${person.geburtsdatum ? "" : "ca. "}${years} ${years === 1 ? "Jahr" : "Jahre"}`;
+}
+
 async function openPersonDetail(personId, options = {}) {
   try {
     await ensureSession();
@@ -2853,13 +2930,37 @@ async function openPersonDetail(personId, options = {}) {
     document.getElementById("pv-name").textContent = name;
     const birth = person.geburtsdatum || person.geburtsjahr;
     const death = person.sterbedatum || person.sterbejahr;
-    document.getElementById("pv-lifetime").textContent = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean).join(" – ");
+    const lifeParts = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean);
+    const alter = personViewAlter(person, person.sterbedatum || (person.sterbejahr ? `${person.sterbejahr}-12-31` : null));
+    if (alter) lifeParts.push(death ? `† ${alter}` : `kein Sterbedatum erfasst · ${alter}`);
+    else if (death) lifeParts.push("verstorben");
+    else if (birth) lifeParts.push("kein Sterbedatum erfasst");
+    document.getElementById("pv-lifetime").textContent = lifeParts.join(" · ");
 
     const keyphoto = document.getElementById("pv-keyphoto");
     keyphoto.hidden = true; keyphoto.removeAttribute("src");
     await ladeSchluesselfotos([person]);
     const photo = schluesselfotoCache.get(person.id);
-    if (photo?.url) { keyphoto.src = photo.url; keyphoto.hidden = false; }
+    if (photo?.url) {
+      keyphoto.src = photo.url; keyphoto.hidden = false;
+      keyphoto.title = "Schlüsselfoto bildschirmfüllend öffnen";
+      keyphoto.style.cursor = "zoom-in";
+      keyphoto.onclick = () => {
+        const viewer = document.getElementById("detail-photo-viewer");
+        const viewerImg = document.getElementById("detail-photo-viewer-img");
+        if (!viewer || !viewerImg) return;
+        detailViewerFoto = null;
+        if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+        if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+        if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = true;
+        setDetailPhotoViewerNumbersVisible(false);
+        viewerImg.src = photo.url;
+        viewer.hidden = false;
+      };
+    } else {
+      keyphoto.onclick = null;
+      keyphoto.removeAttribute("title");
+    }
 
     const facts = document.getElementById("pv-basics");
     facts.replaceChildren();
@@ -2906,7 +3007,24 @@ async function openPersonDetail(personId, options = {}) {
     const spouseIds = [...new Set(partnerFamilies.map(f => f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id).filter(Boolean))];
     const childFamilyIds = new Set(partnerFamilies.map(f => f.id));
     const childrenLinks = (childLinks || []).filter(link => childFamilyIds.has(link.familie_id));
-    const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean)])];
+
+    // Eltern der aktuellen Person: familien_kinder verknüpft das Kind mit seiner Elternfamilie.
+    // Familien und Personen werden nur für tatsächlich vorhandene Elternlinks nachgeladen.
+    const ownParentFamilyIds = [...new Set((childLinks || []).filter(link => link.kind_id === personId).map(link => link.familie_id).filter(Boolean))];
+    let ownParentFamilies = [];
+    if (ownParentFamilyIds.length) {
+      const { data: parentFamilyData, error: parentFamilyError } = await sb.from("familien")
+        .select("id, partner_a_id, partner_b_id, familientyp")
+        .in("id", ownParentFamilyIds);
+      if (parentFamilyError) debugLog(`⚠️ Eltern in Bestand laden: ${parentFamilyError.message}`);
+      // Entscheidend ist die tatsächliche Kind-Verknüpfung in familien_kinder,
+      // nicht der Text in familientyp. Ältere Datensätze können Eltern trotz
+      // anderer Familientyp-Bezeichnung enthalten. Der Filter nach Typ führte
+      // dazu, dass ein Elternteil oder beide Eltern in der Bestand-Ansicht fehlten.
+      ownParentFamilies = parentFamilyData || [];
+    }
+    const parentIds = [...new Set(ownParentFamilies.flatMap(f => [f.partner_a_id, f.partner_b_id]).filter(id => id && id !== personId))];
+    const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean), ...parentIds])];
     let relatedPeople = [];
     if (relatedIds.length) {
       const { data, error: relatedError } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", relatedIds);
@@ -2920,6 +3038,33 @@ async function openPersonDetail(personId, options = {}) {
       button.textContent = [ [related.vorname, related.nachname].filter(Boolean).join(" "), life, extra ].filter(Boolean).join(" · ");
       button.addEventListener("click", () => openPersonDetail(related.id)); container.appendChild(button);
     };
+    const parentsSection = document.getElementById("pv-parents-section");
+    const parentsList = document.getElementById("pv-parents-list");
+    parentsList.replaceChildren();
+    // Eltern über sämtliche verknüpften Elternfamilien sammeln. So funktionieren
+    // auch Datensätze, in denen Vater und Mutter in getrennten Familienzeilen
+    // hinterlegt sind. IDs deduplizieren, ohne die gespeicherte Zuordnung zu ändern.
+    const parentRoleSeen = new Set();
+    const orderedParentIds = [];
+    for (const family of ownParentFamilies) {
+      for (const parentId of [family.partner_a_id, family.partner_b_id]) {
+        if (!parentId || parentId === personId || parentRoleSeen.has(parentId)) continue;
+        parentRoleSeen.add(parentId);
+        orderedParentIds.push(parentId);
+      }
+    }
+    for (const parentId of orderedParentIds) {
+      const parent = relatedMap.get(parentId);
+      if (!parent) {
+        debugLog(`⚠️ Elternteil ${parentId} ist verknüpft, aber konnte für die Bestand-Anzeige nicht geladen werden.`);
+        continue;
+      }
+      const row = document.createElement("div"); row.className = "person-view-relation-row";
+      addPersonLink(row, parent);
+      parentsList.appendChild(row);
+    }
+    parentsSection.hidden = !parentsList.children.length;
+
     for (const family of partnerFamilies) {
       const spouseId = family.partner_a_id === personId ? family.partner_b_id : family.partner_a_id;
       const spouse = relatedMap.get(spouseId); if (!spouse) continue;
@@ -2929,9 +3074,39 @@ async function openPersonDetail(personId, options = {}) {
       if (marriage) {
         const date = document.createElement("span"); date.className = "person-view-relation-date";
         let duration = "";
-        const startDate = new Date(family.beginn);
-        const endDate = family.ende ? new Date(family.ende) : new Date();
-        if (!Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime())) {
+        const startDate = new Date(`${String(family.beginn).slice(0, 10)}T00:00:00`);
+        // Ehedauer endet am gespeicherten Ehe-Ende oder – falls keines
+        // hinterlegt ist – am früheren Sterbedatum der beiden Ehepartner.
+        // So wird bei mehreren Ehen nicht versehentlich bis zum Tod eines
+        // späteren Ehepartners weitergerechnet.
+        // Alle bekannten möglichen Enddaten berücksichtigen. Ein gespeichertes
+        // Familienende darf ein früheres Sterbedatum eines Ehepartners nicht
+        // übergehen (z. B. wenn das Familienende fälschlich auf den Tod des
+        // späteren Ehepartners gesetzt wurde).
+        const endCandidates = [];
+        const addEndCandidate = (value) => {
+          if (!value) return;
+          const dateText = String(value).slice(0, 10);
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateText)) return;
+          const parsed = new Date(`${dateText}T00:00:00`);
+          if (!Number.isNaN(parsed.getTime()) && parsed >= startDate) endCandidates.push(parsed);
+        };
+        addEndCandidate(family.ende);
+        const peopleForDuration = [...relatedPeople, ...(Array.isArray(personenCache) ? personenCache : [])];
+        const couple = [personId, spouseId]
+          .map(id => personAusLookup(peopleForDuration, id))
+          .filter(Boolean);
+        couple.forEach(p => addEndCandidate(p.sterbedatum));
+        // Ein Sterbejahr ohne genaues Datum bleibt ausdrücklich ungenau.
+        // Nur verwenden, wenn kein genaues Sterbedatum bekannt ist.
+        if (!endCandidates.length) {
+          couple.map(p => Number(p.sterbejahr))
+            .filter(y => Number.isFinite(y) && y > 0)
+            .forEach(y => addEndCandidate(`${y}-12-31`));
+        }
+        endCandidates.sort((a, b) => a - b);
+        const endDate = endCandidates[0] || null;
+        if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
           let years = endDate.getFullYear() - startDate.getFullYear();
           if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
           if (years >= 0) duration = ` · ${years} ${years === 1 ? "Jahr" : "Jahre"}`;
@@ -2955,7 +3130,8 @@ async function openPersonDetail(personId, options = {}) {
     try {
       const [{ data: directPhotos, error: directPhotosError }, { data: photoLinks, error: photoLinksError }] = await Promise.all([
         sb.from("fotos").select("*").eq("personen_id", personId),
-        sb.from("foto_personen").select("foto_id").eq("personen_id", personId)
+        // Sortierwert und Verknüpfungs-ID werden in derselben ohnehin nötigen Abfrage geladen.
+        sb.from("foto_personen").select("id, foto_id, sortierung").eq("personen_id", personId)
       ]);
       if (directPhotosError) throw directPhotosError;
       if (photoLinksError) throw photoLinksError;
@@ -2966,28 +3142,200 @@ async function openPersonDetail(personId, options = {}) {
         if (photoError) throw photoError;
         photoRows = (data || []).filter(f => f.dateipfad);
       }
-      photoRows.sort((a,b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+      // Die Reihenfolge ist personenspezifisch: Verknüpfte Fotos verwenden
+      // foto_personen.sortierung; reine Eigentümerfotos verwenden fotos.sortierung.
+      // So beeinflusst das Sortieren bei einer Person keine andere Person.
+      const orderKey = `partezettel-foto-reihenfolge-${personId}`;
+      let legacyOrder = [];
+      try { legacyOrder = JSON.parse(localStorage.getItem(orderKey) || "[]"); } catch (_) {}
+      const legacyIndex = new Map(legacyOrder.map((id, index) => [String(id), index]));
+      const linkByPhotoId = new Map((photoLinks || []).map(link => [String(link.foto_id), link]));
+      const hasSort = value => value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+      photoRows.forEach(photo => {
+        photo._personSortRow = linkByPhotoId.get(String(photo.id)) || null;
+        const row = photo._personSortRow;
+        photo._personSortValue = row ? row.sortierung : (photo.personen_id === personId ? photo.sortierung : null);
+      });
+      // Erst eine stabile Ausgangsreihenfolge bestimmen. Bereits lokal gespeicherte
+      // Reihenfolgen werden nur als Migrationshilfe für noch unsortierte Fotos genutzt.
+      photoRows.sort((a, b) => {
+        if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+        const ai = legacyIndex.has(String(a.id)) ? legacyIndex.get(String(a.id)) : Number.MAX_SAFE_INTEGER;
+        const bi = legacyIndex.has(String(b.id)) ? legacyIndex.get(String(b.id)) : Number.MAX_SAFE_INTEGER;
+        return ai - bi
+          || String(a.aufnahme_jahr || "9999").localeCompare(String(b.aufnahme_jahr || "9999"))
+          || String(a.created_at || "").localeCompare(String(b.created_at || ""))
+          || String(a.id).localeCompare(String(b.id));
+      });
+      const SORT_GAP = 100000;
+      let fallbackIndex = 0;
+      photoRows.forEach(photo => {
+        if (photo.ist_schluesselfoto) {
+          photo._personFallbackRank = -SORT_GAP;
+          photo._personSortRank = -SORT_GAP;
+          return;
+        }
+        photo._personFallbackRank = fallbackIndex++ * SORT_GAP;
+        photo._personSortRank = hasSort(photo._personSortValue) ? Number(photo._personSortValue) : photo._personFallbackRank;
+      });
+      photoRows.sort((a, b) => {
+        if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+        return a._personSortRank - b._personSortRank
+          || a._personFallbackRank - b._personFallbackRank
+          || String(a.id).localeCompare(String(b.id));
+      });
       const photoUrls = await ladeFotoBilder([...new Set(photoRows.map(f => f.dateipfad))]);
-      for (const photo of photoRows) {
-        const url = photoUrls.get(photo.dateipfad) || fotoBildMemoryCache.get(photo.dateipfad) || "";
-        if (!url) continue;
-        const tile = document.createElement("button"); tile.type = "button"; tile.className = "person-view-photo-tile";
-        const img = document.createElement("img"); img.src = url; img.alt = photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto");
-        const caption = document.createElement("span"); caption.textContent = `${photo.ist_schluesselfoto ? "⭐ " : ""}${photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto ansehen")}`;
-        tile.append(img, caption);
-        tile.addEventListener("click", async () => {
-          if (photo.gruppenfoto) {
-            const { data: markers, error: markersError } = await sb.from("foto_personen").select("id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", photo.id).order("nummer", { ascending: true });
-            if (markersError) debugLog(`⚠️ Gruppenfoto-Markierungen: ${markersError.message}`);
-            openGruppenfotoViewer(url, markers || [], photo);
-          } else {
-            const viewer = document.getElementById("detail-photo-viewer");
-            const viewerImg = document.getElementById("detail-photo-viewer-img");
-            if (viewer && viewerImg) { viewerImg.src = url; viewer.hidden = false; }
+      const writePersonSort = async (photo, rank) => {
+        const row = photo._personSortRow;
+        if (row) {
+          const { error } = await sb.from("foto_personen").update({ sortierung: rank }).eq("id", row.id);
+          if (error) throw error;
+          row.sortierung = rank;
+        } else if (photo.personen_id === personId) {
+          const { error } = await sb.from("fotos").update({ sortierung: rank }).eq("id", photo.id);
+          if (error) throw error;
+          photo.sortierung = rank;
+        } else {
+          throw new Error("Für dieses Foto fehlt die persönliche Fotozuordnung.");
+        }
+        photo._personSortValue = rank;
+        photo._personSortRank = rank;
+      };
+      const persistMovedPhoto = async (photo, orderedPhotos) => {
+        const sortable = orderedPhotos.filter(f => !f.ist_schluesselfoto);
+        const needsInitialization = legacyOrder.length > 0 && sortable.some(f => !hasSort(f._personSortValue));
+        if (needsInitialization) {
+          // Einmalige Initialisierung: Die aktuelle Reihenfolge (einschließlich
+          // einer eventuell vorhandenen lokalen Alt-Reihenfolge) wird für diese
+          // Person in die passenden Sortierfelder übernommen. Es werden nur
+          // kleine Integerwerte geschrieben, niemals Bilddateien übertragen.
+          const oldValues = new Map(sortable.map(f => [f.id, f._personSortValue]));
+          try {
+            for (let i = 0; i < sortable.length; i++) {
+              await writePersonSort(sortable[i], i * SORT_GAP);
+            }
+          } catch (saveError) {
+            let restoreError = null;
+            for (const row of sortable) {
+              try { await writePersonSort(row, oldValues.get(row.id) ?? null); }
+              catch (err) { restoreError = err; }
+            }
+            if (restoreError) {
+              throw new Error(`${saveError.message || saveError}; Wiederherstellung unvollständig: ${restoreError.message || restoreError}`);
+            }
+            throw saveError;
           }
+          return;
+        }
+        const index = sortable.findIndex(f => f.id === photo.id);
+        const left = index > 0 ? sortable[index - 1] : null;
+        const right = index < sortable.length - 1 ? sortable[index + 1] : null;
+        const leftRank = left ? left._personSortRank : null;
+        const rightRank = right ? right._personSortRank : null;
+        let rank;
+        if (leftRank === null) rank = rightRank - SORT_GAP;
+        else if (rightRank === null) rank = leftRank + SORT_GAP;
+        else if (rightRank - leftRank > 1) rank = Math.floor((leftRank + rightRank) / 2);
+        else {
+          // Nur wenn ein Sortierabstand aufgebraucht ist, werden die kleinen
+          // Metadatenwerte neu nummeriert. Bilddateien werden dabei nie übertragen.
+          const oldValues = new Map(sortable.map(f => [f.id, f._personSortValue]));
+          try {
+            for (let i = 0; i < sortable.length; i++) {
+              const normalizedRank = i * SORT_GAP;
+              await writePersonSort(sortable[i], normalizedRank);
+            }
+          } catch (saveError) {
+            let restoreError = null;
+            for (const row of sortable) {
+              try { await writePersonSort(row, oldValues.get(row.id) ?? null); }
+              catch (err) { restoreError = err; }
+            }
+            if (restoreError) {
+              throw new Error(`${saveError.message || saveError}; Wiederherstellung unvollständig: ${restoreError.message || restoreError}`);
+            }
+            throw saveError;
+          }
+          return;
+        }
+        await writePersonSort(photo, rank);
+      };
+      const openPhoto = async (photo, url) => {
+        if (photo.gruppenfoto) {
+          const { data: markers, error: markersError } = await sb.from("foto_personen").select("id, personen_id, nummer, position_x, position_y, position_format").eq("foto_id", photo.id).order("nummer", { ascending: true });
+          if (markersError) debugLog(`⚠️ Gruppenfoto-Markierungen: ${markersError.message}`);
+          openGruppenfotoViewer(url, markers || [], photo);
+        } else {
+          const viewer = document.getElementById("detail-photo-viewer");
+          const viewerImg = document.getElementById("detail-photo-viewer-img");
+          if (viewer && viewerImg) {
+            detailViewerFoto = null;
+            if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
+            if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+            if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = true;
+            setDetailPhotoViewerNumbersVisible(false);
+            viewerImg.src = url; viewer.hidden = false;
+          }
+        }
+      };
+      let photoOrderSaving = false;
+      const renderPersonPhotos = () => {
+        photosList.replaceChildren();
+        photoRows.forEach((photo, index) => {
+          const url = photoUrls.get(photo.dateipfad) || fotoBildMemoryCache.get(photo.dateipfad) || "";
+          if (!url) return;
+          const tile = document.createElement("div"); tile.className = "person-view-photo-tile";
+          const open = document.createElement("button"); open.type = "button"; open.className = "person-view-photo-open";
+          open.setAttribute("aria-label", `${photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto ansehen")} groß öffnen`);
+          const img = document.createElement("img"); img.src = url; img.alt = photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto");
+          const caption = document.createElement("span"); caption.textContent = `${photo.ist_schluesselfoto ? "⭐ " : ""}${photo.titel || (photo.gruppenfoto ? "Gruppenfoto" : "Foto ansehen")}`;
+          open.append(img, caption); open.addEventListener("click", () => openPhoto(photo, url));
+          const controls = document.createElement("div"); controls.className = "person-view-photo-order";
+          if (!photo.ist_schluesselfoto) {
+            const sortableRows = photoRows.filter(f => !f.ist_schluesselfoto);
+            const sortableIndex = sortableRows.findIndex(f => f.id === photo.id);
+            const up = document.createElement("button"); up.type = "button"; up.className = "btn btn--ghost"; up.textContent = "↑"; up.title = "Foto nach vorne verschieben"; up.setAttribute("aria-label", "Foto nach vorne verschieben"); up.disabled = photoOrderSaving || sortableIndex === 0;
+            const down = document.createElement("button"); down.type = "button"; down.className = "btn btn--ghost"; down.textContent = "↓"; down.title = "Foto nach hinten verschieben"; down.setAttribute("aria-label", "Foto nach hinten verschieben"); down.disabled = photoOrderSaving || sortableIndex === sortableRows.length - 1;
+            const move = async (delta) => {
+              if (photoOrderSaving) return;
+              const target = sortableIndex + delta;
+              if (target < 0 || target >= sortableRows.length) return;
+              const previousOrder = [...photoRows];
+              const previousRanks = new Map(photoRows.map(f => [f.id, { rank: f._personSortRank, value: f._personSortValue }]));
+              photoOrderSaving = true;
+              const [item] = photoRows.splice(photoRows.findIndex(f => f.id === photo.id), 1);
+              const targetPhoto = sortableRows[target];
+              const targetIndex = photoRows.findIndex(f => f.id === targetPhoto.id);
+              photoRows.splice(targetIndex + (delta > 0 ? 1 : 0), 0, item);
+              renderPersonPhotos();
+              try {
+                await persistMovedPhoto(item, photoRows);
+                // Erst nach bestätigtem Speichern lokale Alt-Reihenfolge entfernen.
+                try { localStorage.removeItem(orderKey); } catch (_) {}
+                photoOrderSaving = false;
+                renderPersonPhotos();
+              } catch (err) {
+                photoRows.splice(0, photoRows.length, ...previousOrder);
+                for (const row of photoRows) {
+                  const old = previousRanks.get(row.id);
+                  if (old) { row._personSortRank = old.rank; row._personSortValue = old.value; }
+                }
+                photoOrderSaving = false;
+                renderPersonPhotos();
+                debugLog(`❌ Foto-Reihenfolge konnte nicht in Supabase gespeichert werden: ${err.message || err}`);
+                alert(`Die Foto-Reihenfolge konnte nicht gespeichert werden. Die Anzeige wurde auf die vorherige Reihenfolge zurückgesetzt.\nBitte Verbindung und Berechtigungen prüfen.\n\n${err.message || err}`);
+              }
+            };
+            up.addEventListener("click", () => move(-1)); down.addEventListener("click", () => move(1));
+            controls.append(up, down);
+          } else {
+            controls.textContent = "Schlüsselfoto";
+            controls.setAttribute("aria-label", "Schlüsselfoto bleibt an erster Stelle");
+          }
+          tile.append(open, controls); photosList.appendChild(tile);
         });
-        photosList.appendChild(tile);
-      }
+      };
+      renderPersonPhotos();
     } catch (photoErr) {
       debugLog(`⚠️ Weitere Fotos konnten nicht geladen werden: ${photoErr.message || photoErr}`);
     }
@@ -3269,7 +3617,7 @@ async function loadDetailFotos(personId) {
   container.innerHTML = "";
   const [{ data: eigene, error: eigeneError }, { data: links, error: linksError }] = await Promise.all([
     sb.from("fotos").select("*").eq("personen_id", personId),
-    sb.from("foto_personen").select("foto_id").eq("personen_id", personId)
+    sb.from("foto_personen").select("id, foto_id, sortierung").eq("personen_id", personId)
   ]);
   if (eigeneError) { debugLog(`❌ Fotos laden: ${eigeneError.message}`); return; }
   if (linksError) { debugLog(`❌ Foto-Verknüpfungen laden: ${linksError.message}`); return; }
@@ -3280,7 +3628,38 @@ async function loadDetailFotos(personId) {
     if (error) { debugLog(`❌ Verknüpfte Fotos laden: ${error.message}`); return; }
     verknuepfte = data || [];
   }
-  const fotos = [...verknuepfte].sort((a, b) => Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto));
+  const personLinkByPhotoId = new Map((links || []).map(link => [String(link.foto_id), link]));
+  const sortValue = foto => {
+    const link = personLinkByPhotoId.get(String(foto.id));
+    if (link) return link.sortierung;
+    return foto.personen_id === personId ? foto.sortierung : null;
+  };
+  const legacyOrderKey = `partezettel-foto-reihenfolge-${personId}`;
+  let legacyOrder = [];
+  try { legacyOrder = JSON.parse(localStorage.getItem(legacyOrderKey) || "[]"); } catch (_) {}
+  const legacyIndex = new Map(legacyOrder.map((id, index) => [String(id), index]));
+  const fotos = [...verknuepfte].sort((a, b) => {
+    if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+    const ai = legacyIndex.has(String(a.id)) ? legacyIndex.get(String(a.id)) : Number.MAX_SAFE_INTEGER;
+    const bi = legacyIndex.has(String(b.id)) ? legacyIndex.get(String(b.id)) : Number.MAX_SAFE_INTEGER;
+    return ai - bi
+      || String(a.aufnahme_jahr || "9999").localeCompare(String(b.aufnahme_jahr || "9999"))
+      || String(a.created_at || "").localeCompare(String(b.created_at || ""))
+      || String(a.id).localeCompare(String(b.id));
+  });
+  const DETAIL_SORT_GAP = 100000;
+  let detailFallbackIndex = 0;
+  fotos.forEach(foto => {
+    const value = sortValue(foto);
+    const hasValue = value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+    foto._personFallbackRank = foto.ist_schluesselfoto ? -DETAIL_SORT_GAP : detailFallbackIndex * DETAIL_SORT_GAP;
+    foto._personSortRank = foto.ist_schluesselfoto ? -DETAIL_SORT_GAP : (hasValue ? Number(value) : foto._personFallbackRank);
+    if (!foto.ist_schluesselfoto) detailFallbackIndex++;
+  });
+  fotos.sort((a, b) => {
+    if (!!a.ist_schluesselfoto !== !!b.ist_schluesselfoto) return Number(!!b.ist_schluesselfoto) - Number(!!a.ist_schluesselfoto);
+    return a._personSortRank - b._personSortRank || a._personFallbackRank - b._personFallbackRank || String(a.id).localeCompare(String(b.id));
+  });
   // Kleine, reine Schlüsselfoto-Vorschau neben den Namensfeldern aktualisieren.
   const keyPreview = document.getElementById("d-schluesselfoto-vorschau");
   if (keyPreview) {
@@ -3565,12 +3944,9 @@ function fuelleGruppenfotoPersonen() {
     else gruppenfotoAuswahlIds.delete(cb.value);
   });
   const bisher = gruppenfotoAuswahlIds;
-  const suchtext = (gruppenfotoPersonenSuche?.value || "").trim().toLocaleLowerCase("de");
+  const suchtext = gruppenfotoPersonenSuche?.value || "";
   const personen = (personenCache || []).slice().sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
-  const gefiltert = personen.filter(p => {
-    if (!suchtext) return true;
-    return `${p.vorname || ""} ${p.nachname || ""} ${p.Ledigenname || p.ledigenname || p.geburtsname || ""}`.toLocaleLowerCase("de").includes(suchtext);
-  });
+  const gefiltert = personen.filter(p => personenSuchTreffer(p, suchtext));
   gruppenfotoPersonenListe.innerHTML = gefiltert.map(p => {
     const anzeige = fotoPersonAnzeige(p);
     return `
@@ -3809,10 +4185,10 @@ gruppenfotoMetadatenSpeichern?.addEventListener("click", async () => {
 function renderFotoPersonAuswahl() {
   if (!fotoPersonAuswahl || !fotoPersonSuchergebnisse) return;
   const alle = fotoPersonAuswahl._alleVerfuegbarenPersonen || [];
-  const suchtext = (fotoPersonSuche?.value || "").trim().toLocaleLowerCase("de");
-  const gefiltert = suchtext ? alle.filter(p => {
+  const suchtext = fotoPersonSuche?.value || "";
+  const gefiltert = normalizePersonenSuchtext(suchtext) ? alle.filter(p => {
     const a = fotoPersonAnzeige(p);
-    return `${a.name} ${a.daten || ""}`.toLocaleLowerCase("de").includes(suchtext);
+    return personenSuchTreffer(p, suchtext, a.daten || "");
   }).slice(0, 30) : [];
   const belegteNummern = new Map(
     fotoMarkierungen.filter(r => r.personen_id).map(r => [r.personen_id, r.nummer])
@@ -4254,6 +4630,18 @@ const detailPhotoViewerImg = document.getElementById("detail-photo-viewer-img");
 const detailPhotoViewerClose = document.getElementById("detail-photo-viewer-close");
 const detailPhotoViewerMarkers = document.getElementById("detail-photo-viewer-markers");
 const detailPhotoViewerLegend = document.getElementById("detail-photo-viewer-legend");
+const detailPhotoViewerToggleNumbers = document.getElementById("detail-photo-viewer-toggle-numbers");
+let detailPhotoViewerNumbersVisible = true;
+
+function setDetailPhotoViewerNumbersVisible(visible) {
+  detailPhotoViewerNumbersVisible = !!visible;
+  if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.hidden = !detailPhotoViewerNumbersVisible;
+  if (detailPhotoViewerToggleNumbers) {
+    detailPhotoViewerToggleNumbers.textContent = detailPhotoViewerNumbersVisible ? "Zahlen ausblenden" : "Zahlen einblenden";
+    detailPhotoViewerToggleNumbers.setAttribute("aria-pressed", String(detailPhotoViewerNumbersVisible));
+  }
+}
+detailPhotoViewerToggleNumbers?.addEventListener("click", () => setDetailPhotoViewerNumbersVisible(!detailPhotoViewerNumbersVisible));
 
 function closeDetailPhotoViewer() {
   if (!detailPhotoViewer) return;
@@ -4275,6 +4663,7 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
   detailPhotoViewerImg.src = url;
   if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
   if (detailPhotoViewerLegend) detailPhotoViewerLegend.innerHTML = "";
+  setDetailPhotoViewerNumbersVisible(true);
 
   const rows = [...(markierungen || [])].sort((a,b) => Number(a.nummer) - Number(b.nummer));
   rows.forEach(row => {
@@ -4294,7 +4683,9 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
     const name = document.createElement("button");
     name.type = "button";
     name.className = "detail-photo-viewer__legend-name";
-    name.textContent = fotoPersonName(row.personen_id);
+    const p = personenCache.find(person => person.id === row.personen_id);
+    const alterImBild = gruppenfotoPersonenAlter(row.personen_id, foto);
+    name.textContent = `${fotoPersonName(row.personen_id)}${alterImBild ? ` · ${alterImBild}` : ""}`;
     name.disabled = false;
     if (row.personen_id) {
       name.dataset.personId = row.personen_id;
@@ -4329,10 +4720,10 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
           .slice()
           .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
         const fill = () => {
-          const q = search.value.trim().toLocaleLowerCase("de");
-          const list = q ? verfuegbar.filter(p => {
+          const q = search.value;
+          const list = normalizePersonenSuchtext(q) ? verfuegbar.filter(p => {
             const a = fotoPersonAnzeige(p);
-            return `${a.name} ${a.daten||""}`.toLocaleLowerCase("de").includes(q);
+            return personenSuchTreffer(p, q, a.daten || "");
           }) : verfuegbar;
           select.innerHTML = '<option value="">— Person auswählen —</option>' + list.map(p => {
             const a = fotoPersonAnzeige(p);
@@ -4392,6 +4783,7 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
     detailPhotoViewerLegend?.appendChild(legend);
   });
   if (detailPhotoViewerLegend) detailPhotoViewerLegend.hidden = rows.length === 0;
+  if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = rows.length === 0;
   detailPhotoViewer.hidden = false;
 }
 
@@ -6484,8 +6876,12 @@ function renderStammbaum(rootId) {
 }
 
 
-function treePersonGender(_person) {
-  // Geschlecht wird in der App nicht mehr ausgewertet.
+function treePersonGender(person) {
+  // Geschlecht ist optional. Vorhandene Werte werden für präzise
+  // Verwandtschaftsbezeichnungen genutzt; fehlende Werte bleiben neutral.
+  const raw = String(person?.geschlecht || "").trim().toLocaleLowerCase("de");
+  if (["m", "mann", "männlich", "maennlich", "männliches", "male"].includes(raw)) return "m";
+  if (["w", "f", "frau", "weiblich", "weibliches", "female"].includes(raw)) return "w";
   return "u";
 }
 
@@ -6753,22 +7149,26 @@ function treeInLawRelation(path) {
 
 function treeRelationshipStepWord(fromId, edgeType, toId) {
   if (edgeType === "sibling") {
-    return treeGenderWord(fromId, "Bruder", "Schwester") + " von";
+    return treeGenderWord(fromId, "Bruder", "Schwester", "Geschwister") + " von";
   }
 
   if (edgeType === "spouse") {
-    return treeGenderWord(fromId, "Ehemann", "Ehefrau") + " von";
+    return treeGenderWord(fromId, "Ehemann", "Ehefrau", "Partner/in") + " von";
   }
 
-  // parent: from = Kind, to = Elternteil
+  // parent: from = Kind, to = Elternteil. Das Geschlecht des Kindes
+  // bestimmt Sohn/Tochter; ohne Angabe bleibt die Formulierung sinnvoll.
   if (edgeType === "parent") {
-    return treeGenderWord(fromId, "Sohn", "Tochter") + " von";
+    return treeGenderWord(fromId, "Sohn", "Tochter", "Kind") + " von";
   }
 
-  // child: from = Elternteil, to = Kind
-  // Die Bezeichnung beschreibt die Beziehung der oberen Person zur
-  // Neutrale Bezeichnung: Geschlecht wird nicht ausgewertet.
-  return "Elternteil von";
+  // child: from = Elternteil, to = Kind. Das Geschlecht des Elternteils
+  // bestimmt Vater/Mutter; ohne Angabe wird neutral formuliert.
+  if (edgeType === "child") {
+    return treeGenderWord(fromId, "Vater", "Mutter", "Elternteil") + " von";
+  }
+
+  return "verwandt mit";
 }
 
 function treeBuildBloodPath(aId, bId, model, blood) {
@@ -7034,7 +7434,8 @@ function fillTreePersonSelect(searchValue = "", preferredId = "") {
   const limit = query ? 120 : 80;
   const matches = [];
   for (const entry of index) {
-    if (!query || entry.search.includes(query)) matches.push(entry.person);
+    const tokens = query.split(/\s+/).filter(Boolean);
+    if (!tokens.length || tokens.every(token => entry.search.includes(token))) matches.push(entry.person);
     if (matches.length >= limit) break;
   }
   select.replaceChildren(new Option("— Person auswählen —", ""));
