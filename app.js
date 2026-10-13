@@ -1,3 +1,4 @@
+// v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
 // v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
 // v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
@@ -4765,6 +4766,16 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
   detailPhotoViewerImg.src = url;
   if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
   if (detailPhotoViewerLegend) detailPhotoViewerLegend.innerHTML = "";
+  // Die Umschalt-Schaltfläche gehört in die rechte Legende direkt über die Namensliste.
+  // Sie wird vor jedem Rendern dorthin verschoben, damit sie nicht links neben dem Foto bleibt.
+  if (detailPhotoViewerLegend && detailPhotoViewerToggleNumbers) {
+    detailPhotoViewerToggleNumbers.hidden = !(markierungen || []).length;
+    detailPhotoViewerToggleNumbers.style.display = "block";
+    detailPhotoViewerToggleNumbers.style.width = "100%";
+    detailPhotoViewerToggleNumbers.style.boxSizing = "border-box";
+    detailPhotoViewerToggleNumbers.style.margin = "0 0 8px 0";
+    detailPhotoViewerLegend.appendChild(detailPhotoViewerToggleNumbers);
+  }
   setDetailPhotoViewerNumbersVisible(true);
 
   const rows = [...(markierungen || [])].sort((a,b) => Number(a.nummer) - Number(b.nummer));
