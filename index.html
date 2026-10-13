@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 282 -->
+    <!-- Version 283 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=273">
+<link rel="stylesheet" href="style.css?v=283">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 282</p>
+  <p id="app-version" class="app-header__version">Version 283</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -252,6 +252,14 @@
         </label>
         <select id="tree-person-select" aria-label="Ausgewählte Ausgangsperson" hidden><option value="">— Person auswählen —</option></select>
       </div>
+      <label class="field tree-preset-field"><span>Vorgefertigte Stammlinie</span>
+        <select id="tree-line-preset" aria-label="Vorgefertigte Stammlinie">
+          <option value="">— Stammlinie auswählen —</option>
+          <option value="ganahl-reinhard-paula">Ganahl – Reinhard und Paula (beide Vorfahrenzweige)</option>
+          <option value="mangeng-peter">Mangeng – Peter</option>
+          <option value="mangeng-johann-josef">Mangeng – Johann Josef</option>
+        </select>
+      </label>
       <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft</button>
       <div class="tree-zoom-controls" aria-label="Stammbaum Zoom">
         <button type="button" id="tree-zoom-out" class="btn btn--ghost" aria-label="Verkleinern">−</button>
@@ -621,6 +629,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=282"></script>
+<script src="app.js?v=283"></script>
 </body>
 </html>

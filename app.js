@@ -1,3 +1,4 @@
+// v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
 // v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
 // v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
 // v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
@@ -7725,6 +7726,70 @@ function updateTreeZoom() {
   if (value) value.textContent = `${Math.round(treeZoom * 100)} %`;
 }
 
+function treeFindPresetPerson(tokens, surname) {
+  const normalizedSurname = treeNormalizeName(surname);
+  const normalizedTokens = tokens.map(treeNormalizeName);
+  const candidates = treeData.personen.filter(person => {
+    const full = treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""}`);
+    const last = treeNormalizeName(person.nachname || "");
+    return last === normalizedSurname && normalizedTokens.every(token => full.includes(token));
+  });
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
+function applyTreeLinePreset(value) {
+  const message = document.getElementById("tree-message");
+  const select = document.getElementById("tree-person-select");
+  const search = document.getElementById("tree-person-search");
+  let targets = [];
+  if (value === "ganahl-reinhard-paula") {
+    const reinhard = treeFindPresetPerson(["reinhard"], "Ganahl");
+    const paula = treeFindPresetPerson(["paula"], "Ganahl");
+    if (reinhard && paula) targets = [reinhard, paula];
+    else if (reinhard || paula) targets = [reinhard || paula];
+  } else if (value === "mangeng-peter") {
+    const person = treeFindPresetPerson(["peter"], "Mangeng");
+    if (person) targets = [person];
+  } else if (value === "mangeng-johann-josef") {
+    const person = treeFindPresetPerson(["johann", "josef"], "Mangeng");
+    if (person) targets = [person];
+  }
+  if (!targets.length) {
+    if (message) message.textContent = "Die Person konnte nicht eindeutig gefunden werden. Bitte Namen in der normalen Personensuche auswählen.";
+    return;
+  }
+  if (targets.length === 1) {
+    if (select) select.value = targets[0].id;
+    if (search) search.value = treePersonSearchText(targets[0]);
+    setTreePersonSelection(targets[0].id);
+    if (message) message.textContent = "";
+    return;
+  }
+  // Gemeinsame Stammlinie: beide Personen werden als getrennte Ausgangspunkte
+  // mit ihren jeweiligen Vorfahrenzweigen in derselben Ansicht dargestellt.
+  const stage = document.getElementById("tree-stage");
+  const classicStage = document.getElementById("tree-classic-stage");
+  if (treeViewMode === "classic") {
+    treeViewMode = "cards";
+    setTreeViewMode("cards");
+  }
+  const originals = [];
+  for (const target of targets) {
+    renderStammbaum(target.id);
+    originals.push(stage.innerHTML);
+  }
+  stage.innerHTML = `<div class="tree-preset-combined"><section class="tree-preset-branch">${originals[0]}</section><section class="tree-preset-branch">${originals[1]}</section></div>`;
+  if (select) select.value = targets[0].id;
+  if (search) search.value = "Reinhard und Paula Ganahl";
+  if (message) message.textContent = "Beide Vorfahrenzweige werden getrennt angezeigt. Für eine einzelne Person bitte wieder die normale Ausgangsperson wählen.";
+  // Rendern der kombinierten Ansicht bindet die Klickaktionen erneut.
+  stage.querySelectorAll("[data-tree-person]").forEach(el => el.addEventListener("click", () => {
+    const id = el.dataset.treePerson;
+    if (id && select) select.value = id;
+    if (id) setTreePersonSelection(id);
+  }));
+}
+
 const treeSelect = document.getElementById("tree-person-select");
 const treePersonSearch = document.getElementById("tree-person-search");
 function setTreePersonSelection(id) {
@@ -7735,6 +7800,8 @@ function setTreePersonSelection(id) {
   else renderStammbaum(id);
 }
 if (treeSelect) treeSelect.addEventListener("change", () => setTreePersonSelection(treeSelect.value));
+const treeLinePreset = document.getElementById("tree-line-preset");
+if (treeLinePreset) treeLinePreset.addEventListener("change", () => applyTreeLinePreset(treeLinePreset.value));
 if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
   const query = treePersonSearch.value;
   fillTreePersonSelect(query, "");
