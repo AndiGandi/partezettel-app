@@ -3475,6 +3475,7 @@ async function openPersonDetail(personId, options = {}) {
       overlay.hidden = true; document.body.classList.remove("person-view-open");
       await openPersonEdit(personId, options);
     };
+    await loadPersonViewAudio(personId);
     overlay.hidden = false; overlay.scrollTop = 0; document.body.classList.add("person-view-open");
   } catch (err) {
     debugLog(`❌ Fehler beim Öffnen der Personenansicht: ${err?.message || err}`);
