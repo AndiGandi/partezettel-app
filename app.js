@@ -1,4 +1,4 @@
-// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
+// v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
 // v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
 // v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
@@ -3004,6 +3004,56 @@ async function openPersonDetail(personId, options = {}) {
     if (familyError) debugLog(`⚠️ Ehepartner laden: ${familyError.message}`);
     if (childError) debugLog(`⚠️ Kinder laden: ${childError.message}`);
     const partnerFamilies = (familyRows || []).filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern");
+
+    // Trauungsbuchquellen gehören zur jeweiligen Ehe und werden deshalb
+    // zusätzlich im Bereich „Kirchenbücher“ angezeigt – auch bei mehreren Ehen.
+    if (partnerFamilies.length) {
+      const eheFamilienIds = partnerFamilies.map(f => f.id).filter(Boolean);
+      try {
+        const { data: eheQuellen, error: eheQuellenError } = await sb
+          .from("familien_trauungsbuch_quellen")
+          .select("familie_id, trauungsbuch_link, trauungsbuch_zeile")
+          .in("familie_id", eheFamilienIds);
+        if (eheQuellenError) throw eheQuellenError;
+
+        const bereitsAngezeigt = new Set(
+          [...booksList.querySelectorAll("a")].map(a => {
+            const row = a.closest(".person-view-book-row");
+            const line = row?.querySelector(".person-view-book-line")?.textContent || "";
+            return `${a.href}|${line}`;
+          })
+        );
+        for (const quelle of (eheQuellen || [])) {
+          const url = String(quelle.trauungsbuch_link || "").trim();
+          if (!url) continue;
+          const line = quelle.trauungsbuch_zeile;
+          const lineLabel = line !== null && line !== undefined && String(line).trim() !== "" ? `Zeile ${line}` : "";
+          const key = `${new URL(url, window.location.href).href}|${lineLabel}`;
+          if (bereitsAngezeigt.has(key)) continue;
+
+          const row = document.createElement("div");
+          row.className = "person-view-book-row";
+          const link = document.createElement("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          link.textContent = "📖 Trauungsbuch öffnen";
+          row.appendChild(link);
+          if (lineLabel) {
+            const lineText = document.createElement("span");
+            lineText.className = "person-view-book-line";
+            lineText.textContent = lineLabel;
+            row.appendChild(lineText);
+          }
+          booksList.appendChild(row);
+          bereitsAngezeigt.add(key);
+        }
+        booksSection.hidden = booksList.children.length === 0;
+      } catch (err) {
+        debugLog(`⚠️ Trauungsbuchquellen in Kirchenbüchern laden: ${err.message || err}`);
+      }
+    }
+
     const spouseIds = [...new Set(partnerFamilies.map(f => f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id).filter(Boolean))];
     const childFamilyIds = new Set(partnerFamilies.map(f => f.id));
     const childrenLinks = (childLinks || []).filter(link => childFamilyIds.has(link.familie_id));
