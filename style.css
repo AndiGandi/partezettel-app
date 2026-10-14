@@ -12,8 +12,8 @@
 
 /* ===================== Stammbaum v31 ===================== */
 .tree-panel{max-width:1200px !important}
-.tree-toolbar{display:flex;flex-wrap:wrap;align-items:flex-end;gap:.75rem;margin-bottom:.55rem}
-.tree-person-select{flex:1 1 100%;min-width:0;width:100%;margin:0;display:grid;grid-template-columns:minmax(0,1fr);gap:.55rem}.tree-person-select .field{display:block;width:100%;min-width:0;margin:0}.tree-person-select input{display:block;width:100%;min-width:0;box-sizing:border-box}
+.tree-toolbar{display:flex;align-items:flex-end;gap:.75rem;margin-bottom:.55rem}
+.tree-person-select{flex:1;margin:0;display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr);gap:.55rem}.tree-person-select .field{margin:0}
 .tree-zoom-controls{display:flex;align-items:center;gap:.3rem;white-space:nowrap;padding-bottom:.05rem}
 .tree-zoom-controls .btn{min-width:42px;min-height:42px;padding:.45rem .65rem}
 #tree-zoom-value{min-width:48px;text-align:center;font-size:.8rem;color:var(--ink-soft)}
@@ -1349,9 +1349,17 @@ select[name*="Year"] {
 .tree-preset-branch .tree-line-legend{position:static;margin-bottom:.5rem;}
 @media(max-width:900px){.tree-preset-combined{grid-template-columns:1fr;}}
 
-/* v284: Stammbaum-Werkzeugleiste auf iPad und schmalen Ansichten umbrechen; Suchfeld volle Breite */
-.tree-toolbar > .tree-person-select--single{flex:1 1 100%;width:100%;min-width:0;}
-.tree-toolbar > .tree-preset-field{flex:1 1 20rem;min-width:0;max-width:100%;}
-.tree-toolbar > .tree-relationship-open{flex:0 0 auto;}
-.tree-toolbar > .tree-zoom-controls{flex:0 0 auto;}
-@media(max-width:900px){.tree-toolbar{align-items:stretch}.tree-toolbar > .tree-person-select--single{flex-basis:100%;}.tree-toolbar > .tree-preset-field{flex:1 1 100%;}.tree-toolbar > .tree-relationship-open{align-self:flex-start;}}
+
+/* v288: iPhone-Layout der Bestands-Suche und zuverlässige Touch-Bedienung */
+.person-card{touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.person-card:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.person-card__content{pointer-events:none}
+@media(max-width:600px){
+  .list-toolbar{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:.4rem;align-items:center}
+  .list-toolbar #search-input{grid-column:1;grid-row:1;width:100%;min-width:0;min-height:44px;font-size:1rem}
+  .list-toolbar #refresh-btn{grid-column:2;grid-row:1;width:44px;min-width:44px;min-height:44px;padding:.45rem}
+  .list-toolbar #personen-cache-status{grid-column:1 / -1;grid-row:2;display:block;white-space:normal;overflow-wrap:anywhere;font-size:.76rem;line-height:1.35;padding:.1rem .1rem 0}
+  .list-toolbar #personen-suchtreffer{grid-column:1 / -1;grid-row:3;white-space:normal;font-size:.8rem}
+  .person-card{width:100%;min-width:0;gap:.6rem}
+  .person-card__content{min-width:0;overflow-wrap:anywhere}
+}

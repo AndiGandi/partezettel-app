@@ -1,6 +1,7 @@
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
 // v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
+// v288: iPhone-Suche mobil angeordnet; Personenkarten per Touch/Tastatur zuverlässig öffnen.
 // v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
 // v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
@@ -2628,6 +2629,9 @@ function erstellePersonenKarte(p) {
   const li = document.createElement("li");
   li.className = "person-card";
   li.dataset.personId = p.id;
+  li.setAttribute("role", "button");
+  li.setAttribute("tabindex", "0");
+  li.setAttribute("aria-label", `Details zu ${[p.vorname, p.nachname].filter(Boolean).join(" ")}`);
 
   const fotoEintrag = schluesselfotoCache.get(p.id);
   const fotoUrl = typeof fotoEintrag === "string" ? fotoEintrag : (fotoEintrag?.url || "");
@@ -2658,7 +2662,17 @@ function erstellePersonenKarte(p) {
 
   content.append(name, years, relations, note);
   li.append(img, placeholder, content);
-  li.addEventListener("click", () => openPersonDetail(p.id));
+  // iOS/Safari: Karten explizit als bedienbare Elemente behandeln. Der Click
+  // bleibt die zentrale Aktion; Enter/Leertaste ergänzen Tastaturbedienung.
+  li.addEventListener("click", (event) => {
+    if (event.target.closest("a,button,input,select,textarea,audio")) return;
+    openPersonDetail(p.id);
+  });
+  li.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openPersonDetail(p.id);
+  });
 
   const karte = { li, img, placeholder, name, years, relations, note, person: p };
   personenKartenCache.set(p.id, karte);
