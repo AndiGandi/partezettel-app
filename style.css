@@ -1372,3 +1372,16 @@ select[name*="Year"] {
 .person-card__audio-status{line-height:1.45}
 .person-card__audio-item{gap:.55rem}
 .person-card__audio-item .btn{min-width:44px;min-height:44px}
+
+
+/* v293: Stammbaum-Suche mit stabiler, voller Eingabebreite auf iPad und iPhone */
+#tab-stammbaum .tree-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:.65rem; width:100%;}
+#tab-stammbaum .tree-person-select--single{display:block;width:100%;max-width:none;min-width:0;grid-column:1 / -1;}
+#tab-stammbaum .tree-person-select--single .field{display:block;width:100%;min-width:0;margin:0;}
+#tab-stammbaum #tree-person-search{display:block;width:100%;max-width:none;min-width:0;box-sizing:border-box;min-height:48px;}
+#tab-stammbaum .tree-person-hint{display:block;width:100%;max-width:none;white-space:normal;overflow-wrap:anywhere;line-height:1.4;}
+#tab-stammbaum .tree-preset-field{grid-column:1;min-width:0;width:100%;}
+#tab-stammbaum .tree-preset-field select{width:100%;min-width:0;}
+#tab-stammbaum .tree-relationship-open{grid-column:2;align-self:end;white-space:nowrap;}
+#tab-stammbaum .tree-zoom-controls{grid-column:1 / -1;justify-content:flex-end;flex-wrap:wrap;}
+@media(max-width:700px){#tab-stammbaum .tree-toolbar{display:grid;grid-template-columns:minmax(0,1fr);gap:.55rem;}#tab-stammbaum .tree-person-select--single,#tab-stammbaum .tree-preset-field,#tab-stammbaum .tree-relationship-open,#tab-stammbaum .tree-zoom-controls{grid-column:1;width:100%;}#tab-stammbaum .tree-relationship-open{white-space:normal;}#tab-stammbaum .tree-zoom-controls{justify-content:flex-end;}}

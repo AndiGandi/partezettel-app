@@ -3122,7 +3122,9 @@ function personViewAlter(person, bisDatum = null) {
   return `${person.geburtsdatum ? "" : "ca. "}${years} ${years === 1 ? "Jahr" : "Jahre"}`;
 }
 
+let currentPersonViewId = null;
 async function openPersonDetail(personId, options = {}) {
+  currentPersonViewId = personId;
   try {
     await ensureSession();
     const { data: person, error } = await sb.from("personen").select("*").eq("id", personId).single();
@@ -3662,12 +3664,25 @@ async function openPersonDetail(personId, options = {}) {
       overlay.hidden = true; document.body.classList.remove("person-view-open");
       await openPersonEdit(personId, options);
     };
-    await loadPersonViewAudio(personId);
     overlay.hidden = false; overlay.scrollTop = 0; document.body.classList.add("person-view-open");
   } catch (err) {
     debugLog(`❌ Fehler beim Öffnen der Personenansicht: ${err?.message || err}`);
   }
 }
+
+document.getElementById("pv-audio-open")?.addEventListener("click", async () => {
+  const personId = currentPersonViewId;
+  if (!personId) return;
+  const view = document.getElementById("person-view-overlay");
+  if (view) view.hidden = true;
+  document.body.classList.remove("person-view-open");
+  await openPersonEdit(personId);
+  const audioButton = document.getElementById("d-audio-record-btn");
+  if (audioButton) {
+    audioButton.scrollIntoView({ behavior: "smooth", block: "center" });
+    audioButton.focus({ preventScroll: true });
+  }
+});
 
 document.getElementById("pv-close")?.addEventListener("click", () => {
   document.getElementById("person-view-overlay").hidden = true;
