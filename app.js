@@ -2965,6 +2965,13 @@ async function openPersonDetail(personId, options = {}) {
       return;
     }
     const overlay = document.getElementById("person-view-overlay");
+    // Detailansicht sofort öffnen: nachgelagerte Foto-, Familien- oder Audioabfragen
+    // dürfen das Öffnen der Person auf iPhone/iPad nicht blockieren.
+    if (overlay) {
+      overlay.hidden = false;
+      overlay.scrollTop = 0;
+      document.body.classList.add("person-view-open");
+    }
     const name = [person.vorname, person.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
     document.getElementById("pv-name").textContent = name;
     const birth = person.geburtsdatum || person.geburtsjahr;
