@@ -2660,8 +2660,23 @@ function erstellePersonenKarte(p) {
   const note = document.createElement("div");
   note.className = "person-card__note";
 
-  content.append(name, years, relations, note);
+  const audioToggle = document.createElement("button");
+  audioToggle.type = "button";
+  audioToggle.className = "btn btn--ghost person-card__audio-toggle";
+  audioToggle.textContent = "🎙️ Sprachnotizen";
+  audioToggle.setAttribute("aria-expanded", "false");
+  const audioPanel = document.createElement("div");
+  audioPanel.className = "person-card__audio-panel";
+  audioPanel.hidden = true;
+  content.append(name, years, relations, note, audioToggle, audioPanel);
   li.append(img, placeholder, content);
+  audioToggle.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    const öffnen = audioPanel.hidden;
+    audioPanel.hidden = !öffnen;
+    audioToggle.setAttribute("aria-expanded", String(öffnen));
+    if (öffnen) await ladeBestandsSprachnotizen(p.id, audioPanel);
+  });
   // iOS/Safari: Karten explizit als bedienbare Elemente behandeln. Der Click
   // bleibt die zentrale Aktion; Enter/Leertaste ergänzen Tastaturbedienung.
   li.addEventListener("click", (event) => {
@@ -2674,7 +2689,7 @@ function erstellePersonenKarte(p) {
     openPersonDetail(p.id);
   });
 
-  const karte = { li, img, placeholder, name, years, relations, note, person: p };
+  const karte = { li, img, placeholder, name, years, relations, note, audioToggle, audioPanel, person: p };
   personenKartenCache.set(p.id, karte);
   aktualisierePersonenKarte(karte, p);
   return karte;
@@ -2708,6 +2723,157 @@ function aktualisierePersonenKarte(karte, p) {
   karte.note.hidden = !p.Notiz;
   setzeSchluesselfotoInKarte(p.id);
 }
+
+// v292: Diktiergerät-Bedienung mit gut sichtbarer Aufnahmedauer direkt im Bestand.
+// Sprachnotizen direkt in der Bestandskarte – unabhängig vom Bearbeitungsmodus.
+const bestandsAudioRecorder = new Map();
+async function ladeBestandsSprachnotizen(personId, panel) {
+  panel.innerHTML = "";
+  const status = document.createElement("p");
+  status.className = "person-card__audio-status";
+  status.textContent = "Sprachnotizen werden geladen …";
+  panel.appendChild(status);
+  const { data, error } = await sb.from("sprachnotizen")
+    .select("id, dateipfad, dauer_sekunden").eq("person_id", personId);
+  panel.innerHTML = "";
+  if (error) {
+    status.textContent = `Fehler beim Laden: ${error.message}`;
+    panel.appendChild(status);
+    return;
+  }
+  if (!data || !data.length) {
+    const leer = document.createElement("p");
+    leer.className = "person-card__audio-status";
+    leer.textContent = "Noch keine Sprachnotizen vorhanden.";
+    panel.appendChild(leer);
+  }
+  for (const item of data || []) {
+    const row = document.createElement("div");
+    row.className = "person-card__audio-item";
+    const player = document.createElement("audio");
+    player.controls = true;
+    player.preload = "none";
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn btn--ghost";
+    del.textContent = "🗑️";
+    del.title = "Sprachnotiz löschen";
+    del.setAttribute("aria-label", "Sprachnotiz löschen");
+    player.addEventListener("play", async (event) => {
+      if (player.src) return;
+      event.preventDefault();
+      try {
+        const { data: signed, error: signedError } = await sb.storage.from(BUCKET_AUDIO).createSignedUrl(item.dateipfad, 3600);
+        if (signedError || !signed?.signedUrl) throw new Error(signedError?.message || "Keine Audio-URL erhalten");
+        player.src = signed.signedUrl;
+        player.load();
+        await player.play();
+      } catch (err) {
+        status.textContent = `Abspielen fehlgeschlagen: ${err.message || err}`;
+      }
+    });
+    del.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      if (!confirm("Diese Sprachnotiz unwiderruflich löschen?")) return;
+      const { error: storageError } = await sb.storage.from(BUCKET_AUDIO).remove([item.dateipfad]);
+      if (storageError) { status.textContent = `Fehler beim Löschen: ${storageError.message}`; return; }
+      const { error: dbError } = await sb.from("sprachnotizen").delete().eq("id", item.id);
+      if (dbError) { status.textContent = `Fehler beim Löschen: ${dbError.message}`; return; }
+      await ladeBestandsSprachnotizen(personId, panel);
+    });
+    row.append(player, del);
+    panel.appendChild(row);
+  }
+  const actions = document.createElement("div");
+  actions.className = "person-card__audio-actions";
+  const record = document.createElement("button");
+  record.type = "button";
+  record.className = "btn btn--secondary";
+  record.textContent = "🎙️ Aufnahme starten";
+  const message = document.createElement("span");
+  message.className = "person-card__audio-status";
+  actions.append(record, message);
+  panel.appendChild(actions);
+
+  record.addEventListener("click", async (event) => {
+    event.stopPropagation();
+    let state = bestandsAudioRecorder.get(personId);
+    if (state?.recorder?.state === "recording") {
+      state.recorder.pause();
+      state.paused = true;
+      record.textContent = "▶️ Fortsetzen";
+      message.textContent = "Aufnahme pausiert";
+      return;
+    }
+    if (state?.recorder?.state === "paused") {
+      state.recorder.resume();
+      state.paused = false;
+      record.textContent = "⏸️ Pause";
+      message.textContent = "Aufnahme läuft · 00:00";
+      return;
+    }
+    if (state?.recorder?.state === "inactive" && state.finished) {
+      bestandsAudioRecorder.delete(personId);
+      state = null;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mime = pickAudioMimeType();
+      const recorder = mime ? new MediaRecorder(stream, { mimeType: mime, audioBitsPerSecond: 32000 }) : new MediaRecorder(stream);
+      const chunks = [];
+      const startedAt = Date.now();
+      let elapsedBeforePause = 0;
+      let segmentStartedAt = Date.now();
+      let durationTimer = null;
+      state = { recorder, chunks, startedAt, finished: false };
+      bestandsAudioRecorder.set(personId, state);
+      recorder.ondataavailable = (e) => { if (e.data?.size) chunks.push(e.data); };
+      const formatAudioTime = (seconds) => `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+      const updateAudioTime = () => {
+        const elapsed = elapsedBeforePause + (recorder.state === "recording" ? Math.floor((Date.now() - segmentStartedAt) / 1000) : 0);
+        message.textContent = `Aufnahme läuft · ${formatAudioTime(elapsed)}`;
+      };
+      durationTimer = window.setInterval(updateAudioTime, 500);
+      recorder.onpause = () => { elapsedBeforePause += Math.floor((Date.now() - segmentStartedAt) / 1000); updateAudioTime(); };
+      recorder.onresume = () => { segmentStartedAt = Date.now(); updateAudioTime(); };
+      recorder.onstop = async () => {
+        if (durationTimer) window.clearInterval(durationTimer);
+        stream.getTracks().forEach(track => track.stop());
+        state.finished = true;
+        const mimeType = recorder.mimeType || mime || "audio/webm";
+        const ext = mimeType.includes("mp4") ? "m4a" : mimeType.includes("ogg") ? "ogg" : "webm";
+        const blob = new Blob(chunks, { type: mimeType });
+        if (!blob.size) { message.textContent = "Keine Audiodaten aufgenommen."; record.textContent = "🎙️ Aufnahme starten"; return; }
+        message.textContent = "Lade Sprachnotiz hoch …";
+        record.disabled = true;
+        const path = `${personId}/${Date.now()}.${ext}`;
+        const { error: uploadError } = await sb.storage.from(BUCKET_AUDIO).upload(path, blob);
+        if (uploadError) { message.textContent = `Upload fehlgeschlagen: ${uploadError.message}`; record.disabled = false; return; }
+        const { error: insertError } = await sb.from("sprachnotizen").insert({ person_id: personId, dateipfad: path, dauer_sekunden: Math.max(1, Math.round((Date.now() - startedAt) / 1000)) });
+        if (insertError) { message.textContent = `Speichern fehlgeschlagen: ${insertError.message}`; record.disabled = false; return; }
+        message.textContent = "Sprachnotiz gespeichert ✓";
+        record.disabled = false;
+        record.textContent = "🎙️ Aufnahme starten";
+        await ladeBestandsSprachnotizen(personId, panel);
+      };
+      recorder.start();
+      record.textContent = "⏸️ Pause";
+      message.textContent = "Aufnahme läuft · 00:00";
+      // Der nächste Klick pausiert/fortsetzt; zum Beenden dient die separate Schaltfläche.
+      const stop = document.createElement("button");
+      stop.type = "button";
+      stop.className = "btn btn--secondary";
+      stop.textContent = "⏹️ Beenden & speichern";
+      stop.addEventListener("click", (e) => { e.stopPropagation(); if (recorder.state !== "inactive") recorder.stop(); });
+      actions.insertBefore(stop, message);
+      recorder.addEventListener("stop", () => { stop.remove(); record.textContent = "🎙️ Aufnahme starten"; });
+    } catch (err) {
+      message.textContent = `Mikrofon nicht verfügbar: ${err.message || "Zugriff verweigert"}`;
+      record.textContent = "🎙️ Aufnahme starten";
+    }
+  });
+}
+
 
 async function renderPersonenList(personen) {
   const list = document.getElementById("personen-list");
