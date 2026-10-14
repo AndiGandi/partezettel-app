@@ -2,6 +2,7 @@
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
 // v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
 // v288: iPhone-Suche mobil angeordnet; Personenkarten per Touch/Tastatur zuverlässig öffnen.
+// v294: Diktiergerät direkt in der großen Bestandsansicht.
 // v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
 // v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
 // v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
@@ -3142,6 +3143,13 @@ async function openPersonDetail(personId, options = {}) {
     }
     const name = [person.vorname, person.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
     document.getElementById("pv-name").textContent = name;
+    const personAudioPanel = document.getElementById("pv-audio-panel");
+    if (personAudioPanel) {
+      personAudioPanel.replaceChildren();
+      ladeBestandsSprachnotizen(person.id, personAudioPanel).catch(err => {
+        personAudioPanel.textContent = `Sprachnotizen konnten nicht geladen werden: ${err?.message || err}`;
+      });
+    }
     const birth = person.geburtsdatum || person.geburtsjahr;
     const death = person.sterbedatum || person.sterbejahr;
     const lifeParts = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean);
@@ -3669,20 +3677,6 @@ async function openPersonDetail(personId, options = {}) {
     debugLog(`❌ Fehler beim Öffnen der Personenansicht: ${err?.message || err}`);
   }
 }
-
-document.getElementById("pv-audio-open")?.addEventListener("click", async () => {
-  const personId = currentPersonViewId;
-  if (!personId) return;
-  const view = document.getElementById("person-view-overlay");
-  if (view) view.hidden = true;
-  document.body.classList.remove("person-view-open");
-  await openPersonEdit(personId);
-  const audioButton = document.getElementById("d-audio-record-btn");
-  if (audioButton) {
-    audioButton.scrollIntoView({ behavior: "smooth", block: "center" });
-    audioButton.focus({ preventScroll: true });
-  }
-});
 
 document.getElementById("pv-close")?.addEventListener("click", () => {
   document.getElementById("person-view-overlay").hidden = true;
