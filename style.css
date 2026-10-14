@@ -13,7 +13,7 @@
 /* ===================== Stammbaum v31 ===================== */
 .tree-panel{max-width:1200px !important}
 .tree-toolbar{display:flex;align-items:flex-end;gap:.75rem;margin-bottom:.55rem}
-.tree-person-select{flex:1;margin:0;display:grid;grid-template-columns:minmax(220px,1fr) minmax(220px,1fr);gap:.55rem}.tree-person-select .field{margin:0}
+.tree-person-select{flex:1;min-width:0;margin:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:.55rem}.tree-person-select .field{min-width:0;margin:0}.tree-person-select--single{grid-template-columns:minmax(0,1fr)}.tree-person-select--single .field{width:100%;min-width:0}.tree-person-select--single input{width:100%;min-width:0;box-sizing:border-box}.tree-person-hint{display:block;max-width:100%;line-height:1.4;overflow-wrap:break-word}
 .tree-zoom-controls{display:flex;align-items:center;gap:.3rem;white-space:nowrap;padding-bottom:.05rem}
 .tree-zoom-controls .btn{min-width:42px;min-height:42px;padding:.45rem .65rem}
 #tree-zoom-value{min-width:48px;text-align:center;font-size:.8rem;color:var(--ink-soft)}
@@ -46,7 +46,7 @@
 .tree-ancestor-note{font-size:.75rem;color:var(--ink-soft);margin-top:-1.8rem}
 @media(max-width:700px){
  .tree-panel{padding:.65rem !important}
- .tree-toolbar{display:block}
+ .tree-toolbar{display:flex;flex-direction:column;align-items:stretch;gap:.65rem}.tree-person-select{width:100%;grid-template-columns:minmax(0,1fr)}.tree-preset-field{width:100%;min-width:0}.tree-person-select--single .field{width:100%}
  .tree-zoom-controls{justify-content:flex-end;margin-top:.45rem}
  .tree-viewport{min-height:480px;max-height:calc(100vh - 300px);padding:.75rem}
  .tree-stage{padding:1rem 1rem 2.5rem;gap:1.7rem}
