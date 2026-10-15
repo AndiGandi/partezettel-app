@@ -3393,7 +3393,8 @@ async function openPersonDetail(personId, options = {}) {
       const spouseId = family.partner_a_id === personId ? family.partner_b_id : family.partner_a_id;
       const spouse = relatedMap.get(spouseId); if (!spouse) continue;
       const row = document.createElement("div"); row.className = "person-view-relation-row";
-      addPersonLink(row, spouse);
+      // Bei Ehepartnern den Ledigenname immer anzeigen, sofern vorhanden.
+      addPersonLink(row, spouse, "", { showMaidenName: true });
       const marriage = family.beginn ? personViewDatum(family.beginn) : "";
       if (marriage) {
         const date = document.createElement("span"); date.className = "person-view-relation-date";
@@ -3433,6 +3434,17 @@ async function openPersonDetail(personId, options = {}) {
             const year = Number(p.sterbejahr);
             if (Number.isInteger(year) && year > 0) addEndCandidate(`${year}-12-31`, true);
           }
+        });
+        // Bei unbekanntem Todesdatum endet eine frühere Ehe spätestens mit
+        // Beginn einer späteren Ehe desselben Partners. Gilt auch für bereits
+        // vorhandene Ehen; nur die Anzeige wird berechnet, DB-Daten bleiben gleich.
+        const coupleIds = new Set([personId, spouseId]);
+        const currentStart = String(family.beginn || "").slice(0, 10);
+        (partnerFamilies || []).forEach(otherFamily => {
+          if (!otherFamily || otherFamily.id === family.id || String(otherFamily.familientyp || "").trim().toLocaleLowerCase("de") !== "ehe") return;
+          if (![otherFamily.partner_a_id, otherFamily.partner_b_id].some(id => coupleIds.has(id))) return;
+          const laterStart = String(otherFamily.beginn || "").slice(0, 10);
+          if (/^\d{4}-\d{2}-\d{2}$/.test(laterStart) && laterStart >= currentStart) addEndCandidate(laterStart, false);
         });
         endCandidates.sort((a, b) => a.date - b.date);
         const earliest = endCandidates[0] || null;
