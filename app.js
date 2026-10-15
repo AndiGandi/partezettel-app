@@ -3657,6 +3657,33 @@ async function openPersonDetail(personId, options = {}) {
     }
     photosSection.hidden = photosList.children.length === 0;
 
+    // Optionale externe Quellen nur anzeigen, wenn tatsächlich gültige Links vorhanden sind.
+    const personLinks = normalisiereWeiterfuehrendeLinks(person.weiterfuehrende_links)
+      .map(link => {
+        try {
+          const parsed = new URL(link.url);
+          if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+          return { titel: link.titel || parsed.hostname, url: parsed.href };
+        } catch (_) { return null; }
+      }).filter(Boolean);
+    const linksSection = document.getElementById("pv-links-section");
+    const linksList = document.getElementById("pv-links-list");
+    if (linksSection && linksList) {
+      linksList.replaceChildren();
+      personLinks.forEach(link => {
+        const row = document.createElement("div");
+        row.className = "person-view-link-row";
+        const anchor = document.createElement("a");
+        anchor.href = link.url;
+        anchor.target = "_blank";
+        anchor.rel = "noopener noreferrer";
+        anchor.textContent = link.titel;
+        row.appendChild(anchor);
+        linksList.appendChild(row);
+      });
+      linksSection.hidden = personLinks.length === 0;
+    }
+
     const notes = String(person.Notiz || person.notiz || "").trim();
     document.getElementById("pv-notes-section").hidden = !notes;
     document.getElementById("pv-notes").textContent = notes;

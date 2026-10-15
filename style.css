@@ -1375,10 +1375,7 @@ select[name*="Year"] {
 .weiterfuehrende-link-row .weiterfuehrende-link-remove { min-height: 42px; }
 @media (max-width: 600px) { .weiterfuehrende-link-row { grid-template-columns: minmax(0, 1fr) auto; } .weiterfuehrende-link-row .weiterfuehrende-link-title { grid-column: 1 / 2; } .weiterfuehrende-link-row .weiterfuehrende-link-url { grid-column: 1 / -1; grid-row: 2; } .weiterfuehrende-link-row .weiterfuehrende-link-remove { grid-column: 2; grid-row: 1; } }
 
-
-/* v297: Stammbaum-Ausgangsperson auf iPad/iPhone zuverlässig über volle Breite */
-#tab-stammbaum .tree-toolbar { display: grid !important; grid-template-columns: minmax(0, 1fr); align-items: start; width: 100%; min-width: 0; }
-#tab-stammbaum .tree-person-select--single { display: block; width: 100% !important; max-width: none !important; min-width: 0; flex: 1 1 100%; }
-#tab-stammbaum .tree-person-select--single > .field { display: block; width: 100% !important; max-width: none !important; min-width: 0; }
-#tab-stammbaum #tree-person-search { display: block; width: 100% !important; max-width: none !important; min-width: 0 !important; box-sizing: border-box; }
-#tab-stammbaum #tree-person-hint { display: block; width: 100%; max-width: none; overflow-wrap: break-word; }
+/* v298: Weiterführende Links in der großen Personenansicht */
+.person-view-links { display: grid; gap: 0.55rem; }
+.person-view-link-row { overflow-wrap: anywhere; }
+.person-view-link-row a { color: var(--link-color, #315f86); text-decoration: underline; text-underline-offset: 0.15em; }
