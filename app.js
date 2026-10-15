@@ -6963,9 +6963,13 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
     : treeRelationshipSelection.personBId === person.id
       ? "tree-node--relation-b"
       : "";
+  const ledigenname = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
+  const nachname = String(person.nachname || "").trim();
+  const maidenLabel = ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")
+    ? ` <span class="tree-node__maiden-name">(geb. ${escTree(ledigenname)})</span>` : "";
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
-    <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}</span>
+    <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}${maidenLabel}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
   </button>`;
 }
