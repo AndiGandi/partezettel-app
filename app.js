@@ -3689,6 +3689,42 @@ document.getElementById("person-view-overlay")?.addEventListener("click", (event
   }
 });
 
+function normalisiereWeiterfuehrendeLinks(value) {
+  if (Array.isArray(value)) return value.filter(x => x && (String(x.titel || "").trim() || String(x.url || "").trim())).map(x => ({ titel: String(x.titel || "").trim(), url: String(x.url || "").trim() }));
+  if (typeof value === "string") { try { return normalisiereWeiterfuehrendeLinks(JSON.parse(value)); } catch (_) { return []; } }
+  return [];
+}
+function rendereWeiterfuehrendeLinksEditor(value) {
+  const container = document.getElementById("d-weiterfuehrende-links-list");
+  if (!container) return;
+  const links = normalisiereWeiterfuehrendeLinks(value);
+  container.replaceChildren();
+  links.forEach(link => fuegeWeiterfuehrendenLinkHinzu(link.titel, link.url));
+}
+function fuegeWeiterfuehrendenLinkHinzu(titel = "", url = "") {
+  const container = document.getElementById("d-weiterfuehrende-links-list");
+  if (!container) return;
+  const row = document.createElement("div"); row.className = "weiterfuehrende-link-row";
+  const titleLabel = document.createElement("label"); titleLabel.className = "field weiterfuehrende-link-title";
+  const titleSpan = document.createElement("span"); titleSpan.textContent = "Titel";
+  const titleInput = document.createElement("input"); titleInput.type = "text"; titleInput.className = "weiterfuehrende-link-titel"; titleInput.placeholder = "z. B. Verlustlisten"; titleInput.value = titel;
+  titleLabel.append(titleSpan, titleInput);
+  const urlLabel = document.createElement("label"); urlLabel.className = "field weiterfuehrende-link-url";
+  const urlSpan = document.createElement("span"); urlSpan.textContent = "Webadresse (URL)";
+  const urlInput = document.createElement("input"); urlInput.type = "url"; urlInput.className = "weiterfuehrende-link-url-input"; urlInput.placeholder = "https://…"; urlInput.inputMode = "url"; urlInput.value = url;
+  urlLabel.append(urlSpan, urlInput);
+  const remove = document.createElement("button"); remove.type = "button"; remove.className = "btn btn--ghost weiterfuehrende-link-remove"; remove.textContent = "✕"; remove.setAttribute("aria-label", "Link entfernen"); remove.addEventListener("click", () => row.remove());
+  row.append(titleLabel, urlLabel, remove); container.append(row);
+}
+function leseWeiterfuehrendeLinksEditor() {
+  return [...document.querySelectorAll("#d-weiterfuehrende-links-list .weiterfuehrende-link-row")].map(row => ({
+    titel: row.querySelector(".weiterfuehrende-link-titel")?.value.trim() || "",
+    url: row.querySelector(".weiterfuehrende-link-url-input")?.value.trim() || ""
+  })).filter(link => link.titel && link.url);
+}
+const weiterfuehrendeLinksAddButton = document.getElementById("d-weiterfuehrende-links-add");
+if (weiterfuehrendeLinksAddButton) weiterfuehrendeLinksAddButton.addEventListener("click", () => fuegeWeiterfuehrendenLinkHinzu());
+
 async function openPersonEdit(personId, options = {}) {
   currentDetailPersonId = personId;
   detailOpenedFromTree = options.fromTree === true;
@@ -3719,6 +3755,7 @@ async function openPersonEdit(personId, options = {}) {
   document.getElementById("d-taufbuch-open").textContent = person.taufbuch_link ? "📖 Taufbuch öffnen" : "📖 Kein Taufbuch-Link";
   document.getElementById("d-sterbebuch-open").textContent = person.sterbebuch_link ? "📖 Sterbebuch öffnen" : "📖 Kein Sterbebuch-Link";
   document.getElementById("d-notiz").value = person.Notiz || "";
+  rendereWeiterfuehrendeLinksEditor(person.weiterfuehrende_links);
   document.getElementById("d-person-message").textContent = "";
   document.getElementById("d-foto-message").textContent = "";
   document.getElementById("d-audio-message").textContent = "";
@@ -3848,6 +3885,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     trauungsbuch_zeile: document.getElementById("d-trauungsbuch-zeile").value.trim() ? Number(document.getElementById("d-trauungsbuch-zeile").value) : null,
     sterbebuch_zeile: document.getElementById("d-sterbebuch-zeile").value.trim() ? Number(document.getElementById("d-sterbebuch-zeile").value) : null,
     Notiz: document.getElementById("d-notiz").value.trim() || null,
+    weiterfuehrende_links: leseWeiterfuehrendeLinksEditor(),
   }).eq("id", currentDetailPersonId);
   if (error) {
     msg.textContent = `Fehler: ${error.message}`;

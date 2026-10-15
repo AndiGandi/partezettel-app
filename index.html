@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 293 -->
+    <!-- Version 296 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=294">
+<link rel="stylesheet" href="style.css?v=296">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 293</p>
+  <p id="app-version" class="app-header__version">Version 296</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -451,6 +451,12 @@
 <div hidden><input type="url" id="d-trauungsbuch-link"><input type="number" id="d-trauungsbuch-zeile"><a id="d-trauungsbuch-open" href="#"></a></div>
 
         <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
+        <section class="weiterfuehrende-links-editor" aria-labelledby="d-weiterfuehrende-links-heading">
+          <h3 id="d-weiterfuehrende-links-heading">Weiterführende Links</h3>
+          <p class="form-hint">Zusätzliche Quellen zu dieser Person, z. B. Kriegsgefangenschaft oder Verlustlisten.</p>
+          <div id="d-weiterfuehrende-links-list"></div>
+          <button type="button" id="d-weiterfuehrende-links-add" class="btn btn--secondary">＋ Link hinzufügen</button>
+        </section>
       </fieldset>
 
       <fieldset class="field-group">
@@ -634,6 +640,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=294"></script>
+<script src="app.js?v=296"></script>
 </body>
 </html>
