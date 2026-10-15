@@ -1861,7 +1861,7 @@ function partnerschaftIstBeendet(familie, lookup = personenCache) {
   return !!familie?.ende || !!familie?.ende_automatik_ignorieren || !!partnerschaftTodesende(familie, lookup);
 }
 
-function ehejahreAnzeige(familie, lookup = personenCache) {
+function ehejahreAnzeige(familie, lookup = personenCache, allePartnerschaften = []) {
   if (String(familie?.familientyp || "").trim().toLocaleLowerCase("de") !== "ehe") return "";
   const beginn = familie?.beginn ? String(familie.beginn).slice(0, 10) : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(beginn)) return "";
@@ -1869,14 +1869,29 @@ function ehejahreAnzeige(familie, lookup = personenCache) {
   let ende = familie?.ende ? String(familie.ende).slice(0, 10) : "";
   if (!ende) {
     const tod = partnerschaftTodesende(familie, lookup);
-    if (tod?.exakt && tod.datum) ende = String(tod.datum).slice(0, 10);
-    else if (tod?.jahr) {
-      const startJahr = Number(beginn.slice(0, 4));
-      const endeJahr = Number(tod.jahr);
-      if (Number.isFinite(startJahr) && Number.isFinite(endeJahr) && endeJahr >= startJahr) {
-        return `${endeJahr - startJahr} Jahre`;
+    if (tod?.exakt && tod.datum) {
+      ende = String(tod.datum).slice(0, 10);
+    } else {
+      // Ist kein genaues Todesdatum bekannt, endet die frühere Ehe spätestens
+      // mit Beginn einer späteren Ehe desselben Partners. Nur Anzeige; keine
+      // vorhandenen Datenbankwerte werden verändert.
+      const partnerIds = new Set([familie?.partner_a_id, familie?.partner_b_id].filter(Boolean));
+      const zweiteEhe = (allePartnerschaften || [])
+        .filter((f) => f && f.id !== familie?.id && String(f.familientyp || "").trim().toLocaleLowerCase("de") === "ehe")
+        .filter((f) => [f.partner_a_id, f.partner_b_id].some((id) => partnerIds.has(id)))
+        .map((f) => String(f.beginn || "").slice(0, 10))
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= beginn)
+        .sort()[0];
+      if (zweiteEhe) {
+        ende = zweiteEhe;
+      } else if (tod?.jahr) {
+        const startJahr = Number(beginn.slice(0, 4));
+        const endeJahr = Number(tod.jahr);
+        if (Number.isFinite(startJahr) && Number.isFinite(endeJahr) && endeJahr >= startJahr) {
+          return `${endeJahr - startJahr} Jahre`;
+        }
+        return "";
       }
-      return "";
     }
   }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(ende)) return "";
@@ -5492,7 +5507,7 @@ async function loadDetailFamilie(personId) {
             </div>
           </label>
           <label class="field familie-jahre-field"><span>Ehejahre</span>
-            <div class="familie-jahre">${ehejahreAnzeige({ ...f, familientyp: typ }, detailPersonMap) || "–"}</div>
+            <div class="familie-jahre">${ehejahreAnzeige({ ...f, familientyp: typ }, detailPersonMap, partnerFamilies) || "–"}</div>
           </label>
           <div class="familie-actions">
             <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
