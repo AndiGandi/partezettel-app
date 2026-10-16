@@ -1,4 +1,4 @@
-// v309: Auswahl bestätigen lädt Personen, Familien und Kinderbeziehungen frisch aus Supabase und aktualisiert die Stammbaumansicht.
+// v310: Stammbaum-Steuerung klar getrennt; vorgefertigte Stammlinie steht oberhalb der Personenauswahl. Auswahl bestätigen lädt Personen, Familien und Kinderbeziehungen frisch aus Supabase und aktualisiert die Stammbaumansicht.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.

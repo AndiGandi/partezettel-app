@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 309 -->
+    <!-- Version 310 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=309">
+<link rel="stylesheet" href="style.css?v=310">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 309</p>
+  <p id="app-version" class="app-header__version">Version 310</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -244,16 +244,20 @@
 
   <!-- ===================== TAB: STAMMBAUM ===================== -->
   <section id="tab-stammbaum" class="tab-panel tree-panel">
-    <div class="tree-toolbar">
-      <div class="tree-person-select tree-person-select--single">
-        <label class="field"><span>Ausgangsperson</span>
-          <input type="search" id="tree-person-search" list="tree-person-options" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" aria-describedby="tree-person-hint">
-          <datalist id="tree-person-options"></datalist>
-          <small id="tree-person-hint" class="tree-person-hint">Name eingeben, passenden Vorschlag wählen und anschließend bestätigen. Geburts- und Sterbejahr helfen bei der Auswahl.</small>
-        </label>
-        <button type="button" id="tree-person-confirm" class="btn btn--primary" style="margin-top:.45rem;min-height:42px">Auswahl bestätigen</button>
-        <select id="tree-person-select" aria-label="Ausgewählte Ausgangsperson" hidden><option value="">— Person auswählen —</option></select>
-      </div>
+    <style>
+      /* v310: Stammbaum-Steuerung in klar getrennte Zeilen gliedern. */
+      #tab-stammbaum .tree-preset-row { margin: 0 0 .85rem; max-width: 42rem; }
+      #tab-stammbaum .tree-preset-row .field { display: flex; flex-direction: column; gap: .35rem; }
+      #tab-stammbaum .tree-person-row { display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+      #tab-stammbaum .tree-person-row .tree-person-select { flex: 1 1 22rem; min-width: 0; }
+      #tab-stammbaum .tree-relationship-launch-row { margin: .85rem 0 1rem; padding-top: .75rem; border-top: 1px solid var(--border, #d8d8d8); }
+      #tab-stammbaum .tree-relationship-launch-row .tree-relationship-open { min-height: 42px; }
+      @media (max-width: 600px) {
+        #tab-stammbaum .tree-person-row { display: block; }
+        #tab-stammbaum .tree-person-row .tree-person-select { width: 100%; }
+      }
+    </style>
+    <div class="tree-preset-row">
       <label class="field tree-preset-field"><span>Vorgefertigte Stammlinie</span>
         <select id="tree-line-preset" aria-label="Vorgefertigte Stammlinie">
           <option value="">— Stammlinie auswählen —</option>
@@ -262,13 +266,28 @@
           <option value="mangeng-josef-rosina">Mangeng – Josef und Rosina geb. Schuler</option>
         </select>
       </label>
-      <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft</button>
+    </div>
+    <div class="tree-toolbar">
+      <div class="tree-person-row">
+        <div class="tree-person-select tree-person-select--single">
+          <label class="field"><span>Ausgangsperson</span>
+            <input type="search" id="tree-person-search" list="tree-person-options" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" aria-describedby="tree-person-hint">
+            <datalist id="tree-person-options"></datalist>
+            <small id="tree-person-hint" class="tree-person-hint">Name eingeben, passenden Vorschlag wählen und anschließend bestätigen. Geburts- und Sterbejahr helfen bei der Auswahl.</small>
+          </label>
+          <button type="button" id="tree-person-confirm" class="btn btn--primary" style="margin-top:.45rem;min-height:42px">Auswahl bestätigen</button>
+          <select id="tree-person-select" aria-label="Ausgewählte Ausgangsperson" hidden><option value="">— Person auswählen —</option></select>
+        </div>
+      </div>
       <div class="tree-zoom-controls" aria-label="Stammbaum Zoom">
         <button type="button" id="tree-zoom-out" class="btn btn--ghost" aria-label="Verkleinern">−</button>
         <span id="tree-zoom-value">100 %</span>
         <button type="button" id="tree-zoom-in" class="btn btn--ghost" aria-label="Vergrößern">+</button>
         <button type="button" id="tree-reset" class="btn btn--ghost">↺</button>
       </div>
+    </div>
+    <div class="tree-relationship-launch-row">
+      <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft ermitteln</button>
     </div>
     <p id="tree-message" class="form-message"></p>
     <div class="tree-view-switch" role="tablist" aria-label="Stammbaumansicht">
@@ -709,6 +728,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=309"></script>
+<script src="app.js?v=310"></script>
 </body>
 </html>
