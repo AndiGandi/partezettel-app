@@ -1,4 +1,4 @@
-// v314: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
+// v315: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
@@ -8081,8 +8081,21 @@ function treeFindMangengRosina() {
     const first = treeNormalizeName(person.vorname || "");
     const last = treeNormalizeName(person.nachname || "");
     const maiden = treeNormalizeName(person.Ledigenname || person.ledigenname || person.geburtsname || "");
-    return first.includes("rosina") && (last === "mangeng" && maiden.includes("schuler") || last === "schuler");
+    const year = String(person.geburtsdatum || person.geburtsjahr || "").match(/(?:18|19|20)\d{2}/)?.[0] || "";
+    return first.includes("rosina") &&
+      ((last === "mangeng" && maiden.includes("schuler")) || last === "schuler") &&
+      (!year || year === "1847");
   });
+  // Die gesuchte Rosina ist mit Josef Mangeng (geb. 1844) verbunden.
+  const linked = candidates.filter(person => treeData.familien.some(family => {
+    const otherId = family.partner_a_id === person.id ? family.partner_b_id
+      : family.partner_b_id === person.id ? family.partner_a_id : null;
+    const other = otherId ? treePerson(otherId) : null;
+    const otherYear = String(other?.geburtsdatum || other?.geburtsjahr || "").match(/(?:18|19|20)\d{2}/)?.[0] || "";
+    return other && treeNormalizeName(other.vorname || "").includes("josef") &&
+      treeNormalizeName(other.nachname || "") === "mangeng" && (!otherYear || otherYear === "1844");
+  }));
+  if (linked.length === 1) return linked[0];
   return candidates.length === 1 ? candidates[0] : null;
 }
 
