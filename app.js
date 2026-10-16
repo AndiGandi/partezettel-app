@@ -1,3 +1,4 @@
+// Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
@@ -8242,46 +8243,74 @@ if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
   }, 140);
 });
 if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
-  const query = treeNormalizeName(treePersonSearch?.value || "");
+  const rawQuery = String(treePersonSearch?.value || "").trim();
+  const query = treeNormalizeName(rawQuery);
   const selectedFromDropdown = treeSelect?.value || "";
+  const message = document.getElementById("tree-message");
+
+  // Bereits ausgewählte Person aus dem nativen Auswahlfeld direkt übernehmen.
   if (!query && selectedFromDropdown && treePerson(selectedFromDropdown)) {
-    setTreePersonSelection(selectedFromDropdown, { confirmed: true });
-    if (treePersonSearch) treePersonSearch.value = "";
-    treePersonConfirm.disabled = true;
+    try {
+      treePersonConfirm.disabled = true;
+      if (message) message.textContent = "Stammbaum wird aktualisiert …";
+      await loadStammbaumData();
+      if (!treePerson(selectedFromDropdown)) throw new Error("Die ausgewählte Person ist in den aktualisierten Daten nicht mehr vorhanden.");
+      fillTreePersonSelect("", selectedFromDropdown);
+      setTreePersonSelection(selectedFromDropdown, { confirmed: true });
+      fillTreeRelationshipSelects();
+      if (message) message.textContent = `Auswahl bestätigt und Stammbaum aktualisiert: ${treePersonSearchText(treePerson(selectedFromDropdown))}`;
+    } catch (err) {
+      if (message) message.textContent = `Aktualisierung fehlgeschlagen: ${err.message || err}`;
+      debugLog(`❌ Stammbaum-Aktualisierung: ${err.message || err}`);
+    } finally {
+      treePersonConfirm.disabled = true;
+    }
     return;
   }
-  if (!query) return;
-  const message = document.getElementById("tree-message");
+
+  if (!query) {
+    if (message) message.textContent = "Bitte zuerst eine Person eingeben oder im Auswahlfeld auswählen.";
+    return;
+  }
+
   const index = getTreePersonSearchIndex();
   const tokens = query.split(/\s+/).filter(Boolean);
-  // Reihenfolgeunabhängig suchen: „Ganahl Albert“ findet auch „Albert Ganahl“.
-  const exact = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === query);
-  const matches = exact.length ? exact : index.filter(entry => tokens.length && tokens.every(token => entry.search.includes(token)));
+  // Vorrang für den exakt gewählten Datalist-Vorschlag inklusive Ledigenname und Jahresangaben.
+  let matches = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === query);
+  if (!matches.length) {
+    // Danach exakter Vorname-/Nachname-Treffer unabhängig von der Reihenfolge.
+    matches = index.filter(entry => {
+      const name = treeNormalizeName(`${entry.person.vorname || ""} ${entry.person.nachname || ""}`);
+      const reverseName = treeNormalizeName(`${entry.person.nachname || ""} ${entry.person.vorname || ""}`);
+      return name === query || reverseName === query;
+    });
+  }
+  if (!matches.length) {
+    matches = index.filter(entry => tokens.length && tokens.every(token => entry.search.includes(token)));
+  }
   if (matches.length !== 1) {
     if (message) message.textContent = matches.length > 1
-      ? `Mehrere Personen passen (${matches.length}). Bitte Vorname, Nachname oder Geburtsjahr genauer eingeben.`
-      : "Keine eindeutige Person gefunden. Bitte einen Vorschlag aus der Liste auswählen oder genauer suchen.";
+      ? `Mehrere Personen passen (${matches.length}). Bitte den vollständigen Vorschlag mit Geburtsjahr auswählen.`
+      : "Keine passende Person gefunden. Bitte einen Vorschlag aus der Liste auswählen oder genauer suchen.";
     return;
   }
 
   const selectedId = matches[0].person.id;
   treePersonConfirm.disabled = true;
-  if (message) message.textContent = "Stammbau-Daten werden aktualisiert …";
+  if (message) message.textContent = "Stammbaum wird aktualisiert …";
   try {
-    // Beim Bestätigen nicht nur den bestehenden Browser-Zustand neu zeichnen,
-    // sondern Personen, Familien und Kinderbeziehungen erneut aus Supabase laden.
     await loadStammbaumData();
     if (!treePerson(selectedId)) throw new Error("Die ausgewählte Person ist in den aktualisierten Daten nicht mehr vorhanden.");
-    if (treePersonSearch) treePersonSearch.value = "";
     fillTreePersonSelect("", selectedId);
+    if (treePersonSearch) treePersonSearch.value = "";
     setTreePersonSelection(selectedId, { confirmed: true });
     fillTreeRelationshipSelects();
-    if (message) message.textContent = `Auswahl bestätigt und Stammbau-Daten aktualisiert: ${treePersonSearchText(treePerson(selectedId))}`;
+    if (message) message.textContent = `Auswahl bestätigt und Stammbaum aktualisiert: ${treePersonSearchText(treePerson(selectedId))}`;
   } catch (err) {
     if (message) message.textContent = `Aktualisierung fehlgeschlagen: ${err.message || err}`;
     debugLog(`❌ Stammbaum-Aktualisierung: ${err.message || err}`);
   } finally {
-    treePersonConfirm.disabled = !treePersonSearch?.value.trim();
+    treePersonConfirm.disabled = true;
   }
 });
 const treeZoomIn = document.getElementById("tree-zoom-in");
