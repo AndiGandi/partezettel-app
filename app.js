@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 318
+// Partezettel Archiv – Version 319
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
@@ -7067,7 +7067,7 @@ function treeParentFamiliesForPerson(id) {
 async function loadStammbaumData() {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
-    sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
+    sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
     sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
     sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
   ]);
