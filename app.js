@@ -6082,13 +6082,6 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
   // Kindes eine zweite identische Elternfamilie entstehen.
   let zielFamilie = null;
 
-  // Ältere Datenbestände können Elternfamilien mit abweichender Schreibweise
-  // des Familientyps enthalten. Nicht nur exakt "Eltern" suchen.
-  const istElternTyp = (typ) => {
-    const normalisiert = String(typ || "").trim().toLocaleLowerCase("de");
-    return ["eltern", "elternfamilie", "parent", "parents"].includes(normalisiert);
-  };
-
   if (zielB) {
     const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, created_at")
@@ -6098,7 +6091,11 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
       )
       .order("created_at", { ascending: true });
     if (error) throw error;
-    zielFamilie = (data || []).find((f) => istElternTyp(f.familientyp)) || null;
+    // Der eindeutige Index erlaubt dieselbe Partnerkombination nur einmal.
+    // Sind die Eltern bereits als Ehe/Partnerschaft gespeichert, muss diese
+    // Familie auch für die Kinderzuordnung verwendet werden. Ein zusätzlicher
+    // Datensatz mit familientyp="Eltern" würde am Index scheitern.
+    zielFamilie = (data || []).find((f) => f.partner_a_id && f.partner_b_id) || null;
   } else {
     const { data, error } = await sb.from("familien")
       .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, created_at")
@@ -6106,7 +6103,7 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
       .is("partner_b_id", null)
       .order("created_at", { ascending: true });
     if (error) throw error;
-    zielFamilie = (data || []).find((f) => istElternTyp(f.familientyp)) || null;
+    zielFamilie = (data || []).find((f) => f.partner_a_id === zielA && !f.partner_b_id) || null;
   }
 
   // Nur wenn wirklich noch keine passende Elternfamilie existiert,
