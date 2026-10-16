@@ -1,4 +1,4 @@
-// v312: Gawatsch-Linie startet bei Rosina Mangeng geb. Schuler und zeigt ihren Partner Josef Mangeng; Ledigenname wird in Stammbaumkarten immer angezeigt, wenn hinterlegt.
+// v313: Gawatsch-Linie startet gemeinsam bei Josef Mangeng und Rosina Mangeng geb. Schuler; Ledigenname wird in Stammbaumkarten angezeigt.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
@@ -8086,6 +8086,22 @@ function treeFindMangengRosina() {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+function treeFindMangengJosef(rosinaId) {
+  const spouseIds = new Set();
+  for (const family of treeData.familien) {
+    if (family.partner_a_id === rosinaId && family.partner_b_id) spouseIds.add(family.partner_b_id);
+    if (family.partner_b_id === rosinaId && family.partner_a_id) spouseIds.add(family.partner_a_id);
+  }
+  const spouseCandidates = [...spouseIds].map(id => treePerson(id)).filter(person =>
+    person && treeNormalizeName(person.vorname || "").includes("josef") && treeNormalizeName(person.nachname || "") === "mangeng"
+  );
+  if (spouseCandidates.length === 1) return spouseCandidates[0];
+  const candidates = treeData.personen.filter(person =>
+    treeNormalizeName(person.vorname || "").includes("josef") && treeNormalizeName(person.nachname || "") === "mangeng"
+  );
+  return candidates.length === 1 ? candidates[0] : null;
+}
+
 function treePresetGenderMatches(person, direction) {
   const gender = treeNormalizeName(person?.geschlecht || "");
   if (direction === "paternal") return /^(m|mann|maennlich|männlich|male|vater)$/.test(gender);
@@ -8093,12 +8109,13 @@ function treePresetGenderMatches(person, direction) {
   return true;
 }
 
-function renderTreeLinePreset(rootId, direction) {
+function renderTreeLinePreset(rootIds, direction) {
   const originalFamilies = treeData.familien;
   const originalChildren = treeData.kinder;
-  const ancestorIds = new Set([rootId]);
+  const roots = [...new Set((Array.isArray(rootIds) ? rootIds : [rootIds]).filter(Boolean))];
+  const ancestorIds = new Set(roots);
   const ancestryFamilyIds = new Set();
-  let frontier = [rootId];
+  let frontier = [...roots];
 
   // Für die väterliche/mütterliche Linie wird pro Generation nur der
   // entsprechende Elternteil verfolgt. "both" umfasst beide Elternseiten.
@@ -8166,6 +8183,15 @@ function applyTreeLinePreset(value) {
     if (message) message.textContent = `Ausgangspunkt für „${preset.label}“ konnte nicht eindeutig gefunden werden. Bitte Personendaten prüfen.`;
     return;
   }
+  const roots = [root.id];
+  if (preset.personType === "mangeng-couple") {
+    const josef = treeFindMangengJosef(root.id);
+    if (!josef) {
+      if (message) message.textContent = "Josef Mangeng konnte nicht eindeutig gefunden werden. Bitte die Partnerschaft mit Rosina Mangeng, geb. Schuler, prüfen.";
+      return;
+    }
+    roots.push(josef.id);
+  }
   if (treeViewMode === "classic") {
     treeViewMode = "cards";
     setTreeViewMode("cards");
@@ -8174,7 +8200,7 @@ function applyTreeLinePreset(value) {
   if (search) search.value = "";
   const confirm = document.getElementById("tree-person-confirm");
   if (confirm) confirm.disabled = true;
-  renderTreeLinePreset(root.id, preset.direction);
+  renderTreeLinePreset(roots, preset.direction);
   if (message) message.textContent = `${preset.label} angezeigt. Der Stammbaum wurde automatisch neu aufgebaut.`;
 }
 
