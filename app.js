@@ -1,4 +1,4 @@
-// v313: Gawatsch-Linie startet gemeinsam bei Josef Mangeng und Rosina Mangeng geb. Schuler; Ledigenname wird in Stammbaumkarten angezeigt.
+// v314: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
@@ -8113,12 +8113,12 @@ function renderTreeLinePreset(rootIds, direction) {
   const originalFamilies = treeData.familien;
   const originalChildren = treeData.kinder;
   const roots = [...new Set((Array.isArray(rootIds) ? rootIds : [rootIds]).filter(Boolean))];
+  if (!roots.length) return;
   const ancestorIds = new Set(roots);
   const ancestryFamilyIds = new Set();
   let frontier = [...roots];
 
-  // Für die väterliche/mütterliche Linie wird pro Generation nur der
-  // entsprechende Elternteil verfolgt. "both" umfasst beide Elternseiten.
+  // Vorfahren je nach gewählter Linie ermitteln.
   for (let depth = 0; depth < 12 && frontier.length; depth += 1) {
     const next = [];
     for (const childId of frontier) {
@@ -8142,10 +8142,30 @@ function renderTreeLinePreset(rootIds, direction) {
     frontier = next;
   }
 
-  // Zusätzlich die Familien der ausgewählten Personen behalten, damit ihre
-  // Nachkommen sichtbar bleiben. Die Ausgangsdaten werden danach wiederhergestellt.
+  // Auch alle Nachkommen der Ausgangsperson(en) rekursiv einbeziehen.
+  const descendantIds = new Set(roots);
+  const descendantFamilyIds = new Set();
+  frontier = [...roots];
+  for (let depth = 0; depth < 20 && frontier.length; depth += 1) {
+    const next = [];
+    for (const personId of frontier) {
+      for (const family of originalFamilies) {
+        if (family.partner_a_id !== personId && family.partner_b_id !== personId) continue;
+        descendantFamilyIds.add(family.id);
+        for (const link of originalChildren.filter(row => row.familie_id === family.id)) {
+          if (!descendantIds.has(link.kind_id)) {
+            descendantIds.add(link.kind_id);
+            next.push(link.kind_id);
+          }
+        }
+      }
+    }
+    frontier = next;
+  }
+
   const relevantFamilies = originalFamilies.filter(family =>
     ancestryFamilyIds.has(family.id) ||
+    descendantFamilyIds.has(family.id) ||
     ancestorIds.has(family.partner_a_id) ||
     ancestorIds.has(family.partner_b_id)
   );
@@ -8153,14 +8173,16 @@ function renderTreeLinePreset(rootIds, direction) {
   treeData.familien = relevantFamilies;
   treeData.kinder = originalChildren.filter(link => relevantFamilyIds.has(link.familie_id));
   try {
-    renderStammbaum(rootId);
+    // WICHTIG: renderStammbaum benötigt eine konkrete Ausgangs-ID. Bei der
+    // früheren Version wurde hier eine nicht definierte Variable rootId benutzt.
+    renderStammbaum(roots[0]);
   } finally {
     treeData.familien = originalFamilies;
     treeData.kinder = originalChildren;
   }
   requestAnimationFrame(() => {
     const stage = document.getElementById("tree-stage");
-    const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(rootId)}"]`);
+    const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(roots[0])}"]`);
     centerTreeViewport(rootCard || stage);
   });
 }
