@@ -6039,9 +6039,10 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
     families = data || [];
   }
 
-  const oldParentLinks = (links || []).filter((l) =>
-    families.some((f) => f.id === l.familie_id && f.familientyp === "Eltern")
-  );
+  // Jede familien_kinder-Verknüpfung dieses Kindes ist eine gespeicherte
+  // Elternzuordnung – auch bei älteren Datensätzen, deren Familientyp nicht
+  // exakt "Eltern" lautet. Beim Speichern dürfen diese Links nicht verloren gehen.
+  const oldParentLinks = links || [];
 
   // Ziel-Familie: A=Vater (oder einziger Elternteil), B=Mutter.
   const zielA = vaterId || mutterId || null;
@@ -6131,10 +6132,20 @@ async function loescheElternfamilieWennLeer(familieId) {
   if (error) throw error;
 
   if (!data || data.length === 0) {
-    const { error: delError } = await sb.from("familien")
-      .delete()
-      .eq("id", familieId);
-    if (delError) throw delError;
+    // Nur explizite Elternfamilien automatisch entfernen. Ältere oder anders
+    // typisierte Familien können zugleich Ehe-/Partnerschaftsdaten enthalten;
+    // diese dürfen beim Bereinigen einer Elternzuordnung nicht gelöscht werden.
+    const { data: familie, error: familieError } = await sb.from("familien")
+      .select("id, familientyp")
+      .eq("id", familieId)
+      .maybeSingle();
+    if (familieError) throw familieError;
+    if (familie && String(familie.familientyp || "").trim().toLocaleLowerCase("de") === "eltern") {
+      const { error: delError } = await sb.from("familien")
+        .delete()
+        .eq("id", familieId);
+      if (delError) throw delError;
+    }
   }
 }
 
