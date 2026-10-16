@@ -6065,28 +6065,31 @@ async function speichereElternZuKind(kindId, vaterId, mutterId) {
   // Kindes eine zweite identische Elternfamilie entstehen.
   let zielFamilie = null;
 
+  // Ältere Datenbestände können Elternfamilien mit abweichender Schreibweise
+  // des Familientyps enthalten. Nicht nur exakt "Eltern" suchen.
+  const istElternTyp = (typ) => {
+    const normalisiert = String(typ || "").trim().toLocaleLowerCase("de");
+    return ["eltern", "elternfamilie", "parent", "parents"].includes(normalisiert);
+  };
+
   if (zielB) {
     const { data, error } = await sb.from("familien")
-      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-      .eq("familientyp", "Eltern")
+      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, created_at")
       .or(
         `and(partner_a_id.eq.${zielA},partner_b_id.eq.${zielB}),` +
         `and(partner_a_id.eq.${zielB},partner_b_id.eq.${zielA})`
       )
-      .order("created_at", { ascending: true })
-      .limit(1);
+      .order("created_at", { ascending: true });
     if (error) throw error;
-    zielFamilie = (data || [])[0] || null;
+    zielFamilie = (data || []).find((f) => istElternTyp(f.familientyp)) || null;
   } else {
     const { data, error } = await sb.from("familien")
-      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-      .eq("familientyp", "Eltern")
+      .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, created_at")
       .eq("partner_a_id", zielA)
       .is("partner_b_id", null)
-      .order("created_at", { ascending: true })
-      .limit(1);
+      .order("created_at", { ascending: true });
     if (error) throw error;
-    zielFamilie = (data || [])[0] || null;
+    zielFamilie = (data || []).find((f) => istElternTyp(f.familientyp)) || null;
   }
 
   // Nur wenn wirklich noch keine passende Elternfamilie existiert,
