@@ -1,3 +1,4 @@
+// v307: Klassischen Stammbaum vorübergehend ausgeblendet; Stammlinie Josef Mangeng/Rosina geb. Schuler; schnellere Personensuche.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
 // v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
@@ -7866,6 +7867,7 @@ function getTreePersonSearchIndex() {
     treePersonSearchIndex = people
       .map((person) => ({
         person,
+        label: treePersonSearchText(person),
         search: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.geburtsjahr || ""} ${person.geburtsdatum || ""} ${person.sterbejahr || ""} ${person.sterbedatum || ""} ${person.Ledigenname || ""}`)
       }))
       .sort((a, b) => personenAuswahlSortierung(a.person, b.person));
@@ -7875,41 +7877,41 @@ function getTreePersonSearchIndex() {
 
 function fillTreePersonSelect(searchValue = "", preferredId = "") {
   const select = document.getElementById("tree-person-select");
-  const search = document.getElementById("tree-person-search");
   const options = document.getElementById("tree-person-options");
   if (!select) return "";
   const query = treeNormalizeName(searchValue);
+  const tokens = query.split(/\s+/).filter(Boolean);
   const previous = preferredId || select.value;
   const index = getTreePersonSearchIndex();
-  // Begrenzte Ergebnisliste hält das native Auswahlmenü auf iPad und iPhone flüssig.
-  const limit = query ? 120 : 80;
+  // Nur passende Einträge und bereits vorbereitete Labels verwenden: kein erneutes
+  // Zerlegen der Suchbegriffe und keine wiederholte Namensformatierung pro Tastendruck.
+  const limit = query ? 100 : 60;
   const matches = [];
   for (const entry of index) {
-    const tokens = query.split(/\s+/).filter(Boolean);
-    if (!tokens.length || tokens.every(token => entry.search.includes(token))) matches.push(entry.person);
+    if (!tokens.length || tokens.every(token => entry.search.includes(token))) matches.push(entry);
     if (matches.length >= limit) break;
   }
   select.replaceChildren(new Option("— Person auswählen —", ""));
   if (options) options.replaceChildren();
   const datalistFragment = options ? document.createDocumentFragment() : null;
   const selectFragment = document.createDocumentFragment();
-  for (const person of matches) {
+  for (const entry of matches) {
     const opt = document.createElement("option");
-    opt.value = person.id;
-    opt.textContent = treePersonSearchText(person);
+    opt.value = entry.person.id;
+    opt.textContent = entry.label;
     selectFragment.appendChild(opt);
     if (datalistFragment) {
       const suggestion = document.createElement("option");
-      suggestion.value = treePersonSearchText(person);
+      suggestion.value = entry.label;
       datalistFragment.appendChild(suggestion);
     }
   }
   select.appendChild(selectFragment);
   if (options && datalistFragment) options.appendChild(datalistFragment);
-  if (previous && matches.some((person) => person.id === previous)) {
+  if (previous && matches.some(entry => entry.person.id === previous)) {
     select.value = previous;
   } else if (matches.length === 1) {
-    select.value = matches[0].id;
+    select.value = matches[0].person.id;
   }
   return select.value;
 }
@@ -8074,6 +8076,24 @@ function treeFindPresetPerson(tokens, surname) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+function treeFindJosefMangengRosinaSchuler() {
+  const josef = treeFindPresetPerson(["josef"], "Mangeng");
+  const rosinaCandidates = (treeData.personen || []).filter(person => {
+    const firstNames = treeNormalizeName(person.vorname || "");
+    const currentSurname = treeNormalizeName(person.nachname || "");
+    const maidenSurname = treeNormalizeName(person.Ledigenname || person.ledigenname || person.geburtsname || "");
+    return firstNames.split(/\s+/).includes("rosina") &&
+      (maidenSurname === "schuler" || currentSurname === "schuler" || (currentSurname === "mangeng" && maidenSurname.includes("schuler")));
+  });
+  // Bei verheirateten Personen die Kombination Mangeng + Ledigenname Schuler bevorzugen.
+  const marriedMatch = rosinaCandidates.filter(person =>
+    treeNormalizeName(person.nachname || "") === "mangeng" &&
+    treeNormalizeName(person.Ledigenname || person.ledigenname || person.geburtsname || "").includes("schuler")
+  );
+  const rosina = marriedMatch.length === 1 ? marriedMatch[0] : rosinaCandidates.length === 1 ? rosinaCandidates[0] : null;
+  return { josef, rosina };
+}
+
 function applyTreeLinePreset(value) {
   const message = document.getElementById("tree-message");
   const select = document.getElementById("tree-person-select");
@@ -8092,6 +8112,10 @@ function applyTreeLinePreset(value) {
     const annaMaria = treeFindPresetPerson(["anna", "maria"], "Mangeng");
     if (johannJosef && annaMaria) targets = [johannJosef, annaMaria];
     else if (johannJosef || annaMaria) targets = [johannJosef || annaMaria];
+  } else if (value === "mangeng-josef-rosina") {
+    const { josef, rosina } = treeFindJosefMangengRosinaSchuler();
+    if (josef && rosina) targets = [josef, rosina];
+    else if (josef || rosina) targets = [josef || rosina];
   }
   if (!targets.length) {
     if (message) message.textContent = "Die Person konnte nicht eindeutig gefunden werden. Bitte Namen in der normalen Personensuche auswählen.";
@@ -8119,7 +8143,11 @@ function applyTreeLinePreset(value) {
   }
   stage.innerHTML = `<div class="tree-preset-combined"><section class="tree-preset-branch">${originals[0]}</section><section class="tree-preset-branch">${originals[1]}</section></div>`;
   if (select) select.value = targets[0].id;
-  if (search) search.value = value === "mangeng-johann-josef" ? "Johann Josef und Anna Maria Mangeng" : "Reinhard und Paula Ganahl";
+  if (search) {
+    if (value === "mangeng-johann-josef") search.value = "Johann Josef und Anna Maria Mangeng";
+    else if (value === "mangeng-josef-rosina") search.value = "Josef Mangeng und Rosina geb. Schuler";
+    else search.value = "Reinhard und Paula Ganahl";
+  }
   if (message) message.textContent = "Beide Vorfahrenzweige werden getrennt angezeigt. Für eine einzelne Person bitte wieder die normale Ausgangsperson wählen.";
   // Rendern der kombinierten Ansicht bindet die Klickaktionen erneut.
   stage.querySelectorAll("[data-tree-person]").forEach(el => el.addEventListener("click", () => {
