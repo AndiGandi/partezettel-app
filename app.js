@@ -1,4 +1,4 @@
-// v315: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
+// v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
@@ -8077,42 +8077,16 @@ function treeFindPresetPerson(tokens, surname) {
 }
 
 function treeFindMangengRosina() {
-  const candidates = treeData.personen.filter(person => {
-    const first = treeNormalizeName(person.vorname || "");
-    const last = treeNormalizeName(person.nachname || "");
-    const maiden = treeNormalizeName(person.Ledigenname || person.ledigenname || person.geburtsname || "");
-    const year = String(person.geburtsdatum || person.geburtsjahr || "").match(/(?:18|19|20)\d{2}/)?.[0] || "";
-    return first.includes("rosina") &&
-      ((last === "mangeng" && maiden.includes("schuler")) || last === "schuler") &&
-      (!year || year === "1847");
-  });
-  // Die gesuchte Rosina ist mit Josef Mangeng (geb. 1844) verbunden.
-  const linked = candidates.filter(person => treeData.familien.some(family => {
-    const otherId = family.partner_a_id === person.id ? family.partner_b_id
-      : family.partner_b_id === person.id ? family.partner_a_id : null;
-    const other = otherId ? treePerson(otherId) : null;
-    const otherYear = String(other?.geburtsdatum || other?.geburtsjahr || "").match(/(?:18|19|20)\d{2}/)?.[0] || "";
-    return other && treeNormalizeName(other.vorname || "").includes("josef") &&
-      treeNormalizeName(other.nachname || "") === "mangeng" && (!otherYear || otherYear === "1844");
-  }));
-  if (linked.length === 1) return linked[0];
-  return candidates.length === 1 ? candidates[0] : null;
+  return treePerson("76e39d37-663f-4324-b496-7983ba905d77") || null;
 }
 
 function treeFindMangengJosef(rosinaId) {
-  const spouseIds = new Set();
-  for (const family of treeData.familien) {
-    if (family.partner_a_id === rosinaId && family.partner_b_id) spouseIds.add(family.partner_b_id);
-    if (family.partner_b_id === rosinaId && family.partner_a_id) spouseIds.add(family.partner_a_id);
-  }
-  const spouseCandidates = [...spouseIds].map(id => treePerson(id)).filter(person =>
-    person && treeNormalizeName(person.vorname || "").includes("josef") && treeNormalizeName(person.nachname || "") === "mangeng"
-  );
-  if (spouseCandidates.length === 1) return spouseCandidates[0];
-  const candidates = treeData.personen.filter(person =>
-    treeNormalizeName(person.vorname || "").includes("josef") && treeNormalizeName(person.nachname || "") === "mangeng"
-  );
-  return candidates.length === 1 ? candidates[0] : null;
+  const josefId = "6a205f8e-b334-4d70-8b68-75782568e631";
+  const familyId = "a15c4a14-e6f8-4929-99b5-29d9d4a6c54a";
+  const family = treeData.familien.find(row => row.id === familyId);
+  if (family && [family.partner_a_id, family.partner_b_id].includes(rosinaId) &&
+      [family.partner_a_id, family.partner_b_id].includes(josefId)) return treePerson(josefId) || null;
+  return treePerson(josefId) || null;
 }
 
 function treePresetGenderMatches(person, direction) {
@@ -8130,69 +8104,44 @@ function renderTreeLinePreset(rootIds, direction) {
   const ancestorIds = new Set(roots);
   const ancestryFamilyIds = new Set();
   let frontier = [...roots];
-
-  // Vorfahren je nach gewählter Linie ermitteln.
-  for (let depth = 0; depth < 12 && frontier.length; depth += 1) {
+  for (let depth = 0; depth < 20 && frontier.length; depth += 1) {
     const next = [];
     for (const childId of frontier) {
       for (const link of originalChildren.filter(row => row.kind_id === childId)) {
         const family = originalFamilies.find(row => row.id === link.familie_id);
         if (!family) continue;
         const parentIds = [family.partner_a_id, family.partner_b_id].filter(Boolean);
-        const eligible = direction === "both"
-          ? parentIds
-          : parentIds.filter(id => treePresetGenderMatches(treePerson(id), direction));
+        const eligible = direction === "both" ? parentIds : parentIds.filter(id => treePresetGenderMatches(treePerson(id), direction));
         if (!eligible.length) continue;
         ancestryFamilyIds.add(family.id);
-        for (const parentId of eligible) {
-          if (!ancestorIds.has(parentId)) {
-            ancestorIds.add(parentId);
-            next.push(parentId);
-          }
-        }
+        for (const parentId of eligible) if (!ancestorIds.has(parentId)) { ancestorIds.add(parentId); next.push(parentId); }
       }
     }
     frontier = next;
   }
-
-  // Auch alle Nachkommen der Ausgangsperson(en) rekursiv einbeziehen.
-  const descendantIds = new Set(roots);
-  const descendantFamilyIds = new Set();
-  frontier = [...roots];
-  for (let depth = 0; depth < 20 && frontier.length; depth += 1) {
+  const includedIds = new Set(ancestorIds);
+  const relevantFamilyIds = new Set(ancestryFamilyIds);
+  frontier = [...includedIds];
+  for (let depth = 0; depth < 30 && frontier.length; depth += 1) {
     const next = [];
     for (const personId of frontier) {
       for (const family of originalFamilies) {
         if (family.partner_a_id !== personId && family.partner_b_id !== personId) continue;
-        descendantFamilyIds.add(family.id);
-        for (const link of originalChildren.filter(row => row.familie_id === family.id)) {
-          if (!descendantIds.has(link.kind_id)) {
-            descendantIds.add(link.kind_id);
-            next.push(link.kind_id);
-          }
+        relevantFamilyIds.add(family.id);
+        for (const link of originalChildren) {
+          if (link.familie_id !== family.id || !link.kind_id || includedIds.has(link.kind_id)) continue;
+          includedIds.add(link.kind_id); next.push(link.kind_id);
         }
       }
     }
     frontier = next;
   }
-
-  const relevantFamilies = originalFamilies.filter(family =>
-    ancestryFamilyIds.has(family.id) ||
-    descendantFamilyIds.has(family.id) ||
-    ancestorIds.has(family.partner_a_id) ||
-    ancestorIds.has(family.partner_b_id)
-  );
-  const relevantFamilyIds = new Set(relevantFamilies.map(family => family.id));
+  const relevantFamilies = originalFamilies.filter(family => relevantFamilyIds.has(family.id));
+  const relevantIds = new Set(relevantFamilies.map(family => family.id));
   treeData.familien = relevantFamilies;
-  treeData.kinder = originalChildren.filter(link => relevantFamilyIds.has(link.familie_id));
-  try {
-    // WICHTIG: renderStammbaum benötigt eine konkrete Ausgangs-ID. Bei der
-    // früheren Version wurde hier eine nicht definierte Variable rootId benutzt.
-    renderStammbaum(roots[0]);
-  } finally {
-    treeData.familien = originalFamilies;
-    treeData.kinder = originalChildren;
-  }
+  treeData.kinder = originalChildren.filter(link => relevantIds.has(link.familie_id));
+  try { renderStammbaum(roots[0]); }
+  finally { treeData.familien = originalFamilies; treeData.kinder = originalChildren; }
   requestAnimationFrame(() => {
     const stage = document.getElementById("tree-stage");
     const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(roots[0])}"]`);
