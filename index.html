@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 310 -->
+    <!-- Version 311 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=310">
+<link rel="stylesheet" href="style.css?v=311">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 310</p>
+  <p id="app-version" class="app-header__version">Version 311</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -245,7 +245,7 @@
   <!-- ===================== TAB: STAMMBAUM ===================== -->
   <section id="tab-stammbaum" class="tab-panel tree-panel">
     <style>
-      /* v310: Stammbaum-Steuerung in klar getrennte Zeilen gliedern. */
+      /* v311: Stammbaum-Steuerung in klar getrennte Zeilen gliedern. */
       #tab-stammbaum .tree-preset-row { margin: 0 0 .85rem; max-width: 42rem; }
       #tab-stammbaum .tree-preset-row .field { display: flex; flex-direction: column; gap: .35rem; }
       #tab-stammbaum .tree-person-row { display: flex; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
@@ -261,9 +261,9 @@
       <label class="field tree-preset-field"><span>Vorgefertigte Stammlinie</span>
         <select id="tree-line-preset" aria-label="Vorgefertigte Stammlinie">
           <option value="">— Stammlinie auswählen —</option>
-          <option value="ganahl-reinhard-paula">Ganahl – Reinhard und Paula (beide Vorfahrenzweige)</option>
-          <option value="mangeng-johann-josef">Mangeng – Johann Josef</option>
-          <option value="mangeng-josef-rosina">Mangeng – Josef und Rosina geb. Schuler</option>
+          <option value="gawatsch-linie">Gawatsch Linie</option>
+          <option value="reinhard-linie">Reinhard Linie</option>
+          <option value="fall-linie">Fall Linie</option>
         </select>
       </label>
     </div>
@@ -728,6 +728,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=310"></script>
+<script src="app.js?v=311"></script>
 </body>
 </html>

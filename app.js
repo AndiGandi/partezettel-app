@@ -1,4 +1,4 @@
-// v310: Stammbaum-Steuerung klar getrennt; vorgefertigte Stammlinie steht oberhalb der Personenauswahl. Auswahl bestätigen lädt Personen, Familien und Kinderbeziehungen frisch aus Supabase und aktualisiert die Stammbaumansicht.
+// v311: Stammbaum-Steuerung klar getrennt; vorgefertigte Stammlinie steht oberhalb der Personenauswahl. Auswahl bestätigen lädt Personen, Familien und Kinderbeziehungen frisch aus Supabase und aktualisiert die Stammbaumansicht.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
@@ -8086,63 +8086,94 @@ function treeFindMangengRosina() {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+function treePresetGenderMatches(person, direction) {
+  const gender = treeNormalizeName(person?.geschlecht || "");
+  if (direction === "paternal") return /^(m|mann|maennlich|männlich|male|vater)$/.test(gender);
+  if (direction === "maternal") return /^(w|f|frau|weiblich|female|mutter)$/.test(gender);
+  return true;
+}
+
+function renderTreeLinePreset(rootId, direction) {
+  const originalFamilies = treeData.familien;
+  const originalChildren = treeData.kinder;
+  const ancestorIds = new Set([rootId]);
+  const ancestryFamilyIds = new Set();
+  let frontier = [rootId];
+
+  // Für die väterliche/mütterliche Linie wird pro Generation nur der
+  // entsprechende Elternteil verfolgt. "both" umfasst beide Elternseiten.
+  for (let depth = 0; depth < 12 && frontier.length; depth += 1) {
+    const next = [];
+    for (const childId of frontier) {
+      for (const link of originalChildren.filter(row => row.kind_id === childId)) {
+        const family = originalFamilies.find(row => row.id === link.familie_id);
+        if (!family) continue;
+        const parentIds = [family.partner_a_id, family.partner_b_id].filter(Boolean);
+        const eligible = direction === "both"
+          ? parentIds
+          : parentIds.filter(id => treePresetGenderMatches(treePerson(id), direction));
+        if (!eligible.length) continue;
+        ancestryFamilyIds.add(family.id);
+        for (const parentId of eligible) {
+          if (!ancestorIds.has(parentId)) {
+            ancestorIds.add(parentId);
+            next.push(parentId);
+          }
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  // Zusätzlich die Familien der ausgewählten Personen behalten, damit ihre
+  // Nachkommen sichtbar bleiben. Die Ausgangsdaten werden danach wiederhergestellt.
+  const relevantFamilies = originalFamilies.filter(family =>
+    ancestryFamilyIds.has(family.id) ||
+    ancestorIds.has(family.partner_a_id) ||
+    ancestorIds.has(family.partner_b_id)
+  );
+  const relevantFamilyIds = new Set(relevantFamilies.map(family => family.id));
+  treeData.familien = relevantFamilies;
+  treeData.kinder = originalChildren.filter(link => relevantFamilyIds.has(link.familie_id));
+  try {
+    renderStammbaum(rootId);
+  } finally {
+    treeData.familien = originalFamilies;
+    treeData.kinder = originalChildren;
+  }
+  requestAnimationFrame(() => {
+    const stage = document.getElementById("tree-stage");
+    const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(rootId)}"]`);
+    centerTreeViewport(rootCard || stage);
+  });
+}
+
 function applyTreeLinePreset(value) {
   const message = document.getElementById("tree-message");
   const select = document.getElementById("tree-person-select");
   const search = document.getElementById("tree-person-search");
-  let targets = [];
-  if (value === "ganahl-reinhard-paula") {
-    const reinhard = treeFindPresetPerson(["reinhard"], "Ganahl");
-    const paula = treeFindPresetPerson(["paula"], "Ganahl");
-    if (reinhard && paula) targets = [reinhard, paula];
-    else if (reinhard || paula) targets = [reinhard || paula];
-  } else if (value === "mangeng-johann-josef") {
-    const johannJosef = treeFindPresetPerson(["johann", "josef"], "Mangeng");
-    const annaMaria = treeFindPresetPerson(["anna", "maria"], "Mangeng");
-    if (johannJosef && annaMaria) targets = [johannJosef, annaMaria];
-    else if (johannJosef || annaMaria) targets = [johannJosef || annaMaria];
-  } else if (value === "mangeng-josef-rosina") {
-    const josefs = treeData.personen.filter(person => treeNormalizeName(person.nachname || "") === "mangeng" && treeNormalizeName(person.vorname || "") === "josef");
-    const josef = josefs.length === 1 ? josefs[0] : null;
-    const rosina = treeFindMangengRosina();
-    if (josef && rosina) targets = [josef, rosina];
-    else if (josef || rosina) targets = [josef || rosina];
-  }
-  if (!targets.length) {
-    if (message) message.textContent = "Die Person konnte nicht eindeutig gefunden werden. Bitte Namen in der normalen Personensuche auswählen.";
+  const presets = {
+    "gawatsch-linie": { tokens: ["luise"], direction: "paternal", label: "Gawatsch Linie" },
+    "reinhard-linie": { tokens: ["hubert"], direction: "both", label: "Reinhard Linie" },
+    "fall-linie": { tokens: ["luise"], direction: "maternal", label: "Fall Linie" }
+  };
+  const preset = presets[value];
+  if (!preset) return;
+  const root = treeFindPresetPerson(preset.tokens, "Ganahl");
+  if (!root) {
+    if (message) message.textContent = `Ausgangspunkt für „${preset.label}“ konnte nicht eindeutig gefunden werden. Bitte Personendaten prüfen.`;
     return;
   }
-  if (targets.length === 1) {
-    if (select) select.value = targets[0].id;
-    if (search) search.value = "";
-    setTreePersonSelection(targets[0].id);
-    if (message) message.textContent = `Auswahl bestätigt: ${treePersonSearchText(targets[0])}`;
-    return;
-  }
-  // Gemeinsame Stammlinie: beide Personen werden als getrennte Ausgangspunkte
-  // mit ihren jeweiligen Vorfahrenzweigen in derselben Ansicht dargestellt.
-  const stage = document.getElementById("tree-stage");
-  const classicStage = document.getElementById("tree-classic-stage");
   if (treeViewMode === "classic") {
     treeViewMode = "cards";
     setTreeViewMode("cards");
   }
-  const originals = [];
-  for (const target of targets) {
-    renderStammbaum(target.id);
-    originals.push(stage.innerHTML);
-  }
-  stage.innerHTML = `<div class="tree-preset-combined"><section class="tree-preset-branch">${originals[0]}</section><section class="tree-preset-branch">${originals[1]}</section></div>`;
-  if (select) select.value = targets[0].id;
+  if (select) select.value = root.id;
   if (search) search.value = "";
-  if (message) message.textContent = `Auswahl bestätigt: ${targets.map(treePersonSearchText).join(" und ")}. Beide Vorfahrenzweige werden getrennt angezeigt.`;
-  requestAnimationFrame(() => centerTreeViewport(stage));
-  // Rendern der kombinierten Ansicht bindet die Klickaktionen erneut.
-  stage.querySelectorAll("[data-tree-person]").forEach(el => el.addEventListener("click", () => {
-    const id = el.dataset.treePerson;
-    if (id && select) select.value = id;
-    if (id) setTreePersonSelection(id);
-  }));
+  const confirm = document.getElementById("tree-person-confirm");
+  if (confirm) confirm.disabled = true;
+  renderTreeLinePreset(root.id, preset.direction);
+  if (message) message.textContent = `${preset.label} angezeigt. Der Stammbaum wurde automatisch neu aufgebaut.`;
 }
 
 const treeSelect = document.getElementById("tree-person-select");
