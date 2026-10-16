@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 306 -->
+    <!-- Version 308 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=307">
+<link rel="stylesheet" href="style.css?v=308">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 306</p>
+  <p id="app-version" class="app-header__version">Version 308</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -249,15 +249,15 @@
         <label class="field"><span>Ausgangsperson</span>
           <input type="search" id="tree-person-search" list="tree-person-options" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" aria-describedby="tree-person-hint">
           <datalist id="tree-person-options"></datalist>
-          <small id="tree-person-hint" class="tree-person-hint">Name eingeben oder die alphabetische Liste öffnen; Geburts- und Sterbejahr helfen bei der Auswahl.</small>
+          <small id="tree-person-hint" class="tree-person-hint">Name eingeben, passenden Vorschlag wählen und anschließend bestätigen. Geburts- und Sterbejahr helfen bei der Auswahl.</small>
         </label>
+        <button type="button" id="tree-person-confirm" class="btn btn--primary" style="margin-top:.45rem;min-height:42px">Auswahl bestätigen</button>
         <select id="tree-person-select" aria-label="Ausgewählte Ausgangsperson" hidden><option value="">— Person auswählen —</option></select>
       </div>
       <label class="field tree-preset-field"><span>Vorgefertigte Stammlinie</span>
         <select id="tree-line-preset" aria-label="Vorgefertigte Stammlinie">
           <option value="">— Stammlinie auswählen —</option>
           <option value="ganahl-reinhard-paula">Ganahl – Reinhard und Paula (beide Vorfahrenzweige)</option>
-          <option value="mangeng-peter">Mangeng – Peter</option>
           <option value="mangeng-johann-josef">Mangeng – Johann Josef</option>
           <option value="mangeng-josef-rosina">Mangeng – Josef und Rosina geb. Schuler</option>
         </select>
@@ -271,6 +271,10 @@
       </div>
     </div>
     <p id="tree-message" class="form-message"></p>
+    <div class="tree-view-switch" role="tablist" aria-label="Stammbaumansicht">
+      <button type="button" id="tree-view-cards" class="btn btn--secondary is-active" role="tab" aria-selected="true">Kartenansicht</button>
+      <button type="button" id="tree-view-classic" class="btn btn--secondary" role="tab" aria-selected="false" hidden>Klassischer Stammbaum</button>
+    </div>
     <div id="tree-relationship-panel" class="tree-relationship-panel" hidden>
       <div class="tree-relationship-panel__header">
         <strong>Wie sind zwei Personen miteinander verwandt?</strong>
@@ -705,6 +709,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=307"></script>
+<script src="app.js?v=308"></script>
 </body>
 </html>

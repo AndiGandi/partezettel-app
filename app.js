@@ -1,4 +1,4 @@
-// v307: Klassischen Stammbaum vorübergehend ausgeblendet; Stammlinie Josef Mangeng/Rosina geb. Schuler; schnellere Personensuche.
+// v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
 // v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
@@ -7867,7 +7867,6 @@ function getTreePersonSearchIndex() {
     treePersonSearchIndex = people
       .map((person) => ({
         person,
-        label: treePersonSearchText(person),
         search: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.geburtsjahr || ""} ${person.geburtsdatum || ""} ${person.sterbejahr || ""} ${person.sterbedatum || ""} ${person.Ledigenname || ""}`)
       }))
       .sort((a, b) => personenAuswahlSortierung(a.person, b.person));
@@ -7877,41 +7876,41 @@ function getTreePersonSearchIndex() {
 
 function fillTreePersonSelect(searchValue = "", preferredId = "") {
   const select = document.getElementById("tree-person-select");
+  const search = document.getElementById("tree-person-search");
   const options = document.getElementById("tree-person-options");
   if (!select) return "";
   const query = treeNormalizeName(searchValue);
-  const tokens = query.split(/\s+/).filter(Boolean);
   const previous = preferredId || select.value;
   const index = getTreePersonSearchIndex();
-  // Nur passende Einträge und bereits vorbereitete Labels verwenden: kein erneutes
-  // Zerlegen der Suchbegriffe und keine wiederholte Namensformatierung pro Tastendruck.
-  const limit = query ? 100 : 60;
+  // Begrenzte Ergebnisliste hält das native Auswahlmenü auf iPad und iPhone flüssig.
+  const limit = query ? 120 : 80;
   const matches = [];
   for (const entry of index) {
-    if (!tokens.length || tokens.every(token => entry.search.includes(token))) matches.push(entry);
+    const tokens = query.split(/\s+/).filter(Boolean);
+    if (!tokens.length || tokens.every(token => entry.search.includes(token))) matches.push(entry.person);
     if (matches.length >= limit) break;
   }
   select.replaceChildren(new Option("— Person auswählen —", ""));
   if (options) options.replaceChildren();
   const datalistFragment = options ? document.createDocumentFragment() : null;
   const selectFragment = document.createDocumentFragment();
-  for (const entry of matches) {
+  for (const person of matches) {
     const opt = document.createElement("option");
-    opt.value = entry.person.id;
-    opt.textContent = entry.label;
+    opt.value = person.id;
+    opt.textContent = treePersonSearchText(person);
     selectFragment.appendChild(opt);
     if (datalistFragment) {
       const suggestion = document.createElement("option");
-      suggestion.value = entry.label;
+      suggestion.value = treePersonSearchText(person);
       datalistFragment.appendChild(suggestion);
     }
   }
   select.appendChild(selectFragment);
   if (options && datalistFragment) options.appendChild(datalistFragment);
-  if (previous && matches.some(entry => entry.person.id === previous)) {
+  if (previous && matches.some((person) => person.id === previous)) {
     select.value = previous;
   } else if (matches.length === 1) {
-    select.value = matches[0].person.id;
+    select.value = matches[0].id;
   }
   return select.value;
 }
@@ -8076,22 +8075,14 @@ function treeFindPresetPerson(tokens, surname) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
-function treeFindJosefMangengRosinaSchuler() {
-  const josef = treeFindPresetPerson(["josef"], "Mangeng");
-  const rosinaCandidates = (treeData.personen || []).filter(person => {
-    const firstNames = treeNormalizeName(person.vorname || "");
-    const currentSurname = treeNormalizeName(person.nachname || "");
-    const maidenSurname = treeNormalizeName(person.Ledigenname || person.ledigenname || person.geburtsname || "");
-    return firstNames.split(/\s+/).includes("rosina") &&
-      (maidenSurname === "schuler" || currentSurname === "schuler" || (currentSurname === "mangeng" && maidenSurname.includes("schuler")));
+function treeFindMangengRosina() {
+  const candidates = treeData.personen.filter(person => {
+    const first = treeNormalizeName(person.vorname || "");
+    const last = treeNormalizeName(person.nachname || "");
+    const maiden = treeNormalizeName(person.Ledigenname || person.ledigenname || person.geburtsname || "");
+    return first.includes("rosina") && (last === "mangeng" && maiden.includes("schuler") || last === "schuler");
   });
-  // Bei verheirateten Personen die Kombination Mangeng + Ledigenname Schuler bevorzugen.
-  const marriedMatch = rosinaCandidates.filter(person =>
-    treeNormalizeName(person.nachname || "") === "mangeng" &&
-    treeNormalizeName(person.Ledigenname || person.ledigenname || person.geburtsname || "").includes("schuler")
-  );
-  const rosina = marriedMatch.length === 1 ? marriedMatch[0] : rosinaCandidates.length === 1 ? rosinaCandidates[0] : null;
-  return { josef, rosina };
+  return candidates.length === 1 ? candidates[0] : null;
 }
 
 function applyTreeLinePreset(value) {
@@ -8104,16 +8095,15 @@ function applyTreeLinePreset(value) {
     const paula = treeFindPresetPerson(["paula"], "Ganahl");
     if (reinhard && paula) targets = [reinhard, paula];
     else if (reinhard || paula) targets = [reinhard || paula];
-  } else if (value === "mangeng-peter") {
-    const person = treeFindPresetPerson(["peter"], "Mangeng");
-    if (person) targets = [person];
   } else if (value === "mangeng-johann-josef") {
     const johannJosef = treeFindPresetPerson(["johann", "josef"], "Mangeng");
     const annaMaria = treeFindPresetPerson(["anna", "maria"], "Mangeng");
     if (johannJosef && annaMaria) targets = [johannJosef, annaMaria];
     else if (johannJosef || annaMaria) targets = [johannJosef || annaMaria];
   } else if (value === "mangeng-josef-rosina") {
-    const { josef, rosina } = treeFindJosefMangengRosinaSchuler();
+    const josefs = treeData.personen.filter(person => treeNormalizeName(person.nachname || "") === "mangeng" && treeNormalizeName(person.vorname || "") === "josef");
+    const josef = josefs.length === 1 ? josefs[0] : null;
+    const rosina = treeFindMangengRosina();
     if (josef && rosina) targets = [josef, rosina];
     else if (josef || rosina) targets = [josef || rosina];
   }
@@ -8123,9 +8113,9 @@ function applyTreeLinePreset(value) {
   }
   if (targets.length === 1) {
     if (select) select.value = targets[0].id;
-    if (search) search.value = treePersonSearchText(targets[0]);
+    if (search) search.value = "";
     setTreePersonSelection(targets[0].id);
-    if (message) message.textContent = "";
+    if (message) message.textContent = `Auswahl bestätigt: ${treePersonSearchText(targets[0])}`;
     return;
   }
   // Gemeinsame Stammlinie: beide Personen werden als getrennte Ausgangspunkte
@@ -8143,12 +8133,9 @@ function applyTreeLinePreset(value) {
   }
   stage.innerHTML = `<div class="tree-preset-combined"><section class="tree-preset-branch">${originals[0]}</section><section class="tree-preset-branch">${originals[1]}</section></div>`;
   if (select) select.value = targets[0].id;
-  if (search) {
-    if (value === "mangeng-johann-josef") search.value = "Johann Josef und Anna Maria Mangeng";
-    else if (value === "mangeng-josef-rosina") search.value = "Josef Mangeng und Rosina geb. Schuler";
-    else search.value = "Reinhard und Paula Ganahl";
-  }
-  if (message) message.textContent = "Beide Vorfahrenzweige werden getrennt angezeigt. Für eine einzelne Person bitte wieder die normale Ausgangsperson wählen.";
+  if (search) search.value = "";
+  if (message) message.textContent = `Auswahl bestätigt: ${targets.map(treePersonSearchText).join(" und ")}. Beide Vorfahrenzweige werden getrennt angezeigt.`;
+  requestAnimationFrame(() => centerTreeViewport(stage));
   // Rendern der kombinierten Ansicht bindet die Klickaktionen erneut.
   stage.querySelectorAll("[data-tree-person]").forEach(el => el.addEventListener("click", () => {
     const id = el.dataset.treePerson;
@@ -8159,25 +8146,63 @@ function applyTreeLinePreset(value) {
 
 const treeSelect = document.getElementById("tree-person-select");
 const treePersonSearch = document.getElementById("tree-person-search");
-function setTreePersonSelection(id) {
+const treePersonConfirm = document.getElementById("tree-person-confirm");
+let treeSearchDebounce = null;
+function centerTreeViewport(target) {
+  const viewport = document.getElementById("tree-viewport");
+  if (!viewport || !target) return;
+  const vr = viewport.getBoundingClientRect();
+  const tr = target.getBoundingClientRect();
+  viewport.scrollTo({
+    left: Math.max(0, viewport.scrollLeft + (tr.left + tr.width / 2 - (vr.left + vr.width / 2))),
+    top: Math.max(0, viewport.scrollTop + (tr.top + tr.height / 2 - (vr.top + vr.height / 2))),
+    behavior: "smooth"
+  });
+}
+function setTreePersonSelection(id, { confirmed = false } = {}) {
   if (!treeSelect || !id || !treePerson(id)) return;
   treeSelect.value = id;
-  if (treePersonSearch) treePersonSearch.value = treePersonSearchText(treePerson(id));
   if (treeViewMode === "classic") renderKlassischerStammbaum(id);
   else renderStammbaum(id);
+  requestAnimationFrame(() => {
+    const stage = document.getElementById(treeViewMode === "classic" ? "tree-classic-stage" : "tree-stage");
+    const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(id)}"]`);
+    centerTreeViewport(rootCard || stage);
+  });
+  if (confirmed) {
+    const message = document.getElementById("tree-message");
+    if (message) message.textContent = `Auswahl bestätigt: ${treePersonSearchText(treePerson(id))}`;
+    if (treePersonSearch) treePersonSearch.value = "";
+  }
 }
 if (treeSelect) treeSelect.addEventListener("change", () => setTreePersonSelection(treeSelect.value));
 const treeLinePreset = document.getElementById("tree-line-preset");
 if (treeLinePreset) treeLinePreset.addEventListener("change", () => applyTreeLinePreset(treeLinePreset.value));
 if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
   const query = treePersonSearch.value;
-  fillTreePersonSelect(query, "");
-  const exact = (treeData.personen || []).find(p => treeNormalizeName(treePersonSearchText(p)) === treeNormalizeName(query));
-  if (exact) setTreePersonSelection(exact.id);
-  else if (!query.trim() && treeSelect?.value) {
-    const selected = treeSelect.value;
-    if (treeViewMode === "classic") renderKlassischerStammbaum(selected);
-    else renderStammbaum(selected);
+  if (treePersonConfirm) treePersonConfirm.disabled = !query.trim();
+  if (treeSearchDebounce) clearTimeout(treeSearchDebounce);
+  treeSearchDebounce = setTimeout(() => {
+    fillTreePersonSelect(query, "");
+    const normalized = treeNormalizeName(query);
+    const matches = getTreePersonSearchIndex().filter(entry => normalized && entry.search.includes(normalized));
+    if (treePersonConfirm) treePersonConfirm.disabled = !query.trim() || matches.length === 0;
+  }, 140);
+});
+if (treePersonConfirm) treePersonConfirm.addEventListener("click", () => {
+  const query = treeNormalizeName(treePersonSearch?.value || "");
+  if (!query) return;
+  const index = getTreePersonSearchIndex();
+  const exact = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === query);
+  const matches = exact.length ? exact : index.filter(entry => entry.search.split(/\s+/).some(token => token === query) || entry.search.includes(query));
+  if (matches.length === 1) {
+    setTreePersonSelection(matches[0].person.id, { confirmed: true });
+    if (treePersonConfirm) treePersonConfirm.disabled = true;
+  } else {
+    const message = document.getElementById("tree-message");
+    if (message) message.textContent = matches.length > 1
+      ? `Mehrere Personen passen (${matches.length}). Bitte Vorname, Nachname oder Geburtsjahr genauer eingeben.`
+      : "Keine eindeutige Person gefunden. Bitte einen Vorschlag aus der Liste auswählen oder genauer suchen.";
   }
 });
 const treeZoomIn = document.getElementById("tree-zoom-in");
