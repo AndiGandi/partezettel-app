@@ -1,3 +1,4 @@
+// Partezettel Archiv – Version 317
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
@@ -7023,8 +7024,8 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
       : "";
   const ledigenname = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
   const nachname = String(person.nachname || "").trim();
-  const maidenLabel = ledigenname
-    ? ` <span class="tree-node__maiden-name">(geb. ${escTree(ledigenname)})</span>` : "";
+  const maidenLabel = ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")
+    ? ` <span class="tree-node__maiden-name">, geb. ${escTree(ledigenname)}</span>` : "";
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
     <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}${maidenLabel}</span>
@@ -7342,7 +7343,13 @@ let treeRelationshipSelection = { personAId: null, personBId: null };
 
 function treePersonLabel(id) {
   const p = treePerson(id);
-  return p ? `${p.vorname || ""} ${p.nachname || ""}`.trim() : "Unbekannt";
+  if (!p) return "Unbekannt";
+  const base = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  const ledigenname = String(p.Ledigenname || p.ledigenname || p.geburtsname || "").trim();
+  const nachname = String(p.nachname || "").trim();
+  return ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")
+    ? `${base}, geb. ${ledigenname}`
+    : base;
 }
 
 function treeRelationshipModel() {
