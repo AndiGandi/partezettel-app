@@ -1,3 +1,4 @@
+// Partezettel Archiv – Version 322
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7866,6 +7867,28 @@ function treePersonSearchText(person) {
   return personenAuswahlText(person);
 }
 
+// Löst auch vollständige Datalist-Vorschläge mit Ledigenname und Jahresangaben auf.
+function resolveTreePersonSearch(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) return [];
+  const normalized = treeNormalizeName(value);
+  const index = getTreePersonSearchIndex();
+  const exactLabel = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === normalized);
+  if (exactLabel.length) return exactLabel;
+  const clean = normalized
+    .replace(/\b(geb|geboren|gest|gestorben)\.?/g, " ")
+    .replace(/\b\d{4}\b/g, " ")
+    .replace(/[(),.;]/g, " ")
+    .replace(/\s+/g, " ").trim();
+  const tokens = clean.split(/\s+/).filter(Boolean);
+  if (!tokens.length) return [];
+  return index.filter(entry => {
+    const p = entry.person;
+    const names = treeNormalizeName(`${p.vorname || ""} ${p.nachname || ""} ${p.Ledigenname || ""}`);
+    return tokens.every(token => names.includes(token));
+  });
+}
+
 let treePersonSearchIndexSource = null;
 let treePersonSearchIndex = [];
 
@@ -8230,18 +8253,26 @@ function setTreePersonSelection(id, { confirmed = false } = {}) {
 if (treeSelect) treeSelect.addEventListener("change", () => setTreePersonSelection(treeSelect.value));
 const treeLinePreset = document.getElementById("tree-line-preset");
 if (treeLinePreset) treeLinePreset.addEventListener("change", () => applyTreeLinePreset(treeLinePreset.value));
-if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
-  const query = treePersonSearch.value;
-  if (treePersonConfirm) treePersonConfirm.disabled = !query.trim();
-  if (treeSearchDebounce) clearTimeout(treeSearchDebounce);
-  treeSearchDebounce = setTimeout(() => {
-    fillTreePersonSelect(query, "");
-    const normalized = treeNormalizeName(query);
-    const tokens = normalized.split(/\s+/).filter(Boolean);
-    const matches = getTreePersonSearchIndex().filter(entry => tokens.length && tokens.every(token => entry.search.includes(token)));
-    if (treePersonConfirm) treePersonConfirm.disabled = !tokens.length || matches.length === 0;
-  }, 140);
-});
+function refreshTreeConfirmButton() {
+  if (!treePersonConfirm) return;
+  const query = String(treePersonSearch?.value || "").trim();
+  const selectedId = treeSelect?.value || "";
+  treePersonConfirm.disabled = !(query ? resolveTreePersonSearch(query).length > 0 : Boolean(selectedId && treePerson(selectedId)));
+}
+if (treePersonSearch) {
+  const updateTreeSearch = () => {
+    refreshTreeConfirmButton();
+    const query = treePersonSearch.value;
+    if (treeSearchDebounce) clearTimeout(treeSearchDebounce);
+    treeSearchDebounce = setTimeout(() => {
+      fillTreePersonSelect(query, "");
+      refreshTreeConfirmButton();
+    }, 100);
+  };
+  treePersonSearch.addEventListener("input", updateTreeSearch);
+  treePersonSearch.addEventListener("change", updateTreeSearch);
+  treePersonSearch.addEventListener("blur", () => setTimeout(refreshTreeConfirmButton, 0));
+}
 if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
   const rawQuery = String(treePersonSearch?.value || "").trim();
   const query = treeNormalizeName(rawQuery);
@@ -8273,21 +8304,8 @@ if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
     return;
   }
 
-  const index = getTreePersonSearchIndex();
-  const tokens = query.split(/\s+/).filter(Boolean);
-  // Vorrang für den exakt gewählten Datalist-Vorschlag inklusive Ledigenname und Jahresangaben.
-  let matches = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === query);
-  if (!matches.length) {
-    // Danach exakter Vorname-/Nachname-Treffer unabhängig von der Reihenfolge.
-    matches = index.filter(entry => {
-      const name = treeNormalizeName(`${entry.person.vorname || ""} ${entry.person.nachname || ""}`);
-      const reverseName = treeNormalizeName(`${entry.person.nachname || ""} ${entry.person.vorname || ""}`);
-      return name === query || reverseName === query;
-    });
-  }
-  if (!matches.length) {
-    matches = index.filter(entry => tokens.length && tokens.every(token => entry.search.includes(token)));
-  }
+  // Datalist-Text zuverlässig auflösen; Metadaten wie „geb.“ und Jahreszahlen stören nicht.
+  const matches = resolveTreePersonSearch(rawQuery);
   if (matches.length !== 1) {
     if (message) message.textContent = matches.length > 1
       ? `Mehrere Personen passen (${matches.length}). Bitte den vollständigen Vorschlag mit Geburtsjahr auswählen.`
