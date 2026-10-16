@@ -1,3 +1,4 @@
+// v309: Auswahl bestätigen lädt Personen, Familien und Kinderbeziehungen frisch aus Supabase und aktualisiert die Stammbaumansicht.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
@@ -8189,20 +8190,38 @@ if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
     if (treePersonConfirm) treePersonConfirm.disabled = !query.trim() || matches.length === 0;
   }, 140);
 });
-if (treePersonConfirm) treePersonConfirm.addEventListener("click", () => {
+if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
   const query = treeNormalizeName(treePersonSearch?.value || "");
   if (!query) return;
+  const message = document.getElementById("tree-message");
   const index = getTreePersonSearchIndex();
   const exact = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === query);
   const matches = exact.length ? exact : index.filter(entry => entry.search.split(/\s+/).some(token => token === query) || entry.search.includes(query));
-  if (matches.length === 1) {
-    setTreePersonSelection(matches[0].person.id, { confirmed: true });
-    if (treePersonConfirm) treePersonConfirm.disabled = true;
-  } else {
-    const message = document.getElementById("tree-message");
+  if (matches.length !== 1) {
     if (message) message.textContent = matches.length > 1
       ? `Mehrere Personen passen (${matches.length}). Bitte Vorname, Nachname oder Geburtsjahr genauer eingeben.`
       : "Keine eindeutige Person gefunden. Bitte einen Vorschlag aus der Liste auswählen oder genauer suchen.";
+    return;
+  }
+
+  const selectedId = matches[0].person.id;
+  treePersonConfirm.disabled = true;
+  if (message) message.textContent = "Stammbau-Daten werden aktualisiert …";
+  try {
+    // Beim Bestätigen nicht nur den bestehenden Browser-Zustand neu zeichnen,
+    // sondern Personen, Familien und Kinderbeziehungen erneut aus Supabase laden.
+    await loadStammbaumData();
+    if (!treePerson(selectedId)) throw new Error("Die ausgewählte Person ist in den aktualisierten Daten nicht mehr vorhanden.");
+    if (treePersonSearch) treePersonSearch.value = "";
+    fillTreePersonSelect("", selectedId);
+    setTreePersonSelection(selectedId, { confirmed: true });
+    fillTreeRelationshipSelects();
+    if (message) message.textContent = `Auswahl bestätigt und Stammbau-Daten aktualisiert: ${treePersonSearchText(treePerson(selectedId))}`;
+  } catch (err) {
+    if (message) message.textContent = `Aktualisierung fehlgeschlagen: ${err.message || err}`;
+    debugLog(`❌ Stammbaum-Aktualisierung: ${err.message || err}`);
+  } finally {
+    treePersonConfirm.disabled = !treePersonSearch?.value.trim();
   }
 });
 const treeZoomIn = document.getElementById("tree-zoom-in");
