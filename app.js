@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 319
+// Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
@@ -8236,17 +8236,27 @@ if (treePersonSearch) treePersonSearch.addEventListener("input", () => {
   treeSearchDebounce = setTimeout(() => {
     fillTreePersonSelect(query, "");
     const normalized = treeNormalizeName(query);
-    const matches = getTreePersonSearchIndex().filter(entry => normalized && entry.search.includes(normalized));
-    if (treePersonConfirm) treePersonConfirm.disabled = !query.trim() || matches.length === 0;
+    const tokens = normalized.split(/\s+/).filter(Boolean);
+    const matches = getTreePersonSearchIndex().filter(entry => tokens.length && tokens.every(token => entry.search.includes(token)));
+    if (treePersonConfirm) treePersonConfirm.disabled = !tokens.length || matches.length === 0;
   }, 140);
 });
 if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
   const query = treeNormalizeName(treePersonSearch?.value || "");
+  const selectedFromDropdown = treeSelect?.value || "";
+  if (!query && selectedFromDropdown && treePerson(selectedFromDropdown)) {
+    setTreePersonSelection(selectedFromDropdown, { confirmed: true });
+    if (treePersonSearch) treePersonSearch.value = "";
+    treePersonConfirm.disabled = true;
+    return;
+  }
   if (!query) return;
   const message = document.getElementById("tree-message");
   const index = getTreePersonSearchIndex();
+  const tokens = query.split(/\s+/).filter(Boolean);
+  // Reihenfolgeunabhängig suchen: „Ganahl Albert“ findet auch „Albert Ganahl“.
   const exact = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === query);
-  const matches = exact.length ? exact : index.filter(entry => entry.search.split(/\s+/).some(token => token === query) || entry.search.includes(query));
+  const matches = exact.length ? exact : index.filter(entry => tokens.length && tokens.every(token => entry.search.includes(token)));
   if (matches.length !== 1) {
     if (message) message.textContent = matches.length > 1
       ? `Mehrere Personen passen (${matches.length}). Bitte Vorname, Nachname oder Geburtsjahr genauer eingeben.`
