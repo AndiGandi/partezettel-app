@@ -3919,6 +3919,10 @@ async function synchronisiereTrauungsbuchBeiEhe(personAId, personBId) {
 document.getElementById("d-save-person-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-person-message");
   msg.textContent = "Speichere …";
+  // Elternauswahl vor dem allgemeinen Speichern sichern. Die allgemeinen
+  // Personendaten dürfen bereits gespeicherte Elternbeziehungen nicht verlieren.
+  const elternVaterId = document.getElementById("d-vater")?.value || null;
+  const elternMutterId = document.getElementById("d-mutter")?.value || null;
   const vorname = document.getElementById("d-vorname").value.trim();
   const nachname = document.getElementById("d-nachname").value.trim();
   if (!vorname || !nachname) {
@@ -3960,6 +3964,19 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     );
   } catch (err) {
     debugLog(`⚠️ Partnerschaftsende durch Tod: ${err.message || err}`);
+  }
+
+  // Elternbeziehungen nach dem Personendatensatz erneut absichern. Wenn beide
+  // Auswahlfelder leer sind, wird bewusst nichts an bestehenden Beziehungen
+  // geändert; das Löschen von Eltern erfolgt ausschließlich über „Eltern speichern“.
+  if (elternVaterId || elternMutterId) {
+    try {
+      await speichereElternZuKind(currentDetailPersonId, elternVaterId, elternMutterId);
+    } catch (err) {
+      msg.textContent = `Person gespeichert, Elternbeziehungen konnten nicht gesichert werden: ${err.message || err}`;
+      debugLog(`❌ Elternbeziehungen beim allgemeinen Speichern: ${err.message || err}`);
+      return;
+    }
   }
 
   // Lokalen Cache sofort aktualisieren, damit die Partnerschaftsanzeige
