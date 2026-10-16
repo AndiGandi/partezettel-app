@@ -1,4 +1,4 @@
-// v311: Stammbaum-Steuerung klar getrennt; vorgefertigte Stammlinie steht oberhalb der Personenauswahl. Auswahl bestätigen lädt Personen, Familien und Kinderbeziehungen frisch aus Supabase und aktualisiert die Stammbaumansicht.
+// v312: Gawatsch-Linie startet bei Rosina Mangeng geb. Schuler und zeigt ihren Partner Josef Mangeng; Ledigenname wird in Stammbaumkarten immer angezeigt, wenn hinterlegt.
 // v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
 // v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
 // v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
@@ -7023,7 +7023,7 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
       : "";
   const ledigenname = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
   const nachname = String(person.nachname || "").trim();
-  const maidenLabel = ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")
+  const maidenLabel = ledigenname
     ? ` <span class="tree-node__maiden-name">(geb. ${escTree(ledigenname)})</span>` : "";
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
@@ -8153,13 +8153,15 @@ function applyTreeLinePreset(value) {
   const select = document.getElementById("tree-person-select");
   const search = document.getElementById("tree-person-search");
   const presets = {
-    "gawatsch-linie": { tokens: ["luise"], direction: "paternal", label: "Gawatsch Linie" },
+    "gawatsch-linie": { personType: "mangeng-couple", direction: "both", label: "Gawatsch Linie" },
     "reinhard-linie": { tokens: ["hubert"], direction: "both", label: "Reinhard Linie" },
     "fall-linie": { tokens: ["luise"], direction: "maternal", label: "Fall Linie" }
   };
   const preset = presets[value];
   if (!preset) return;
-  const root = treeFindPresetPerson(preset.tokens, "Ganahl");
+  const root = preset.personType === "mangeng-couple"
+    ? treeFindMangengRosina()
+    : treeFindPresetPerson(preset.tokens, "Ganahl");
   if (!root) {
     if (message) message.textContent = `Ausgangspunkt für „${preset.label}“ konnte nicht eindeutig gefunden werden. Bitte Personendaten prüfen.`;
     return;
