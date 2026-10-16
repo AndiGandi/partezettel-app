@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Partezettel Archiv</title>
-    <!-- Version 301 -->
+    <!-- Version 302 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
-<link rel="stylesheet" href="style.css?v=301">
+<link rel="stylesheet" href="style.css?v=302">
 </head>
 <body>
 
@@ -31,7 +31,7 @@
 <div id="app-shell" hidden>
 <header class="app-header">
   <h1>Partezettel Archiv</h1>
-  <p id="app-version" class="app-header__version">Version 301</p>
+  <p id="app-version" class="app-header__version">Version 302</p>
   <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
@@ -42,6 +42,7 @@
   <button class="tab-btn" data-tab="erfassen" role="tab" aria-selected="false">Ersteingabe</button>
   <button class="tab-btn" data-tab="fotos" role="tab" aria-selected="false">Gruppenfoto</button>
   <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export / Sicherung</button>
+  <button class="tab-btn" data-tab="hilfe" role="tab" aria-selected="false">Hilfe / Kurzanleitung</button>
 </nav>
 
 <main>
@@ -336,6 +337,70 @@
       <div id="gruppenfoto-liste" class="detail-media-list"></div>
       <p id="gruppenfoto-leer" class="list-empty">Noch keine Fotos.</p>
     </fieldset>
+  </section>
+
+  <!-- ===================== TAB: HILFE ===================== -->
+  <section id="tab-hilfe" class="tab-panel">
+    <div class="field-group" style="padding:1rem;border-radius:14px;">
+      <h2 style="margin-top:0;">Hilfe zum Partezettel Archiv</h2>
+      <p>Hier findest du eine einfache Erklärung der Bereiche und eine Kurzanleitung für die wichtigsten Arbeitsschritte.</p>
+      <h3>Kurzanleitung</h3>
+      <ol style="padding-left:1.4rem;line-height:1.65;">
+        <li><strong>Person neu erfassen:</strong> Öffne <em>Ersteingabe</em>, trage mindestens Vorname und Nachname ein und ergänze bekannte Daten.</li>
+        <li><strong>Foto hinzufügen:</strong> Nimm ein Foto des Partezettels auf oder wähle eines aus deiner Fotomediathek. Wähle bei Bedarf das Schlüsselfoto für den Stammbaum.</li>
+        <li><strong>Speichern:</strong> Speichere die Person. Wenn du eine Verwandtschaft oder einen bereits erfassten Partner zuordnen möchtest, nutze die entsprechenden Felder.</li>
+        <li><strong>Person finden:</strong> Öffne <em>Bestand</em> und suche nach einem Namen. Tippe eine Person an, um die große Bestandsansicht zu öffnen.</li>
+        <li><strong>Person ergänzen:</strong> In der Personenansicht kannst du die Angaben prüfen und über <em>Bearbeiten</em> ändern. Speichere deine Änderungen.</li>
+        <li><strong>Stammbaum ansehen:</strong> Öffne <em>Stammbaum</em>, suche eine Ausgangsperson und wähle die gewünschte Darstellung. Mit „+“ und „−“ passt du die Vergrößerung an.</li>
+        <li><strong>Daten sichern:</strong> Öffne regelmäßig <em>Export / Sicherung</em> und erstelle ein vollständiges iCloud-Backup. Bewahre die Datei sicher auf.</li>
+      </ol>
+      <p style="padding:.75rem;border-radius:10px;background:var(--surface-secondary,#f3f3f3);"><strong>Wichtiger Hinweis:</strong> Ein Export ist nicht dasselbe wie ein Backup. Für eine Sicherung mit Fotos und Sprachnotizen verwende „Backup für iCloud erstellen“.</p>
+    </div>
+
+    <div class="field-group" style="padding:1rem;border-radius:14px;">
+      <h3 style="margin-top:0;">Die Bereiche im Überblick</h3>
+      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
+        <summary><strong>Bestand</strong></summary>
+        <p>Hier findest und durchsuchst du bereits gespeicherte Personen. Nutze das Suchfeld, um Namen zu finden. Tippe auf einen Eintrag, um die große Bestandsansicht mit Lebensdaten, Familienbeziehungen, Kirchenbuchangaben, Fotos und vorhandenen Sprachnotizen zu öffnen. Über die Bearbeitungsfunktion kannst du Personendaten ergänzen.</p>
+      </details>
+      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
+        <summary><strong>Stammbaum</strong></summary>
+        <p>Wähle eine Ausgangsperson über das Suchfeld. Der Stammbaum zeigt die gespeicherten Familienbeziehungen. Du kannst zwischen Kartenansicht und klassischem Stammbaum wechseln, hinein- und herauszoomen und die Ansicht zurücksetzen. Über „Verwandtschaft“ kannst du zwei Personen auswählen und ihren Verwandtschaftsweg ermitteln.</p>
+      </details>
+      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
+        <summary><strong>Ersteingabe</strong></summary>
+        <p>Hier legst du eine neue Person an. Trage Namen und bekannte Geburts- oder Sterbedaten ein. Der Ledigenname kann ergänzt werden, wenn er vom späteren Familiennamen abweicht. Notizen, Kirchenbuch-Links, Fotos und – falls benötigt – erste Familienbeziehungen können ebenfalls erfasst werden. Nicht bekannte Daten lässt du leer.</p>
+      </details>
+      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
+        <summary><strong>Gruppenfoto</strong></summary>
+        <p>Hier verwaltest du Gruppenfotos, zum Beispiel Familienfeiern. Du kannst eine Bezeichnung und ein Aufnahmedatum ergänzen und Personen auf dem Foto zuordnen. Die Markierungen helfen dabei, einzelne Personen auf dem Bild wiederzufinden. Normale Einzelfotos werden hier nicht als Gruppenfotos verwaltet.</p>
+      </details>
+      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
+        <summary><strong>Export / Sicherung</strong></summary>
+        <p>Erstelle ein vollständiges Backup für iCloud, das Datenbankdaten, Fotos und Sprachnotizen enthält. Lege die erzeugte Datei anschließend in der Dateien-App an einem sicheren Ort ab. Zusätzlich kannst du Daten als JSON, GEDCOM oder PDF exportieren. Ein Export ersetzt kein vollständiges Backup.</p>
+      </details>
+      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
+        <summary><strong>Große Bestandsansicht einer Person</strong></summary>
+        <p>Die Ansicht zeigt die wichtigsten Angaben zu einer Person, darunter Eltern, Ehepartner, Kinder bzw. Familienbeziehungen, Kirchenbuchquellen und Fotos, sofern entsprechende Daten vorhanden sind. Hier lassen sich auch zugeordnete Sprachnotizen anhören und – sofern die Aufnahmefunktion an dieser Stelle verfügbar ist – neue Notizen aufnehmen. Bereiche ohne Daten werden teilweise ausgeblendet.</p>
+      </details>
+      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
+        <summary><strong>Weiterführende Links und Quellen</strong></summary>
+        <p>Kirchenbuch-Links können mit der Person verknüpft werden. Weiterführende Quellen wie Verlustlisten oder Kriegsgefangenschaftsverzeichnisse können – sofern die Funktion in der installierten Version verfügbar und eingerichtet ist – mit Titel und Webadresse hinterlegt werden. Externe Links öffnen die jeweilige Internetseite.</p>
+      </details>
+    </div>
+
+    <div class="field-group" style="padding:1rem;border-radius:14px;">
+      <h3 style="margin-top:0;">Tipps und Sicherheit</h3>
+      <ul style="padding-left:1.25rem;line-height:1.65;">
+        <li>Speichere nur Angaben, die du belegen kannst. Bei unvollständigen historischen Daten lieber Felder leer lassen und Unsicherheiten in der Notiz erläutern.</li>
+        <li>Kontrolliere bei Ehepartnern den Ledigenname und die bekannten Ehe- bzw. Lebensdaten.</li>
+        <li>Prüfe nach größeren Ergänzungen, ob Fotos und Familienbeziehungen richtig zugeordnet sind.</li>
+        <li>Erstelle regelmäßig ein vollständiges Backup und bewahre es getrennt vom Gerät auf.</li>
+        <li>Lösche Personen nur, wenn du sicher bist. Eine Löschung kann auch zugehörige Fotos, Sprachnotizen und Beziehungen betreffen.</li>
+        <li>Wenn auf iPhone oder iPad eine Änderung scheinbar fehlt, lade die Ansicht neu und kontrolliere die Verbindung, bevor du Daten erneut eingibst.</li>
+      </ul>
+      <p class="capture-status">Die verfügbaren Funktionen können sich je nach installierter App-Version unterscheiden.</p>
+    </div>
   </section>
 
   <!-- ===================== TAB: EXPORT ===================== -->
@@ -643,6 +708,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=301"></script>
+<script src="app.js?v=302"></script>
 </body>
 </html>
