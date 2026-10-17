@@ -1514,3 +1514,57 @@ select[name*="Year"] {
 #tab-liste #refresh-btn{grid-column:2;grid-row:1}
 #tab-liste .personen-suchtreffer{grid-column:1/-1;grid-row:2;text-align:left;font-size:.9rem}
 #tab-liste .personen-suchtreffer:empty{display:none}
+
+/* Familienspuren v333 – Stammbaum: Bedienbereich, Generationen und Karten im Home-Design */
+#tab-stammbaum .tree-controls{background:#fff;border:1px solid #d8e0d8;border-radius:18px;padding:1.05rem 1.15rem;box-shadow:0 2px 10px rgba(23,79,59,.05);margin:0 0 1rem}
+#tab-stammbaum .tree-controls__grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:1rem 1.3rem;align-items:start}
+#tab-stammbaum .tree-controls__person{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.35rem .6rem;align-items:end}
+#tab-stammbaum .tree-controls__person .tree-person-hint{grid-column:1/-1;display:block;margin:0;color:#65756b;font-size:.76rem;line-height:1.4}
+#tab-stammbaum .tree-controls__person .btn,#tab-stammbaum .tree-controls__actions .btn{min-height:46px}
+#tab-stammbaum .tree-controls__preset .field{margin:0}
+#tab-stammbaum .tree-controls__actions{display:flex;flex-wrap:wrap;align-items:center;gap:.6rem;margin-top:1rem;padding-top:1rem;border-top:1px solid #e5ece3}
+#tab-stammbaum .tree-controls__actions .tree-view-switch{display:inline-flex;gap:.2rem;margin:0 0 0 auto;padding:.2rem;border:1px solid #cbdacb;border-radius:13px;background:#edf3eb}
+#tab-stammbaum .tree-controls__actions .tree-view-switch .btn{width:auto;min-height:40px;border:0;background:transparent;color:#315b49;box-shadow:none}
+#tab-stammbaum .tree-controls__actions .tree-view-switch .btn.is-active{background:#174f3b;color:#fff;box-shadow:0 2px 6px rgba(16,61,46,.2)}
+#tab-stammbaum #tree-message{margin:.7rem 0 0;text-align:left;font-size:.82rem;color:#55745e}
+#tab-stammbaum #tree-message:empty{display:none}
+#tab-stammbaum .tree-relationship-panel{border-color:#d8e0d8;border-radius:15px;background:#fff;box-shadow:0 2px 8px rgba(23,79,59,.045)}
+#tab-stammbaum .tree-relationship-panel__header strong{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;color:#174f3b}
+
+#tab-stammbaum .tree-viewport-bar{display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin:0 0 .55rem}
+#tab-stammbaum .tree-viewport-bar__hint{font-size:.78rem;color:#65756b}
+#tab-stammbaum .tree-zoom-controls{margin:0;padding:.2rem;gap:.1rem;border:1px solid #cbdacb;border-radius:999px;background:#fff;box-shadow:0 1px 4px rgba(23,79,59,.06)}
+#tab-stammbaum .tree-zoom-controls .btn{min-width:40px;min-height:40px;padding:0;border:0;border-radius:999px;background:transparent;color:#174f3b;font-size:1.1rem}
+#tab-stammbaum .tree-zoom-controls .btn:hover{background:#edf3eb}
+#tab-stammbaum #tree-zoom-value{min-width:3.2rem;text-align:center;font-size:.8rem;font-weight:600;color:#315b49}
+#tab-stammbaum .tree-viewport{border:1px solid #d3ddd1;border-radius:18px;background:linear-gradient(180deg,#f9faf6 0%,#eef3ec 100%);box-shadow:inset 0 1px 5px rgba(23,79,59,.05)}
+
+#tab-stammbaum .tree-line-legend{border-color:#d3ddd1;background:#fff;color:#55745e;box-shadow:0 1px 4px rgba(23,79,59,.07)}
+#tab-stammbaum .tree-deep-generation{position:relative;display:flex;flex-direction:column;align-items:center;gap:.6rem}
+#tab-stammbaum .tree-deep-generation__label{display:flex;align-items:center;gap:.7rem;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.7rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#55745e}
+#tab-stammbaum .tree-deep-generation__label::before,#tab-stammbaum .tree-deep-generation__label::after{content:"";width:2.4rem;height:1px;background:#c9d7c8}
+#tab-stammbaum .tree-deep-generation+.tree-deep-generation::before{content:"";position:absolute;top:-1.55rem;left:50%;width:2px;height:1.2rem;transform:translateX(-50%);border-radius:2px;background:#c9d7c8}
+
+#tab-stammbaum .tree-node{color:#263d30;background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(23,79,59,.07);font-family:inherit;-webkit-appearance:none;appearance:none}
+#tab-stammbaum .tree-node__name{color:#263d30;font-weight:600}
+#tab-stammbaum .tree-node__years{color:#6c746d}
+#tab-stammbaum .tree-node__maiden-name{color:#6c746d;font-size:.82em}
+#tab-stammbaum .tree-node__photo,#tab-stammbaum .tree-node__placeholder{border:2px solid #e0e8df;box-shadow:0 1px 3px rgba(23,79,59,.08)}
+#tab-stammbaum .tree-node__placeholder{background:#edf3ec;color:#52715d}
+#tab-stammbaum .tree-node--root{background:#f1f7f2;box-shadow:0 0 0 4px rgba(23,79,59,.14),0 8px 20px rgba(23,79,59,.18)}
+@media(hover:hover){#tab-stammbaum .tree-node{transition:transform .15s ease,box-shadow .15s ease}#tab-stammbaum .tree-node:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(23,79,59,.15)}}
+#tab-stammbaum .tree-relationship .tree-partner-link{flex:0 0 2px;width:30px;height:2px;border-radius:2px;background:#9db9a5}
+#tab-stammbaum .tree-marriage__label,#tab-stammbaum .tree-relationship>span:not(.tree-partner-link){font-size:.68rem;color:#66756a}
+
+@media(max-width:700px){
+  #tab-stammbaum .tree-controls{padding:.9rem .85rem;border-radius:15px}
+  #tab-stammbaum .tree-controls__grid,#tab-stammbaum .tree-controls__person{grid-template-columns:minmax(0,1fr)}
+  #tab-stammbaum .tree-controls__person .btn{width:100%}
+  #tab-stammbaum .tree-controls__actions .btn:not(.tree-view-switch .btn){flex:1 1 100%}
+  #tab-stammbaum .tree-controls__actions .tree-view-switch{width:100%;margin:0}
+  #tab-stammbaum .tree-controls__actions .tree-view-switch .btn{flex:1}
+  #tab-stammbaum .tree-viewport-bar__hint{display:none}
+  #tab-stammbaum .tree-viewport-bar{justify-content:flex-end}
+}
+#tab-stammbaum .tree-controls .field{margin:0}
+#tab-stammbaum .tree-controls__actions .tree-view-switch:not(:has(#tree-view-classic:not([hidden]))){display:none}
