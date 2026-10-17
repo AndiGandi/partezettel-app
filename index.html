@@ -10,7 +10,7 @@
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Partezettel">
+<meta name="apple-mobile-web-app-title" content="Familienspuren">
 <link rel="stylesheet" href="style.css?v=322">
 <style>
   .login-card--familienspuren { text-align: center; }
@@ -50,10 +50,25 @@
 </div>
 
 <div id="app-shell" hidden>
-<header class="app-header">
-  <h1>Partezettel Archiv</h1>
+<header class="app-header app-header--familienspuren">
+  <div class="app-brand-mark" aria-hidden="true">
+    <svg viewBox="0 0 120 88" focusable="false">
+      <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M60 18 L30 42 L60 66 L90 42 Z" />
+        <path d="M30 42 L60 42 L90 42 M60 18 L60 42 L60 66" />
+      </g>
+      <g fill="currentColor" stroke="var(--paper)" stroke-width="2.5">
+        <circle cx="60" cy="18" r="8"/><circle cx="30" cy="42" r="8"/>
+        <circle cx="90" cy="42" r="8"/><circle cx="60" cy="66" r="8"/>
+        <circle cx="60" cy="42" r="7"/>
+      </g>
+    </svg>
+  </div>
+  <div class="app-brand-copy">
+    <h1>Familienspuren</h1>
+    <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
+  </div>
   <p id="app-version" class="app-header__version">Version 322</p>
-  <p class="app-header__subtitle">Erinnerungen sammeln und bewahren</p>
   <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
 
