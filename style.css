@@ -1665,3 +1665,19 @@ details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
 #tab-stammbaum .tree-classic-node--spouse .tree-node{border-color:#d8e0d8}
 #tab-stammbaum .tree-classic-node--root .tree-node,#tab-stammbaum .tree-classic-node--family-root .tree-node{background:#f1f7f2;box-shadow:0 0 0 4px rgba(23,79,59,.14),0 8px 20px rgba(23,79,59,.18)}
 @media(max-width:700px){#tab-stammbaum .tree-controls__actions .tree-view-switch{display:grid;grid-template-columns:1fr 1fr;width:100%}}
+
+/* Familienspuren v340 – gemeinsame Personenauswahl (Suchfeld + Trefferliste) */
+.person-picker{position:relative}
+.person-picker__field{position:relative}
+.person-picker .person-picker__input{width:100%;padding-right:2.7rem}
+.person-picker .person-picker__input.is-gewaehlt{background:#f1f7f2;border-color:#9db9a5}
+.person-picker__clear{position:absolute;right:.4rem;top:50%;transform:translateY(-50%);width:34px;height:34px;min-width:34px;min-height:34px;padding:0;border:0;border-radius:10px;background:transparent;color:#55745e;font-size:1.05rem;line-height:1;cursor:pointer}
+.person-picker__clear:hover{background:#edf3eb}
+.person-picker__clear[hidden]{display:none}
+.person-picker__select{display:none !important}
+.tree-suggest.is-oben{top:auto;bottom:calc(100% + 4px)}
+.tree-suggest__item.is-active{background:#edf3eb}
+.person-picker .person-picker__input{padding-right:2.9rem !important}
+.person-picker .person-picker__input.is-gewaehlt{background:#f1f7f2 !important;border-color:#9db9a5 !important}
+.parent-link-field > .person-picker{grid-column:1 / -1}
+.parent-link-field:has(> .person-picker:not([hidden])) .parent-edit-btn{display:none}

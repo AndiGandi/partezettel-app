@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 339 -->
+    <!-- Version 340 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=339">
+<link rel="stylesheet" href="style.css?v=340">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -68,7 +68,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 339</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 340</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -92,17 +92,17 @@
 
         <label class="field">
           <span>Vorname *</span>
-          <input type="text" id="vorname" required>
+          <input type="text" id="vorname" required autocapitalize="words" autocorrect="off" spellcheck="false" autocomplete="off">
         </label>
 
         <label class="field">
           <span>Nachname (falls bekannt)</span>
-          <input type="text" id="nachname">
+          <input type="text" id="nachname" autocapitalize="words" autocorrect="off" spellcheck="false" autocomplete="off">
         </label>
 
         <label class="field">
           <span>Ledigenname (falls abweichend)</span>
-          <input type="text" id="ledigenname" placeholder="z. B. Geburtsname vor der Heirat">
+          <input type="text" id="ledigenname" placeholder="z. B. Geburtsname vor der Heirat" autocapitalize="words" autocorrect="off" spellcheck="false" autocomplete="off">
         </label>
 
         <label class="field">
@@ -256,7 +256,7 @@
   <!-- ===================== TAB: PERSONEN-LISTE ===================== -->
   <section id="tab-liste" class="tab-panel is-active">
     <div class="list-toolbar">
-      <input type="search" id="search-input" placeholder="Person suchen …" autocomplete="off" oninput="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)" onkeyup="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)">
+      <input type="search" id="search-input" placeholder="Person suchen …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" oninput="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)" onkeyup="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)">
       <span id="personen-suchtreffer" class="personen-suchtreffer" aria-live="polite"></span>
       <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
     </div>
@@ -285,7 +285,7 @@
       <div class="tree-controls__grid">
         <div class="tree-controls__person">
           <div class="tree-suggest-wrap"><label class="field"><span>Ausgangsperson</span>
-            <input type="search" id="tree-person-search" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" aria-describedby="tree-person-hint">
+            <input type="search" id="tree-person-search" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" aria-describedby="tree-person-hint">
           </label></div>
           <button type="button" id="tree-person-confirm" class="btn btn--primary">Auswahl bestätigen</button>
           <small id="tree-person-hint" class="tree-person-hint">Name eingeben, passenden Vorschlag wählen und anschließend bestätigen. Geburts- und Sterbejahr helfen bei der Auswahl.</small>
@@ -329,7 +329,7 @@
       <div class="tree-relationship-fields">
         <div class="tree-relation-field">
           <div class="tree-suggest-wrap"><label class="field"><span>Person 1</span>
-            <input type="search" id="tree-relation-search-a" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off">
+            <input type="search" id="tree-relation-search-a" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
           </label></div>
           <small id="tree-relation-hint-a" class="tree-relation-hint" aria-live="polite"></small>
           <select id="tree-relation-person-a" aria-label="Person 1" hidden><option value="">— Person auswählen —</option></select>
@@ -337,7 +337,7 @@
         <button type="button" id="tree-relation-swap" class="btn btn--ghost tree-relation-swap" aria-label="Person 1 und Person 2 tauschen" title="Personen tauschen">⇄</button>
         <div class="tree-relation-field">
           <div class="tree-suggest-wrap"><label class="field"><span>Person 2</span>
-            <input type="search" id="tree-relation-search-b" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off">
+            <input type="search" id="tree-relation-search-b" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
           </label></div>
           <small id="tree-relation-hint-b" class="tree-relation-hint" aria-live="polite"></small>
           <select id="tree-relation-person-b" aria-label="Person 2" hidden><option value="">— Person auswählen —</option></select>
@@ -405,7 +405,7 @@
           <span>Personen auf dem Foto *</span>
           <strong id="gruppenfoto-personen-anzahl">0 ausgewählt</strong>
         </div>
-        <input type="search" id="gruppenfoto-personen-suche" class="gruppenfoto-personen-suche" placeholder="Person suchen …" autocomplete="off">
+        <input type="search" id="gruppenfoto-personen-suche" class="gruppenfoto-personen-suche" placeholder="Person suchen …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
         <div id="gruppenfoto-personen-liste" class="gruppenfoto-personen-liste" aria-label="Personen auswählen"></div>
       </div>
       <p class="capture-status">Mehrere Personen können bereits beim ersten Anlegen ausgewählt werden. Unbekannte Personen können anschließend direkt am Foto ergänzt werden.</p>
@@ -570,9 +570,9 @@
         <legend>Person</legend>
         <div class="person-name-keyphoto-row">
           <div class="person-name-fields">
-            <label class="field"><span>Vorname *</span><input type="text" id="d-vorname"></label>
-            <label class="field"><span>Nachname (falls bekannt)</span><input type="text" id="d-nachname"></label>
-            <label class="field"><span>Ledigenname</span><input type="text" id="d-ledigenname"></label>
+            <label class="field"><span>Vorname *</span><input type="text" id="d-vorname" autocapitalize="words" autocorrect="off" spellcheck="false" autocomplete="off"></label>
+            <label class="field"><span>Nachname (falls bekannt)</span><input type="text" id="d-nachname" autocapitalize="words" autocorrect="off" spellcheck="false" autocomplete="off"></label>
+            <label class="field"><span>Ledigenname</span><input type="text" id="d-ledigenname" autocapitalize="words" autocorrect="off" spellcheck="false" autocomplete="off"></label>
             <label class="field"><span>Geschlecht *</span><select id="d-geschlecht"><option value="">— bitte wählen —</option><option value="männlich">männlich</option><option value="weiblich">weiblich</option></select></label>
           </div>
           <div id="d-schluesselfoto-vorschau" class="person-keyphoto-preview" aria-label="Schlüsselfoto">
@@ -749,7 +749,7 @@
       </div>
       <div class="foto-personen-controls">
         <label class="field"><span>Person hinzufügen</span>
-          <input type="search" id="foto-person-suche" class="foto-person-suche" placeholder="Name tippen – Treffer antippen zum Hinzufügen …" autocomplete="off">
+          <input type="search" id="foto-person-suche" class="foto-person-suche" placeholder="Name tippen – Treffer antippen zum Hinzufügen …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
           <div id="foto-person-suchergebnisse" class="foto-person-suchergebnisse" role="listbox" aria-label="Personen suchen"></div>
           <select id="foto-person-auswahl" hidden aria-hidden="true"><option value="">— Person auswählen —</option></select>
         </label>
@@ -789,6 +789,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=339"></script>
+<script src="app.js?v=340"></script>
 </body>
 </html>

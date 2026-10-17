@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 339
+// Partezettel Archiv – Version 340
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -18,6 +18,133 @@
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
+
+
+// ======================================================================
+// v340: Gemeinsames Modul für Namenssuche, Anzeige und Sortierung.
+// Alle Personenfelder (Bestand, Stammbaum, Verwandtschaft, Gruppenfoto, Foto-Personen,
+// Eltern-/Partner-/Kind-Auswahl) nutzen dieselben Regeln – auf iPad, iPhone, Mac und Android gleich.
+// ======================================================================
+const PersonSuche = (() => {
+  // Vereinheitlicht Eingabe und Daten: Groß/Klein, Umlaute, ß, ae/oe/ue, Bindestriche, Apostrophe.
+  function normalisiere(wert) {
+    return String(wert ?? "")
+      .toLocaleLowerCase("de-DE")
+      .replace(/ß/g, "ss")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/['’`´]/g, "")
+      .replace(/ae/g, "a").replace(/oe/g, "o").replace(/ue/g, "u")
+      .replace(/[\u2010-\u2015_\/-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  // Suchbegriffe: Kommas, Klammern, Punkte, „geb./gest.“ werden ignoriert (ganzes Wort, nicht „Gebhard“).
+  function zerlege(wert, ohneJahre = false) {
+    let t = normalisiere(wert).replace(/\b(geb|geboren|gest|gestorben)\.?(?![a-z0-9])/g, " ");
+    if (ohneJahre) t = t.replace(/\b\d{4}\b/g, " ");
+    return t.replace(/[(),.;:*†]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  }
+
+  const deDatum = (d) => { const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}.${m[2]}.${m[1]}` : ""; };
+  const jahrVon = (datum, jahr) => (datum ? String(datum).slice(0, 4) : (jahr ? String(jahr) : ""));
+  const ledigVon = (p) => String(p?.Ledigenname || p?.ledigenname || p?.geburtsname || "").trim();
+
+  function jahre(p) {
+    const g = jahrVon(p?.geburtsdatum, p?.geburtsjahr);
+    const s = jahrVon(p?.sterbedatum, p?.sterbejahr);
+    return g && s ? `${g} – ${s}` : (g ? `geb. ${g}` : (s ? `gest. ${s}` : ""));
+  }
+  function nameOhneLedig(p) {
+    return [p?.vorname, p?.nachname].map((x) => String(x || "").trim()).filter(Boolean).join(" ");
+  }
+  function name(p) {
+    const n = nameOhneLedig(p) || (ledigVon(p) ? "" : "(unbekannte Person)");
+    const l = ledigVon(p);
+    return l ? `${n ? n + " " : ""}(geb. ${l})` : n;
+  }
+  // Einheitliches Einzeilen-Format für Felder und Listen: „Vorname Nachname (geb. X) · 1880 – 1960“
+  function label(p) {
+    if (!p) return "(unbekannte Person)";
+    const j = jahre(p);
+    return j ? `${name(p)} · ${j}` : name(p);
+  }
+  // Einheitliches Zweizeilen-Format für Trefferlisten
+  function anzeige(p) {
+    return {
+      name: nameOhneLedig(p) || (ledigVon(p) ? "" : "(unbekannte Person)"),
+      ledig: ledigVon(p),
+      daten: (typeof fotoPersonJahrDatumAnzeige === "function" ? fotoPersonJahrDatumAnzeige(p) : jahre(p)) || jahre(p)
+    };
+  }
+
+  const sortSchluessel = (p) => String(p?.nachname || p?.Ledigenname || p?.ledigenname || p?.geburtsname || "").trim();
+  // Eine Sortierung für alle: Nachname (ersatzweise Ledigenname), Vorname, Geburtsjahr; ohne Namen zuletzt.
+  function sort(a, b) {
+    const ka = sortSchluessel(a);
+    const kb = sortSchluessel(b);
+    if (!ka && kb) return 1;
+    if (ka && !kb) return -1;
+    const n = ka.localeCompare(kb, "de", { sensitivity: "base" });
+    if (n) return n;
+    const v = String(a?.vorname || "").trim().localeCompare(String(b?.vorname || "").trim(), "de", { sensitivity: "base" });
+    if (v) return v;
+    const ay = Number(jahrVon(a?.geburtsdatum, a?.geburtsjahr)) || 0;
+    const by = Number(jahrVon(b?.geburtsdatum, b?.geburtsjahr)) || 0;
+    if (ay && by && ay !== by) return ay - by;
+    if (ay && !by) return -1;
+    if (!ay && by) return 1;
+    return String(a?.id || "").localeCompare(String(b?.id || ""));
+  }
+
+  const cache = new WeakMap();
+  function eintrag(person) {
+    const sig = [person.vorname, person.nachname, person.Ledigenname, person.ledigenname, person.geburtsname,
+      person.geburtsdatum, person.geburtsjahr, person.sterbedatum, person.sterbejahr].join("\u0001");
+    const vorhanden = cache.get(person);
+    if (vorhanden && vorhanden.sig === sig) return vorhanden;
+    const lab = label(person);
+    const e = {
+      person, sig, label: lab, labelNorm: normalisiere(lab),
+      search: normalisiere([person.vorname, person.nachname, person.Ledigenname, person.ledigenname, person.geburtsname,
+        person.geburtsdatum, deDatum(person.geburtsdatum), person.geburtsjahr,
+        person.sterbedatum, deDatum(person.sterbedatum), person.sterbejahr]
+        .filter((v) => v !== null && v !== undefined && String(v).trim() !== "").join(" ")),
+      names: normalisiere(`${person.vorname || ""} ${person.nachname || ""} ${ledigVon(person)}`),
+      nachVor: normalisiere(`${person.nachname || ""} ${person.vorname || ""}`)
+    };
+    cache.set(person, e);
+    return e;
+  }
+
+  function eintraegeVon(personen) {
+    return [...(personen || [])].sort(sort).map(eintrag);
+  }
+
+  function trifft(person, suchwert, extra = "") {
+    const tokens = Array.isArray(suchwert) ? suchwert : zerlege(suchwert);
+    if (!tokens.length) return true;
+    const e = eintrag(person);
+    const heu = extra ? `${e.search} ${normalisiere(extra)}` : e.search;
+    return tokens.every((t) => heu.includes(t));
+  }
+
+  // Treffer nach Eintrag-Liste (vorsortiert): Namensanfang zuerst, danach Teiltreffer.
+  function suche(eintraege, suchwert, { max = 100 } = {}) {
+    const tokens = zerlege(suchwert);
+    if (!tokens.length) return { total: 0, entries: [], tokens };
+    const erste = tokens[0];
+    const treffer = [];
+    for (const e of eintraege) {
+      if (tokens.every((t) => e.search.includes(t))) treffer.push(e);
+    }
+    const rang = (e) => ((e.names.startsWith(erste) || e.nachVor.startsWith(erste)) ? 0 : (e.names.split(" ").some((w) => w.startsWith(erste)) ? 1 : 2));
+    const geordnet = treffer.map((e, i) => ({ e, i, r: rang(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map((x) => x.e);
+    return { total: geordnet.length, entries: geordnet.slice(0, max), tokens };
+  }
+
+  return { normalisiere, zerlege, jahre, name, label, anzeige, sort, sortSchluessel, eintrag, eintraegeVon, trifft, suche };
+})();
 
 // ---------- Sichtbares Debug-Log (funktioniert ohne Mac/Web-Inspector) ----------
 function debugLog(msg) {
@@ -1116,12 +1243,23 @@ const erstPartnerVorhanden = document.getElementById("erst-partner-vorhanden");
 const erstPartnerschaftArt = document.getElementById("erst-partnerschaft-art");
 let erstPartnerPersonenGeladen = false;
 let erstPartnerFamilienCache = null;
+// v340: Eine Datenquelle für alle Personenlisten: der Bestands-Cache (mit Änderungsprüfung).
+let personenFrischAm = 0;
+async function ensurePersonenFrisch(maxAlterMs = 30000) {
+  const veraltet = !personenCacheGeladen || !Array.isArray(personenCache) || personenCache.length < 2 || (Date.now() - personenFrischAm) > maxAlterMs;
+  if (veraltet) {
+    try { await loadPersonen(); } catch (err) { debugLog(`⚠️ Personenliste aktualisieren: ${err.message || err}`); }
+    if (!Array.isArray(personenCache) || personenCache.length < 2) {
+      try { await loadPersonen(true); } catch (err) { debugLog(`⚠️ Personenliste vollständig laden: ${err.message || err}`); }
+    }
+    personenFrischAm = Date.now();
+  }
+  return Array.isArray(personenCache) ? personenCache : [];
+}
+
 async function ladeErstPartnerPersonen() {
   if (!erstPartnerVorhanden || erstPartnerPersonenGeladen) return;
-  const { data, error } = await sb.from("personen")
-    .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr")
-    .order("nachname").limit(5000);
-  if (error) throw error;
+  const data = await ensurePersonenFrisch();
 
   // Nur die kleinen Beziehungsfelder laden; keine Fotos oder Medien.
   if (!Array.isArray(erstPartnerFamilienCache)) {
@@ -1145,7 +1283,7 @@ async function ladeErstPartnerPersonen() {
   const kandidaten = (data || []).filter(person => person.id !== aktuell && !belegt.has(person.id))
     .sort(personenAuswahlSortierung);
   for (const person of kandidaten) {
-    erstPartnerVorhanden.appendChild(new Option(personenAuswahlText(person), person.id));
+    erstPartnerVorhanden.appendChild(personOption(person));
   }
   const hinweis = document.getElementById("erst-partner-hinweis");
   if (hinweis) hinweis.textContent = kandidaten.length
@@ -1162,10 +1300,9 @@ if (erstPartnerVorhanden) {
 async function ladeErstverwandtschaftPersonen() {
   if (!erstPerson) return;
   erstPerson.innerHTML = '<option value="">— Person auswählen —</option>';
-  const { data, error } = await sb.from("personen").select("id, vorname, nachname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname").limit(5000);
-  if (error) throw error;
-  erstRelationDaten.personen = data || [];
-  for (const person of erstRelationDaten.personen) erstPerson.appendChild(new Option(personenAuswahlText(person), person.id));
+  const personen = await ensurePersonenFrisch();
+  erstRelationDaten.personen = personen.slice().sort(PersonSuche.sort);
+  for (const person of erstRelationDaten.personen) erstPerson.appendChild(personOption(person));
 }
 async function aktualisiereErstverwandtschaft() {
   const typ = erstRelation?.value || "keine";
@@ -1408,6 +1545,7 @@ async function sendEintrag(eintrag, onProgress) {
       "Zeitüberschreitung beim Speichern der Person (Netzwerk antwortet nicht)"
     );
     if (personError) throw personError;
+    personenFrischAm = 0;   // v340: neue Person soll in allen Auswahllisten sofort verfügbar sein
 
     // Familienbeziehung nur nach erfolgreichem Personen-INSERT speichern.
     if (eintrag.erstverwandtschaftTyp && eintrag.erstverwandtschaftTyp !== "keine") {
@@ -1718,7 +1856,7 @@ function lebensalterAnzeige(person) {
   return `${nurSterbejahr ? "ca. " : ""}${jahre} Jahre`;
 }
 function sortierNachnameSchluessel(p) {
-  return String(p?.nachname || p?.Ledigenname || p?.ledigenname || "").trim();
+  return PersonSuche.sortSchluessel(p);
 }
 function sortierNameVergleich(a, b) {
   const ka = sortierNachnameSchluessel(a), kb = sortierNachnameSchluessel(b);
@@ -1774,37 +1912,11 @@ function personenVergleich(a, b) {
 }
 function sortierePersonen(personen) { return [...personen].sort(personenVergleich); }
 function personenAuswahlText(person) {
-  if (!person) return "(unbekannte Person)";
-  const nachname = String(person.nachname || "").trim();
-  const vorname = String(person.vorname || "").trim();
-  const name = [nachname, vorname].filter(Boolean).join(", ") || "(unbekannte Person)";
-  const ledigenname = String(person.Ledigenname || "").trim();
-  const geburtsjahr = person.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : (person.geburtsjahr ? String(person.geburtsjahr) : "");
-  const sterbejahr = person.sterbedatum ? String(person.sterbedatum).slice(0, 4) : (person.sterbejahr ? String(person.sterbejahr) : "");
-  let text = name;
-  if (ledigenname) {
-    text += ` (geb. ${ledigenname})`;
-  }
-  if (/^\d{4}$/.test(geburtsjahr)) text += ` (geb. ${geburtsjahr})`;
-  if (/^\d{4}$/.test(sterbejahr)) text += ` (gest. ${sterbejahr})`;
-  return text;
+  return PersonSuche.label(person);
 }
 
 function personenAuswahlSortierung(a, b) {
-  const an = String(a?.nachname || "").trim();
-  const bn = String(b?.nachname || "").trim();
-  const n = an.localeCompare(bn, "de", { sensitivity: "base" });
-  if (n) return n;
-  const av = String(a?.vorname || "").trim();
-  const bv = String(b?.vorname || "").trim();
-  const v = av.localeCompare(bv, "de", { sensitivity: "base" });
-  if (v) return v;
-  const ay = Number(a?.geburtsjahr || (a?.geburtsdatum ? String(a.geburtsdatum).slice(0,4) : 0)) || 0;
-  const by = Number(b?.geburtsjahr || (b?.geburtsdatum ? String(b.geburtsdatum).slice(0,4) : 0)) || 0;
-  if (ay && by) return ay - by;
-  if (ay) return -1;
-  if (by) return 1;
-  return String(a?.id || "").localeCompare(String(b?.id || ""));
+  return PersonSuche.sort(a, b);
 }
 
 function berechneFamilienSortKeys(personen,familien) {
@@ -2980,28 +3092,16 @@ const personenSortButton=document.getElementById("personen-sort-richtung");
 let personenSucheLauf = 0;
 
 function normalizePersonenSuchtext(value) {
-  return String(value ?? "")
-    .toLocaleLowerCase("de-DE")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .trim()
-    .replace(/\s+/g, " ");
+  return PersonSuche.normalisiere(value);
 }
 
 function personenSuchtext(p, extra = "") {
-  return normalizePersonenSuchtext(
-    [p?.vorname, p?.nachname, p?.Ledigenname, p?.ledigenname, p?.geburtsname,
-      p?.geburtsdatum, p?.geburtsjahr, p?.sterbedatum, p?.sterbejahr, extra]
-      .filter(v => v !== null && v !== undefined && String(v).trim() !== "")
-      .join(" ")
-  );
+  const e = PersonSuche.eintrag(p || {});
+  return extra ? `${e.search} ${PersonSuche.normalisiere(extra)}` : e.search;
 }
 
 function personenSuchTreffer(person, suchwert, extra = "") {
-  const tokens = normalizePersonenSuchtext(suchwert).split(" ").filter(Boolean);
-  if (!tokens.length) return true;
-  const haystack = personenSuchtext(person, extra);
-  return tokens.every(token => haystack.includes(token));
+  return PersonSuche.trifft(person || {}, suchwert, extra);
 }
 
 function wendePersonenSucheAn(suchwert) {
@@ -4018,6 +4118,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     Notiz: document.getElementById("d-notiz").value.trim() || null,
     weiterfuehrende_links: leseWeiterfuehrendeLinksEditor(),
   }).eq("id", currentDetailPersonId);
+  personenFrischAm = 0;   // v340: geänderte Namen sofort in allen Auswahllisten verwenden
   if (error) {
     msg.textContent = `Fehler: ${error.message}`;
     return;
@@ -4443,7 +4544,7 @@ function fuelleGruppenfotoPersonen() {
   });
   const bisher = gruppenfotoAuswahlIds;
   const suchtext = gruppenfotoPersonenSuche?.value || "";
-  const personen = (personenCache || []).slice().sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
+  const personen = (personenCache || []).slice().sort(PersonSuche.sort);
   const gefiltert = personen.filter(p => personenSuchTreffer(p, suchtext));
   gruppenfotoPersonenListe.innerHTML = gefiltert.map(p => {
     const anzeige = fotoPersonAnzeige(p);
@@ -4462,6 +4563,7 @@ function fuelleGruppenfotoPersonen() {
 }
 
 gruppenfotoPersonenSuche?.addEventListener("input", fuelleGruppenfotoPersonen);
+gruppenfotoPersonenSuche?.addEventListener("search", fuelleGruppenfotoPersonen);
 
 async function ladeGruppenfotoListe() {
   if (!gruppenfotoListe) return;
@@ -4684,10 +4786,9 @@ function renderFotoPersonAuswahl() {
   if (!fotoPersonAuswahl || !fotoPersonSuchergebnisse) return;
   const alle = fotoPersonAuswahl._alleVerfuegbarenPersonen || [];
   const suchtext = fotoPersonSuche?.value || "";
-  const gefiltert = normalizePersonenSuchtext(suchtext) ? alle.filter(p => {
-    const a = fotoPersonAnzeige(p);
-    return personenSuchTreffer(p, suchtext, a.daten || "");
-  }).slice(0, 30) : [];
+  const suchTokens = PersonSuche.zerlege(suchtext);
+  const alleTreffer = suchTokens.length ? alle.filter(p => PersonSuche.trifft(p, suchTokens, fotoPersonAnzeige(p).daten || "")).sort(PersonSuche.sort) : [];
+  const gefiltert = alleTreffer.slice(0, 50);
   const belegteNummern = new Map(
     fotoMarkierungen.filter(r => r.personen_id).map(r => [r.personen_id, r.nummer])
   );
@@ -4701,11 +4802,12 @@ function renderFotoPersonAuswahl() {
           ${anzeige.daten ? `<small>${escapeHtml(anzeige.daten)}</small>` : ""}
           ${nr ? `<small>Bereits auf dem Foto (Nr. ${nr})</small>` : `<span>＋ Hinzufügen</span>`}
         </button>`;
-      }).join("")
+      }).join("") + (alleTreffer.length > gefiltert.length ? `<p class="foto-person-suche-hinweis">${alleTreffer.length} Treffer – die ersten ${gefiltert.length} werden angezeigt. Bitte genauer suchen.</p>` : "")
     : '<p class="foto-person-suche-hinweis">Keine passende Person gefunden.</p>';
 }
 
 fotoPersonSuche?.addEventListener("input", renderFotoPersonAuswahl);
+fotoPersonSuche?.addEventListener("search", renderFotoPersonAuswahl);
 fotoPersonSuchergebnisse?.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-person-id]");
   if (!button || button.disabled || !fotoPersonenAktuell) return;
@@ -5533,10 +5635,7 @@ async function loadDetailFamilie(personId) {
   [parentSelectVater, parentSelectMutter].forEach((select) => {
     select.innerHTML = '<option value="">— nicht angegeben —</option>';
     personenCache.filter((p) => p.id !== personId).sort(personenAuswahlSortierung).forEach((p) => {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = personenAuswahlText(p);
-      select.appendChild(opt);
+      select.appendChild(personOption(p));
     });
   });
 
@@ -5989,21 +6088,8 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
 
   select.innerHTML = '<option value="">— auswählen —</option>';
 
-  // Die Auswahl darf nie von einem unvollständigen Cache abhängen.
-  // "select *" ist absichtlich gewählt, damit zusätzliche/ältere Spalten
-  // in der Tabelle nicht dazu führen, dass die gesamte Personenabfrage fehlschlägt.
-  let personenFuerAuswahl = [];
-  try {
-    const { data, error } = await sb.from("personen")
-      .select("*")
-      .order("nachname", { ascending: true });
-    if (error) throw error;
-    personenFuerAuswahl = Array.isArray(data) ? data : [];
-    if (personenFuerAuswahl.length) personenCache = personenFuerAuswahl;
-  } catch (err) {
-    debugLog(`⚠️ Personen für Auswahl direkt laden: ${err.message || err}`);
-    personenFuerAuswahl = Array.isArray(personenCache) ? personenCache : [];
-  }
+  // v340: gemeinsamer Bestands-Cache statt eigenem Komplettabruf bei jedem Öffnen.
+  const personenFuerAuswahl = await ensurePersonenFrisch();
 
   let kandidaten = personenFuerAuswahl.filter((p) => p.id !== excludePersonId);
 
@@ -6044,17 +6130,9 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
     }
   }
 
-  kandidaten.sort((a, b) => {
-    const name = personenAuswahlText(a).localeCompare(personenAuswahlText(b), "de", { sensitivity: "base" });
-    return name;
-  });
+  kandidaten.sort(PersonSuche.sort);
 
-  for (const p of kandidaten) {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = personenAuswahlText(p);
-    select.appendChild(opt);
-  }
+  for (const p of kandidaten) select.appendChild(personOption(p));
 }
 
 async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnerschaft", beginn = null, ende = null) {
@@ -8355,7 +8433,7 @@ function treeRelationResolve(key) {
   if (matches.length === 1) {
     const entry = matches[0];
     side.select.value = entry.person.id;
-    treeRelationShowHint(side, entry.labelNorm === treeNormalizeName(raw) ? "✓ ausgewählt" : `✓ ${entry.label}`, true);
+    treeRelationShowHint(side, entry.labelNorm === PersonSuche.normalisiere(raw) ? "✓ ausgewählt" : `✓ ${entry.label}`, true);
     return side.select.value;
   }
   side.select.value = "";
@@ -8433,85 +8511,244 @@ function initTreeRelationFields() {
   });
 }
 
-// ---------- v336: eigene Trefferliste statt Safari-Datalist ----------
-// Das System-Menü (datalist) zeigt je nach Browser nur einen Teil der Treffer und lässt sich nicht gestalten.
-// Die eigene Liste zeigt alle Treffer (bis TREE_SUGGEST_MAX) mit Anzahl, scrollbar und in der App-Optik.
+// ---------- v340: gemeinsame Trefferliste und Personenauswahl für alle Felder ----------
 const TREE_SUGGEST_MAX = 100;
 
-function treeSuggestQuery(value) {
-  const tokens = treeSearchTokens(value);
-  if (!tokens.length) return { total: 0, entries: [] };
-  const first = tokens[0];
-  const hits = [];
-  for (const entry of getTreePersonSearchIndex()) {
-    if (tokens.every((token) => entry.search.includes(token))) hits.push(entry);
-  }
-  // Treffer, die mit dem Suchbegriff beginnen, stehen zuerst; danach Teiltreffer. Innerhalb bleibt die Namensordnung.
-  const rang = (e) => (e.names.startsWith(first) || e.labelNorm.startsWith(first)) ? 0 : (e.names.split(" ").some((w) => w.startsWith(first)) ? 1 : 2);
-  const sortiert = hits.map((e, i) => ({ e, i, r: rang(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map((x) => x.e);
-  return { total: sortiert.length, entries: sortiert.slice(0, TREE_SUGGEST_MAX) };
+function personItem(entry) {
+  const t = PersonSuche.anzeige(entry.person);
+  return { id: entry.person.id, name: t.name, ledig: t.ledig, sub: t.daten, label: entry.label, person: entry.person };
 }
 
-function treeSuggestAttach(input, onPick) {
+function treeSuggestAnbieter(wert) {
+  const erg = PersonSuche.suche(getTreePersonSearchIndex(), wert, { max: TREE_SUGGEST_MAX });
+  return { total: erg.total, items: erg.entries.map(personItem), verbergenBeiLeer: !erg.tokens.length };
+}
+
+// Gemeinsame Engine: Trefferliste unter einem Eingabefeld (Tippen, Pfeiltasten, Enter, Esc, Antippen).
+function personSuggestAttach(input, anbieter, beiAuswahl, optionen = {}) {
   const wrap = input?.closest(".tree-suggest-wrap");
-  if (!wrap) return;
+  if (!wrap) return null;
   input.removeAttribute("list");
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
   const box = document.createElement("div");
   box.className = "tree-suggest";
   box.setAttribute("role", "listbox");
   box.hidden = true;
   wrap.appendChild(box);
   let timer = null;
-  let aktuelle = new Map();
-  const verbergen = () => { box.hidden = true; };
+  let items = [];
+  let aktiv = -1;
+
+  const verbergen = () => { box.hidden = true; aktiv = -1; input.setAttribute("aria-expanded", "false"); };
+  // Liste unter dem Feld öffnen; reicht der Platz nicht (z. B. wegen der Bildschirmtastatur), darüber.
+  const platzieren = () => {
+    if (box.hidden) return;
+    const vv = window.visualViewport;
+    const r = input.getBoundingClientRect();
+    const sichtOben = vv ? vv.offsetTop : 0;
+    const sichtUnten = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const platzUnten = sichtUnten - r.bottom - 12;
+    const platzOben = r.top - sichtOben - 36;
+    const oben = platzUnten < 260 && platzOben > platzUnten;
+    box.classList.toggle("is-oben", oben);
+    box.style.maxHeight = `${Math.round(Math.max(140, Math.min(380, oben ? platzOben : platzUnten)))}px`;
+  };
+  const markieren = () => {
+    const knoepfe = box.querySelectorAll(".tree-suggest__item");
+    knoepfe.forEach((el, i) => el.classList.toggle("is-active", i === aktiv));
+    if (aktiv >= 0) knoepfe[aktiv]?.scrollIntoView({ block: "nearest" });
+  };
   const zeichnen = () => {
-    const wert = input.value.trim();
-    if (!wert) { verbergen(); return; }
-    const { total, entries } = treeSuggestQuery(wert);
-    aktuelle = new Map(entries.map((e) => [e.person.id, e]));
-    if (!entries.length) {
-      box.innerHTML = '<div class="tree-suggest__empty">Keine Person gefunden.</div>';
-      box.hidden = false;
+    const erg = anbieter(input.value) || { items: [], total: 0 };
+    items = erg.items || [];
+    aktiv = -1;
+    if (!items.length) {
+      if (erg.verbergenBeiLeer) { verbergen(); return; }
+      box.innerHTML = `<div class="tree-suggest__empty">${escTree(erg.leerText || "Keine Person gefunden.")}</div>`;
+    } else {
+      const kopf = erg.kopf || (erg.total > items.length
+        ? `${erg.total} Treffer – die ersten ${items.length} werden angezeigt. Bitte weiter eingrenzen.`
+        : `${erg.total} Treffer`);
+      box.innerHTML = `<div class="tree-suggest__head">${escTree(kopf)}</div>` + items.map((e, i) =>
+        `<button type="button" class="tree-suggest__item" role="option" data-index="${i}"><span class="tree-suggest__name">${escTree(e.name)}${e.ledig ? ` <span class="tree-suggest__maiden">(geb. ${escTree(e.ledig)})</span>` : ""}</span>${e.sub ? `<span class="tree-suggest__years">${escTree(e.sub)}</span>` : ""}</button>`).join("");
+    }
+    box.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+    box.scrollTop = 0;
+    platzieren();
+  };
+  const waehlen = (item) => {
+    if (!item) return;
+    if (!optionen.eingabeBleibt) input.value = item.label;
+    verbergen();
+    beiAuswahl(item, input);
+  };
+
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(zeichnen, 60); });
+  input.addEventListener("focus", () => { zeichnen(); if (optionen.beiFokus) optionen.beiFokus(); });
+  input.addEventListener("blur", () => setTimeout(() => { verbergen(); if (optionen.beiBlur) optionen.beiBlur(); }, 220));
+  // Capture: Pfeiltasten/Enter in der Liste haben Vorrang vor anderen Tastenbelegungen des Feldes.
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { verbergen(); return; }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      if (box.hidden) zeichnen();
+      if (!items.length) return;
+      event.preventDefault();
+      aktiv = event.key === "ArrowDown" ? Math.min(items.length - 1, aktiv + 1) : Math.max(0, aktiv - 1);
+      markieren();
       return;
     }
-    const kopf = total > entries.length
-      ? `${total} Treffer – die ersten ${entries.length} werden angezeigt. Bitte weiter eingrenzen.`
-      : `${total} ${total === 1 ? "Treffer" : "Treffer"}`;
-    box.innerHTML = `<div class="tree-suggest__head">${escTree(kopf)}</div>` + entries.map((e) => {
-      const p = e.person;
-      const name = [p.vorname, p.nachname].filter(Boolean).join(" ").trim() || "(ohne Namen)";
-      const ledig = String(p.Ledigenname || p.ledigenname || "").trim();
-      const jahre = treeYearsText(p);
-      return `<button type="button" class="tree-suggest__item" role="option" data-id="${escTree(p.id)}"><span class="tree-suggest__name">${escTree(name)}${ledig ? ` <span class="tree-suggest__maiden">(geb. ${escTree(ledig)})</span>` : ""}</span>${jahre ? `<span class="tree-suggest__years">${escTree(jahre)}</span>` : ""}</button>`;
-    }).join("");
-    box.hidden = false;
-    box.scrollTop = 0;
-  };
-  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(zeichnen, 60); });
-  input.addEventListener("focus", zeichnen);
-  input.addEventListener("blur", () => setTimeout(verbergen, 220));
-  input.addEventListener("keydown", (event) => { if (event.key === "Escape") verbergen(); });
+    if (event.key === "Enter" && !box.hidden && items.length && (aktiv >= 0 || items.length === 1)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      waehlen(items[aktiv >= 0 ? aktiv : 0]);
+    }
+  }, true);
   box.addEventListener("mousedown", (event) => event.preventDefault());
   box.addEventListener("click", (event) => {
     const knopf = event.target.closest(".tree-suggest__item");
-    if (!knopf) return;
-    const entry = aktuelle.get(knopf.dataset.id);
-    if (!entry) return;
-    input.value = entry.label;
-    verbergen();
-    onPick(entry);
+    if (knopf) waehlen(items[Number(knopf.dataset.index)]);
   });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener("resize", platzieren);
+    window.visualViewport.addEventListener("scroll", platzieren);
+  }
+  window.addEventListener("resize", platzieren);
+  return { zeichnen, verbergen, box };
+}
+
+// <option> für Personenlisten: einheitliches Anzeigeformat, Person bleibt für die Suche am Eintrag.
+function personOption(person) {
+  const opt = document.createElement("option");
+  opt.value = person.id;
+  opt.textContent = PersonSuche.label(person);
+  opt._person = person;
+  return opt;
+}
+
+function personPickerEintrag(opt) {
+  if (opt._person) return PersonSuche.eintrag(opt._person);
+  const norm = PersonSuche.normalisiere(opt.text);
+  return { person: null, label: opt.text, labelNorm: norm, search: norm, names: norm, nachVor: norm };
+}
+
+// Ersetzt die Anzeige eines <select> mit Personen durch Suchfeld + Trefferliste.
+// Das <select> bleibt unsichtbar bestehen: Wert, Optionen, change-Ereignis und hidden funktionieren wie bisher.
+function personPickerFuerSelect(select, optionen = {}) {
+  if (!select || select._personPicker) return null;
+  const wrap = document.createElement("div");
+  wrap.className = "person-picker tree-suggest-wrap";
+  const feld = document.createElement("div");
+  feld.className = "person-picker__field";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "person-picker__input";
+  input.placeholder = optionen.platzhalter || "Name oder Jahr eingeben …";
+  input.autocomplete = "off";
+  input.setAttribute("autocapitalize", "off");
+  input.setAttribute("autocorrect", "off");
+  input.setAttribute("spellcheck", "false");
+  input.setAttribute("enterkeyhint", "search");
+  input.setAttribute("inputmode", "search");
+  const loeschen = document.createElement("button");
+  loeschen.type = "button";
+  loeschen.className = "person-picker__clear";
+  loeschen.setAttribute("aria-label", "Auswahl entfernen");
+  loeschen.title = "Auswahl entfernen";
+  loeschen.textContent = "✕";
+  loeschen.hidden = true;
+  feld.append(input, loeschen);
+  wrap.appendChild(feld);
+  select.parentNode.insertBefore(wrap, select);
+  select.classList.add("person-picker__select");
+  select.tabIndex = -1;
+  select.setAttribute("aria-hidden", "true");
+
+  const sync = () => {
+    const hatWert = !!select.value;
+    const gewaehlt = hatWert ? select.options[select.selectedIndex] : null;
+    if (document.activeElement !== input) input.value = gewaehlt ? gewaehlt.text : "";
+    input.classList.toggle("is-gewaehlt", hatWert);
+    loeschen.hidden = !hatWert;
+    wrap.hidden = select.hidden;
+  };
+
+  // select.value = … (aus dem bestehenden Code) aktualisiert das Suchfeld sofort.
+  const proto = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+  Object.defineProperty(select, "value", {
+    configurable: true,
+    get() { return proto.get.call(this); },
+    set(v) { proto.set.call(this, v); sync(); }
+  });
+  select.focus = () => input.focus();
+  new MutationObserver(() => { sync(); engine?.verbergen && document.activeElement !== input && engine.verbergen(); })
+    .observe(select, { childList: true, attributes: true, attributeFilter: ["hidden"] });
+
+  const anbieter = (wert) => {
+    const alle = [...select.options].filter((o) => o.value);
+    if (!alle.length) return { total: 0, items: [], leerText: "Keine Personen verfügbar (oder noch nicht geladen)." };
+    const tokens = PersonSuche.zerlege(wert);
+    const eintraege = alle.map((o) => ({ opt: o, e: personPickerEintrag(o) }));
+    const zuItem = ({ opt, e }) => {
+      const t = e.person ? PersonSuche.anzeige(e.person) : { name: opt.text, ledig: "", daten: "" };
+      return { id: opt.value, name: t.name, ledig: t.ledig, sub: t.daten, label: opt.text };
+    };
+    if (!tokens.length) {
+      return { total: alle.length, items: eintraege.slice(0, 12).map(zuItem), kopf: `${alle.length} Personen – zum Suchen Namen oder Jahr eintippen` };
+    }
+    const erste = tokens[0];
+    const treffer = eintraege.filter(({ e }) => tokens.every((t) => e.search.includes(t)));
+    const rang = ({ e }) => ((e.names.startsWith(erste) || e.nachVor.startsWith(erste)) ? 0 : (e.names.split(" ").some((w) => w.startsWith(erste)) ? 1 : 2));
+    const geordnet = treffer.map((x, i) => ({ x, i, r: rang(x) })).sort((p, q) => p.r - q.r || p.i - q.i).map((p) => p.x);
+    return { total: geordnet.length, items: geordnet.slice(0, TREE_SUGGEST_MAX).map(zuItem) };
+  };
+
+  const auswaehlen = (item) => {
+    select.value = item.id;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    input.blur();
+  };
+  const engine = personSuggestAttach(input, anbieter, auswaehlen, {
+    beiFokus: () => {
+      setTimeout(() => { try { if (input.value) input.select(); } catch (_) { /* ältere Browser */ } }, 0);
+      if (optionen.beiFokus) optionen.beiFokus(select);
+    },
+    beiBlur: sync
+  });
+  loeschen.addEventListener("click", () => {
+    select.value = "";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    input.focus();
+  });
+  select._personPicker = { input, wrap, sync };
+  sync();
+  return select._personPicker;
+}
+
+function initPersonPickers() {
+  const felder = [
+    ["erstverwandtschaft-person", { platzhalter: "Bezugsperson suchen …" }],
+    ["erst-partner-vorhanden", { platzhalter: "Partner/in suchen …", beiFokus: (sel) => sel.dispatchEvent(new Event("focus")) }],
+    ["d-vater", { platzhalter: "Vater suchen …" }],
+    ["d-mutter", { platzhalter: "Mutter suchen …" }],
+    ["d-partner-person", { platzhalter: "Partner/in suchen …" }],
+    ["d-kind-person", { platzhalter: "Kind suchen …" }]
+  ];
+  for (const [id, optionen] of felder) personPickerFuerSelect(document.getElementById(id), optionen);
 }
 
 function initTreeSuggestions() {
-  treeSuggestAttach(document.getElementById("tree-person-search"), (entry) => {
+  personSuggestAttach(document.getElementById("tree-person-search"), treeSuggestAnbieter, (item) => {
     const auswahl = document.getElementById("tree-person-select");
-    if (auswahl) auswahl.value = entry.person.id;
+    if (auswahl) auswahl.value = item.id;
     refreshTreeConfirmButton();
   });
   for (const key of ["a", "b"]) {
-    treeSuggestAttach(document.getElementById(`tree-relation-search-${key}`), (entry) => treeRelationSetPerson(key, entry.person.id));
+    personSuggestAttach(document.getElementById(`tree-relation-search-${key}`), treeSuggestAnbieter, (item) => treeRelationSetPerson(key, item.id));
   }
+  initPersonPickers();
 }
 
 function initTreeRelationshipUI() {
@@ -8571,20 +8808,18 @@ function treePersonSearchText(person) {
 const TREE_VORSCHLAEGE_MAX = 12;
 
 function treeSearchTokens(value, ohneJahre = false) {
-  let clean = treeNormalizeName(value).replace(/\b(geb|geboren|gest|gestorben)\.?/g, " ");
-  if (ohneJahre) clean = clean.replace(/\b\d{4}\b/g, " ");
-  return clean.replace(/[(),.;]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  return PersonSuche.zerlege(value, ohneJahre);
 }
 
-// Löst auch vollständige Datalist-Vorschläge mit Ledigenname und Jahresangaben auf.
+// Löst auch vollständige Vorschlagstexte mit Ledigenname und Jahresangaben auf.
 function resolveTreePersonSearch(rawValue) {
   const value = String(rawValue || "").trim();
   if (!value) return [];
-  const normalized = treeNormalizeName(value);
+  const normalized = PersonSuche.normalisiere(value);
   const index = getTreePersonSearchIndex();
   const exactLabel = index.filter(entry => entry.labelNorm === normalized);
   if (exactLabel.length) return exactLabel;
-  const tokens = treeSearchTokens(value, true);
+  const tokens = PersonSuche.zerlege(value, true);
   if (!tokens.length) return [];
   return index.filter(entry => tokens.every(token => entry.names.includes(token)));
 }
@@ -8601,18 +8836,7 @@ function getTreePersonSearchIndex() {
   const people = treeSuchPersonen();
   if (treePersonSearchIndexSource !== people) {
     treePersonSearchIndexSource = people;
-    treePersonSearchIndex = people
-      .map((person) => {
-        const label = treePersonSearchText(person);
-        return {
-          person,
-          label,
-          labelNorm: treeNormalizeName(label),
-          names: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.Ledigenname || ""}`),
-          search: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.geburtsjahr || ""} ${person.geburtsdatum || ""} ${person.sterbejahr || ""} ${person.sterbedatum || ""} ${person.Ledigenname || ""}`)
-        };
-      })
-      .sort((a, b) => personenAuswahlSortierung(a.person, b.person));
+    treePersonSearchIndex = PersonSuche.eintraegeVon(people);
   }
   return treePersonSearchIndex;
 }
