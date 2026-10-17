@@ -7871,25 +7871,25 @@ function initTreeRelationshipUI() {
 
 
 
-// v328: Cousinen- und Cousinsuche direkt im Stammbaum.
+// v330: Cousinen-Suche direkt im Stammbaum; übernimmt die aktuell ausgewählte Ausgangsperson.
 function initTreeCousinFinder() {
-  const treeTab = document.querySelector('[data-tab="stammbaum"]')?.closest('.tab-panel')
-    || document.getElementById('stammbaum');
+  const treeTab = document.getElementById('tab-stammbaum');
   if (!treeTab || document.getElementById('tree-cousin-finder')) return;
   const panel = document.createElement('section');
   panel.id = 'tree-cousin-finder';
   panel.className = 'tree-relationship-panel';
+  panel.hidden = true;
   panel.style.cssText = 'margin:16px 0;padding:16px;border:1px solid var(--border-color,#d9dfd8);border-radius:12px;background:var(--card-bg,#fff);';
   panel.innerHTML = `
-    <h3 style="margin-top:0">Cousinen und Cousins finden</h3>
-    <p>Wähle eine Ausgangsperson. Die Suche verwendet die gespeicherten Eltern- und Familienverknüpfungen.</p>
+    <h3 style="margin-top:0">Cousinen anzeigen</h3>
+    <p>Es wird die im Stammbaum ausgewählte Person verwendet. Die Suche berücksichtigt gespeicherte Eltern- und Familienverknüpfungen.</p>
     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
       <label style="flex:1;min-width:220px">Ausgangsperson
         <select id="tree-cousin-person" style="display:block;width:100%;margin-top:5px"><option value="">Person auswählen …</option></select>
       </label>
       <label style="min-width:160px">Ergebnis
         <select id="tree-cousin-scope" style="display:block;width:100%;margin-top:5px">
-          <option value="all">Cousinen und Cousins</option><option value="female">Nur Cousinen</option><option value="male">Nur Cousins</option>
+          <option value="female" selected>Nur Cousinen</option><option value="all">Cousinen und Cousins</option><option value="male">Nur Cousins</option>
         </select>
       </label>
       <label style="min-width:190px">Verwandtschaftsgrad
@@ -7897,7 +7897,7 @@ function initTreeCousinFinder() {
           <option value="all">Auch entferntere</option><option value="1">Nur ersten Grades</option>
         </select>
       </label>
-      <button type="button" id="tree-cousin-search" class="btn btn-primary">Cousinen/Cousins suchen</button>
+      <button type="button" id="tree-cousin-search" class="btn btn--primary">Cousinen suchen</button>
     </div>
     <div id="tree-cousin-results" aria-live="polite" style="margin-top:14px"></div>`;
   const anchor = treeTab.querySelector('#tree-relationship-panel') || treeTab.querySelector('#tree-person-select')?.closest('.form-group') || treeTab.firstElementChild;
@@ -7917,7 +7917,24 @@ function initTreeCousinFinder() {
     else if (treeSelect?.value && people.some(p=>p.id===treeSelect.value)) personSelect.value=treeSelect.value;
   };
   fill();
-  const oldRender = window.renderStammbaum;
+  const openButton = document.getElementById('tree-cousin-open');
+  const syncSelectedPerson = () => {
+    fill();
+    if (treeSelect?.value && [...personSelect.options].some(option => option.value === treeSelect.value)) {
+      personSelect.value = treeSelect.value;
+    }
+  };
+  openButton?.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    if (!panel.hidden) {
+      syncSelectedPerson();
+      if (personSelect.value) document.getElementById('tree-cousin-search')?.click();
+      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  });
+  treeSelect?.addEventListener('change', () => {
+    if (!panel.hidden) syncSelectedPerson();
+  });
   document.getElementById('tree-cousin-search').addEventListener('click', () => {
     const personId = personSelect.value;
     if (!personId) { results.textContent = 'Bitte zuerst eine Person auswählen.'; return; }
@@ -7974,9 +7991,14 @@ function initTreeCousinFinder() {
     results.replaceChildren();
     const summary=document.createElement('p'); summary.textContent=`${matches.length} Treffer gefunden.`; results.append(summary,list);
   });
-  // Refresh the selector when the Stammbaum data is reloaded.
-  const observer = new MutationObserver(() => { if ((treeData.personen||[]).length && personSelect.options.length !== (treeData.personen.length+1)) fill(); });
-  observer.observe(panel,{childList:true,subtree:true});
+  // Keep the selected person in sync with the main Stammbaum selector.
+  const stage = document.getElementById('tree-stage');
+  if (stage && typeof MutationObserver !== 'undefined') {
+    const observer = new MutationObserver(() => {
+      if ((treeData.personen || []).length && personSelect.options.length !== treeData.personen.length + 1) syncSelectedPerson();
+    });
+    observer.observe(stage, { childList: true, subtree: true });
+  }
 }
 
 function treePersonSearchText(person) {
@@ -8463,7 +8485,7 @@ initTreeRelationshipUI();
 initTreeCousinFinder();
 
 
-// v328: Cousinen- und Cousinsuche im Stammbaum; v326: Auswahllisten alphabetisch sortieren, ohne gespeicherte Daten zu verändern.
+// v330: Cousinen-Suche mit Ausgangsperson aus der Stammbaum-Auswahl; v326: Auswahllisten alphabetisch sortieren, ohne gespeicherte Daten zu verändern.
 (function initAlphabetischeAuswahllisten() {
   const deCollator = new Intl.Collator("de-DE", { sensitivity: "base", numeric: true, ignorePunctuation: true });
   const sortSelect = (select) => {
