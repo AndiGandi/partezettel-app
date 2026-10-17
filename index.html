@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 335 -->
+    <!-- Version 336 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=335">
+<link rel="stylesheet" href="style.css?v=336">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -68,7 +68,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 335</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 336</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -284,10 +284,9 @@
     <div class="tree-controls">
       <div class="tree-controls__grid">
         <div class="tree-controls__person">
-          <label class="field"><span>Ausgangsperson</span>
-            <input type="search" id="tree-person-search" list="tree-person-options" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" aria-describedby="tree-person-hint">
-            <datalist id="tree-person-options"></datalist>
-          </label>
+          <div class="tree-suggest-wrap"><label class="field"><span>Ausgangsperson</span>
+            <input type="search" id="tree-person-search" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" aria-describedby="tree-person-hint">
+          </label></div>
           <button type="button" id="tree-person-confirm" class="btn btn--primary">Auswahl bestätigen</button>
           <small id="tree-person-hint" class="tree-person-hint">Name eingeben, passenden Vorschlag wählen und anschließend bestätigen. Geburts- und Sterbejahr helfen bei der Auswahl.</small>
           <select id="tree-person-select" aria-label="Ausgewählte Ausgangsperson" hidden><option value="">— Person auswählen —</option></select>
@@ -327,19 +326,17 @@
       </div>
       <div class="tree-relationship-fields">
         <div class="tree-relation-field">
-          <label class="field"><span>Person 1</span>
-            <input type="search" id="tree-relation-search-a" list="tree-relation-options-a" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off">
-            <datalist id="tree-relation-options-a"></datalist>
-          </label>
+          <div class="tree-suggest-wrap"><label class="field"><span>Person 1</span>
+            <input type="search" id="tree-relation-search-a" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off">
+          </label></div>
           <small id="tree-relation-hint-a" class="tree-relation-hint" aria-live="polite"></small>
           <select id="tree-relation-person-a" aria-label="Person 1" hidden><option value="">— Person auswählen —</option></select>
         </div>
         <button type="button" id="tree-relation-swap" class="btn btn--ghost tree-relation-swap" aria-label="Person 1 und Person 2 tauschen" title="Personen tauschen">⇄</button>
         <div class="tree-relation-field">
-          <label class="field"><span>Person 2</span>
-            <input type="search" id="tree-relation-search-b" list="tree-relation-options-b" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off">
-            <datalist id="tree-relation-options-b"></datalist>
-          </label>
+          <div class="tree-suggest-wrap"><label class="field"><span>Person 2</span>
+            <input type="search" id="tree-relation-search-b" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off">
+          </label></div>
           <small id="tree-relation-hint-b" class="tree-relation-hint" aria-live="polite"></small>
           <select id="tree-relation-person-b" aria-label="Person 2" hidden><option value="">— Person auswählen —</option></select>
         </div>
@@ -779,6 +776,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=335"></script>
+<script src="app.js?v=336"></script>
 </body>
 </html>

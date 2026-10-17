@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 335
+// Partezettel Archiv – Version 336
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -8153,6 +8153,87 @@ function initTreeRelationFields() {
   });
 }
 
+// ---------- v336: eigene Trefferliste statt Safari-Datalist ----------
+// Das System-Menü (datalist) zeigt je nach Browser nur einen Teil der Treffer und lässt sich nicht gestalten.
+// Die eigene Liste zeigt alle Treffer (bis TREE_SUGGEST_MAX) mit Anzahl, scrollbar und in der App-Optik.
+const TREE_SUGGEST_MAX = 100;
+
+function treeSuggestQuery(value) {
+  const tokens = treeSearchTokens(value);
+  if (!tokens.length) return { total: 0, entries: [] };
+  const first = tokens[0];
+  const hits = [];
+  for (const entry of getTreePersonSearchIndex()) {
+    if (tokens.every((token) => entry.search.includes(token))) hits.push(entry);
+  }
+  // Treffer, die mit dem Suchbegriff beginnen, stehen zuerst; danach Teiltreffer. Innerhalb bleibt die Namensordnung.
+  const rang = (e) => (e.names.startsWith(first) || e.labelNorm.startsWith(first)) ? 0 : (e.names.split(" ").some((w) => w.startsWith(first)) ? 1 : 2);
+  const sortiert = hits.map((e, i) => ({ e, i, r: rang(e) })).sort((x, y) => x.r - y.r || x.i - y.i).map((x) => x.e);
+  return { total: sortiert.length, entries: sortiert.slice(0, TREE_SUGGEST_MAX) };
+}
+
+function treeSuggestAttach(input, onPick) {
+  const wrap = input?.closest(".tree-suggest-wrap");
+  if (!wrap) return;
+  input.removeAttribute("list");
+  const box = document.createElement("div");
+  box.className = "tree-suggest";
+  box.setAttribute("role", "listbox");
+  box.hidden = true;
+  wrap.appendChild(box);
+  let timer = null;
+  let aktuelle = new Map();
+  const verbergen = () => { box.hidden = true; };
+  const zeichnen = () => {
+    const wert = input.value.trim();
+    if (!wert) { verbergen(); return; }
+    const { total, entries } = treeSuggestQuery(wert);
+    aktuelle = new Map(entries.map((e) => [e.person.id, e]));
+    if (!entries.length) {
+      box.innerHTML = '<div class="tree-suggest__empty">Keine Person gefunden.</div>';
+      box.hidden = false;
+      return;
+    }
+    const kopf = total > entries.length
+      ? `${total} Treffer – die ersten ${entries.length} werden angezeigt. Bitte weiter eingrenzen.`
+      : `${total} ${total === 1 ? "Treffer" : "Treffer"}`;
+    box.innerHTML = `<div class="tree-suggest__head">${escTree(kopf)}</div>` + entries.map((e) => {
+      const p = e.person;
+      const name = [p.vorname, p.nachname].filter(Boolean).join(" ").trim() || "(ohne Namen)";
+      const ledig = String(p.Ledigenname || p.ledigenname || "").trim();
+      const jahre = treeYearsText(p);
+      return `<button type="button" class="tree-suggest__item" role="option" data-id="${escTree(p.id)}"><span class="tree-suggest__name">${escTree(name)}${ledig ? ` <span class="tree-suggest__maiden">(geb. ${escTree(ledig)})</span>` : ""}</span>${jahre ? `<span class="tree-suggest__years">${escTree(jahre)}</span>` : ""}</button>`;
+    }).join("");
+    box.hidden = false;
+    box.scrollTop = 0;
+  };
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(zeichnen, 60); });
+  input.addEventListener("focus", zeichnen);
+  input.addEventListener("blur", () => setTimeout(verbergen, 220));
+  input.addEventListener("keydown", (event) => { if (event.key === "Escape") verbergen(); });
+  box.addEventListener("mousedown", (event) => event.preventDefault());
+  box.addEventListener("click", (event) => {
+    const knopf = event.target.closest(".tree-suggest__item");
+    if (!knopf) return;
+    const entry = aktuelle.get(knopf.dataset.id);
+    if (!entry) return;
+    input.value = entry.label;
+    verbergen();
+    onPick(entry);
+  });
+}
+
+function initTreeSuggestions() {
+  treeSuggestAttach(document.getElementById("tree-person-search"), (entry) => {
+    const auswahl = document.getElementById("tree-person-select");
+    if (auswahl) auswahl.value = entry.person.id;
+    refreshTreeConfirmButton();
+  });
+  for (const key of ["a", "b"]) {
+    treeSuggestAttach(document.getElementById(`tree-relation-search-${key}`), (entry) => treeRelationSetPerson(key, entry.person.id));
+  }
+}
+
 function initTreeRelationshipUI() {
   const open = document.getElementById("tree-relationship-open");
   const close = document.getElementById("tree-relationship-close");
@@ -8718,4 +8799,5 @@ window.addEventListener("resize", () => { if (treeViewMode === "classic" && tree
 updateTreeZoom();
 initTreeRelationshipUI();
 initTreeRelationFields();
+initTreeSuggestions();
 initTreeCousinsUI();

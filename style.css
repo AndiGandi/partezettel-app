@@ -1580,3 +1580,16 @@ select[name*="Year"] {
   #tab-stammbaum .tree-relationship-fields{grid-template-columns:minmax(0,1fr)}
   #tab-stammbaum .tree-relation-swap{margin:0;justify-self:center;transform:rotate(90deg)}
 }
+
+/* Familienspuren v336 – eigene Trefferliste für die Personensuche */
+.tree-suggest-wrap{position:relative}
+.tree-suggest{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:60;max-height:min(46vh,380px);overflow-y:auto;-webkit-overflow-scrolling:touch;padding:.3rem;background:#fff;border:1px solid #cbd8cf;border-radius:14px;box-shadow:0 12px 30px rgba(23,79,59,.2)}
+.tree-suggest[hidden]{display:none}
+.tree-suggest__head{position:sticky;top:-.3rem;z-index:1;margin:-.3rem -.3rem .25rem;padding:.5rem .8rem;background:#f4f8f3;border-bottom:1px solid #e0e8df;border-radius:13px 13px 0 0;font-size:.76rem;color:#55745e}
+.tree-suggest__empty{padding:.7rem .8rem;color:#65756b;font-size:.9rem}
+.tree-suggest__item{display:block;width:100%;padding:.55rem .75rem;border:0;border-radius:10px;background:transparent;text-align:left;font:inherit;color:#263d30;cursor:pointer;-webkit-appearance:none;appearance:none}
+.tree-suggest__item:hover,.tree-suggest__item:focus-visible{background:#edf3eb;outline:none}
+.tree-suggest__item:active{background:#dfeadf}
+.tree-suggest__name{display:block;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;line-height:1.3}
+.tree-suggest__maiden{font-weight:400;color:#6c746d}
+.tree-suggest__years{display:block;margin-top:.05rem;font-size:.78rem;color:#6c746d}
