@@ -1568,3 +1568,15 @@ select[name*="Year"] {
 }
 #tab-stammbaum .tree-controls .field{margin:0}
 #tab-stammbaum .tree-controls__actions .tree-view-switch:not(:has(#tree-view-classic:not([hidden]))){display:none}
+
+/* Familienspuren v335 – Verwandtschaft ermitteln: Personenfelder mit Sucheingabe */
+#tab-stammbaum .tree-relationship-fields{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:.6rem;align-items:start}
+#tab-stammbaum .tree-relation-field .field{margin:0}
+#tab-stammbaum .tree-relation-hint{display:block;min-height:1.1rem;margin-top:.3rem;font-size:.76rem;line-height:1.35;color:#65756b}
+#tab-stammbaum .tree-relation-hint.is-ok{color:#2f6b4a}
+#tab-stammbaum .tree-relation-hint.is-warn{color:#8a5a2b}
+#tab-stammbaum .tree-relation-swap{margin-top:1.45rem;min-width:46px;padding:0;font-size:1.15rem}
+@media(max-width:700px){
+  #tab-stammbaum .tree-relationship-fields{grid-template-columns:minmax(0,1fr)}
+  #tab-stammbaum .tree-relation-swap{margin:0;justify-self:center;transform:rotate(90deg)}
+}

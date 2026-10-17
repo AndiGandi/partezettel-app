@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 334
+// Partezettel Archiv – Version 335
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7894,6 +7894,7 @@ function fillTreeRelationshipSelects() {
     }
   }
   selects.forEach((s, i) => { if (current[i] && treePerson(current[i])) s.value = current[i]; });
+  if (typeof treeRelationSyncInputs === "function") treeRelationSyncInputs();
 }
 
 // ---------- v327: Cousins und Cousinen der Ausgangsperson ----------
@@ -8032,6 +8033,126 @@ function initTreeCousinsUI() {
   close?.addEventListener("click", () => { panel.hidden = true; });
 }
 
+// ---------- v335: Verwandtschaft – Personenfelder mit Sucheingabe statt langer Auswahlliste ----------
+const treeRelationSides = {};
+function treeRelationGet(key) {
+  if (!treeRelationSides[key]) {
+    treeRelationSides[key] = {
+      input: document.getElementById(`tree-relation-search-${key}`),
+      select: document.getElementById(`tree-relation-person-${key}`),
+      hint: document.getElementById(`tree-relation-hint-${key}`),
+      list: document.getElementById(`tree-relation-options-${key}`),
+      vorschlagKey: "",
+      indexRef: null
+    };
+  }
+  return treeRelationSides[key];
+}
+
+function treeRelationShowHint(side, text, ok) {
+  if (!side.hint) return;
+  side.hint.textContent = text;
+  side.hint.classList.toggle("is-ok", !!text && !!ok);
+  side.hint.classList.toggle("is-warn", !!text && !ok);
+}
+
+function treeRelationSetPerson(key, id) {
+  const side = treeRelationGet(key);
+  if (!side.select || !side.input) return;
+  const person = id ? treePerson(id) : null;
+  side.select.value = person ? id : "";
+  side.input.value = person ? treePersonSearchText(person) : "";
+  treeRelationShowHint(side, person ? "✓ ausgewählt" : "", true);
+}
+
+// Gibt die Personen-ID zurück, wenn der eingetippte Text genau eine Person ergibt.
+function treeRelationResolve(key) {
+  const side = treeRelationGet(key);
+  if (!side.input || !side.select) return "";
+  const raw = side.input.value.trim();
+  if (!raw) { side.select.value = ""; treeRelationShowHint(side, "", true); return ""; }
+  const matches = resolveTreePersonSearch(raw);
+  if (matches.length === 1) {
+    const entry = matches[0];
+    side.select.value = entry.person.id;
+    treeRelationShowHint(side, entry.labelNorm === treeNormalizeName(raw) ? "✓ ausgewählt" : `✓ ${entry.label}`, true);
+    return side.select.value;
+  }
+  side.select.value = "";
+  treeRelationShowHint(side, matches.length > 1 ? `${matches.length} Personen passen – bitte einen Vorschlag antippen.` : "Keine Person gefunden.", false);
+  return "";
+}
+
+function treeRelationFillSuggestions(key) {
+  const side = treeRelationGet(key);
+  if (!side.input || !side.list) return;
+  const index = getTreePersonSearchIndex();
+  const tokens = treeSearchTokens(side.input.value);
+  const matches = [];
+  for (const entry of index) {
+    if (!tokens.length || tokens.every((token) => entry.search.includes(token))) {
+      matches.push(entry);
+      if (matches.length >= TREE_VORSCHLAEGE_MAX) break;
+    }
+  }
+  const k = matches.map((entry) => entry.person.id).join("|");
+  if (k === side.vorschlagKey && side.indexRef === index) return;
+  side.vorschlagKey = k;
+  side.indexRef = index;
+  const fragment = document.createDocumentFragment();
+  for (const entry of matches) {
+    const opt = document.createElement("option");
+    opt.value = entry.label;
+    fragment.appendChild(opt);
+  }
+  side.list.replaceChildren(fragment);
+}
+
+// Gewählte Person aus dem versteckten Auswahlfeld im Eingabefeld sichtbar machen.
+function treeRelationSyncInputs() {
+  for (const key of ["a", "b"]) {
+    const side = treeRelationGet(key);
+    if (!side.select || !side.input) continue;
+    if (side.select.value && treePerson(side.select.value) && !side.input.value) treeRelationSetPerson(key, side.select.value);
+  }
+}
+
+function treeRelationClearInputs() {
+  for (const key of ["a", "b"]) {
+    const side = treeRelationGet(key);
+    if (side.input) side.input.value = "";
+    if (side.select) side.select.value = "";
+    treeRelationShowHint(side, "", true);
+  }
+}
+
+function initTreeRelationFields() {
+  const timers = {};
+  for (const key of ["a", "b"]) {
+    const side = treeRelationGet(key);
+    if (!side.input) continue;
+    const update = () => {
+      clearTimeout(timers[key]);
+      timers[key] = setTimeout(() => { treeRelationFillSuggestions(key); treeRelationResolve(key); }, 60);
+    };
+    side.input.addEventListener("focus", () => treeRelationFillSuggestions(key));
+    side.input.addEventListener("input", update);
+    side.input.addEventListener("change", () => treeRelationResolve(key));
+    side.input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      treeRelationResolve(key);
+      document.getElementById("tree-relationship-calc")?.click();
+    });
+  }
+  document.getElementById("tree-relation-swap")?.addEventListener("click", () => {
+    const idA = treeRelationResolve("a");
+    const idB = treeRelationResolve("b");
+    treeRelationSetPerson("a", idB);
+    treeRelationSetPerson("b", idA);
+  });
+}
+
 function initTreeRelationshipUI() {
   const open = document.getElementById("tree-relationship-open");
   const close = document.getElementById("tree-relationship-close");
@@ -8046,19 +8167,24 @@ function initTreeRelationshipUI() {
     panel.hidden = false;
     fillTreeRelationshipSelects();
     if (!a.value && treeSelect?.value) a.value = treeSelect.value;
+    treeRelationSyncInputs();
   });
   close?.addEventListener("click", () => { panel.hidden = true; });
   reset.addEventListener("click", () => {
     a.value = "";
     b.value = "";
+    treeRelationClearInputs();
     result.innerHTML = "";
     treeRelationshipSelection = { personAId: null, personBId: null };
     const treeSelectElement = document.getElementById("tree-person-select");
     if (treeSelectElement?.value) renderStammbaum(treeSelectElement.value);
   });
   calc.addEventListener("click", () => {
+    treeRelationResolve("a");
+    treeRelationResolve("b");
     const personAId = a.value;
     const personBId = b.value;
+    if (!personAId || !personBId) { result.innerHTML = "Bitte beide Personen auswählen: Namen eintippen und einen Vorschlag antippen."; return; }
     const found = treeRelationshipResult(personAId, personBId);
     if (!found) { result.innerHTML = "Bitte zwei Personen auswählen."; return; }
 
@@ -8591,4 +8717,5 @@ if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeView
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
+initTreeRelationFields();
 initTreeCousinsUI();
