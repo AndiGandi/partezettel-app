@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 330
+// Partezettel Archiv – Version 331
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7869,17 +7869,21 @@ function treeYearsText(person) {
   ].filter(Boolean).join(" – ");
 }
 
-// Cousins/Cousinen 1. Grades: Kinder der Geschwister der Eltern. Geschwister, die nur ein
-// Elternteil gemeinsam haben (Halbgeschwister), werden mitgeführt und als solche markiert.
+// Cousins/Cousinen 1. Grades: Kinder der Geschwister der Eltern, gruppiert nach Onkel/Tante.
+// Geschwister, die nur ein Elternteil gemeinsam haben (Halbgeschwister), werden mitgeführt und markiert.
+function treeBirthSortKey(person) {
+  return person ? (person.geburtsdatum || (person.geburtsjahr ? String(person.geburtsjahr) : "") || "9999") : "9999";
+}
+
 function treeCousinsOf(personId) {
   const parentIds = new Set();
   for (const fam of treeParentFamiliesForPerson(personId)) {
     [fam.partner_a_id, fam.partner_b_id].filter(Boolean).forEach((id) => parentIds.add(id));
   }
-  if (!parentIds.size) return { parents: 0, cousins: [] };
+  if (!parentIds.size) return { parents: 0, gruppen: [], ohneKinder: [], personen: [] };
 
   // Onkel/Tanten: Geschwister der Eltern
-  const uncles = new Map(); // id -> { halb }
+  const uncles = new Map(); // id -> { halb, eltern:Set }
   for (const parentId of parentIds) {
     const grandFamilies = treeParentFamiliesForPerson(parentId);
     const grandFamilyIds = new Set(grandFamilies.map((f) => f.id));
@@ -7893,7 +7897,8 @@ function treeCousinsOf(personId) {
         const uncleId = kind.kind_id;
         if (parentIds.has(uncleId) || uncleId === personId) continue;
         const vorhanden = uncles.get(uncleId);
-        if (!vorhanden || (vorhanden.halb && !halb)) uncles.set(uncleId, { halb });
+        if (!vorhanden) uncles.set(uncleId, { halb, eltern: new Set([parentId]) });
+        else { vorhanden.eltern.add(parentId); if (vorhanden.halb && !halb) vorhanden.halb = false; }
       }
     }
   }
@@ -7906,19 +7911,31 @@ function treeCousinsOf(personId) {
     }
   }
 
-  const cousins = new Map(); // id -> { person, via:Set, halb }
+  const nachName = (p) => `${p?.nachname || ""} ${p?.vorname || ""}`;
+  const sortierer = (x, y) => treeBirthSortKey(x).localeCompare(treeBirthSortKey(y))
+    || nachName(x).localeCompare(nachName(y), "de", { sensitivity: "base" });
+
+  const gruppen = [];
+  const ohneKinder = [];
+  const einzigartig = new Map();
   for (const [uncleId, info] of uncles) {
+    const onkelTante = treePerson(uncleId);
+    if (!onkelTante) continue;
+    const kinder = new Map();
     for (const fam of treeFamiliesForPerson(uncleId)) {
       for (const kind of treeChildrenForFamily(fam.id)) {
         if (ausschliessen.has(kind.kind_id) || !kind.person) continue;
-        const eintrag = cousins.get(kind.kind_id) || { person: kind.person, via: new Set(), halb: info.halb };
-        eintrag.via.add(uncleId);
-        if (!info.halb) eintrag.halb = false;
-        cousins.set(kind.kind_id, eintrag);
+        kinder.set(kind.kind_id, kind.person);
       }
     }
+    if (!kinder.size) { ohneKinder.push(onkelTante); continue; }
+    const liste = [...kinder.values()].sort(sortierer);
+    liste.forEach((k) => einzigartig.set(k.id, k));
+    gruppen.push({ onkelTante, halb: info.halb, eltern: [...info.eltern], kinder: liste });
   }
-  return { parents: parentIds.size, cousins: [...cousins.values()] };
+  gruppen.sort((x, y) => sortierer(x.onkelTante, y.onkelTante));
+  ohneKinder.sort(sortierer);
+  return { parents: parentIds.size, gruppen, ohneKinder, personen: [...einzigartig.values()] };
 }
 
 function treeCousinsRender(personId) {
@@ -7928,35 +7945,38 @@ function treeCousinsRender(personId) {
     result.innerHTML = "Bitte zuerst eine Ausgangsperson auswählen.";
     return;
   }
-  const { parents, cousins } = treeCousinsOf(personId);
+  const { parents, gruppen, ohneKinder, personen } = treeCousinsOf(personId);
   const titel = `<strong>Cousins und Cousinen von ${escTree(treePersonLabel(personId))}</strong>`;
   if (!parents) {
     result.innerHTML = `${titel}<p class="tree-cousins__hint">Für diese Person sind keine Eltern erfasst, daher können keine Cousins oder Cousinen ermittelt werden.</p>`;
     return;
   }
-  if (!cousins.length) {
-    result.innerHTML = `${titel}<p class="tree-cousins__hint">Keine Cousins oder Cousinen erfasst. Das kann auch daran liegen, dass Eltern, Großeltern oder Geschwister der Eltern noch nicht eingetragen sind.</p>`;
+  const ohneKinderHinweis = ohneKinder.length
+    ? `<p class="tree-cousins__hint">Onkel/Tanten ohne erfasste Kinder: ${ohneKinder.map((p) => escTree(treePersonLabel(p.id))).join("; ")}</p>` : "";
+  if (!gruppen.length) {
+    result.innerHTML = `${titel}<p class="tree-cousins__hint">Keine Cousins oder Cousinen erfasst. Das kann auch daran liegen, dass Eltern, Großeltern oder Geschwister der Eltern noch nicht eingetragen sind.</p>${ohneKinderHinweis}`;
     return;
   }
-  const sortKey = (p) => (p.geburtsdatum || (p.geburtsjahr ? `${p.geburtsjahr}` : "") || "9999");
-  cousins.sort((x, y) => sortKey(x.person).localeCompare(sortKey(y.person))
-    || `${x.person.nachname || ""} ${x.person.vorname || ""}`.localeCompare(`${y.person.nachname || ""} ${y.person.vorname || ""}`, "de", { sensitivity: "base" }));
-  const gruppen = [
-    { key: "m", titel: "Cousins (männlich)", eintraege: [] },
-    { key: "w", titel: "Cousinen (weiblich)", eintraege: [] },
-    { key: "u", titel: "Geschlecht nicht angegeben", eintraege: [] }
-  ];
-  cousins.forEach((c) => gruppen.find((g) => g.key === treePersonGender(c.person)).eintraege.push(c));
-  const zeile = (c) => {
-    const via = [...c.via].map((id) => {
-      const g = treePersonGender(treePerson(id));
-      return `${escTree(treePersonLabel(id))} (${g === "m" ? "Onkel" : g === "w" ? "Tante" : "Onkel/Tante"})`;
+  const anzahl = (g) => personen.filter((p) => treePersonGender(p) === g).length;
+  const m = anzahl("m"), w = anzahl("w"), u = anzahl("u");
+  const summe = [`${m} Cousins`, `${w} Cousinen`, u ? `${u} ohne Geschlechtsangabe` : ""].filter(Boolean).join(" · ");
+  const jahreHtml = (p) => { const j = treeYearsText(p); return j ? ` <span class="tree-cousins__years">${escTree(j)}</span>` : ""; };
+  const gruppeHtml = (g) => {
+    const og = treePersonGender(g.onkelTante);
+    const rolle = og === "m" ? "Onkel" : og === "w" ? "Tante" : "Onkel/Tante";
+    const geschwister = og === "m" ? (g.halb ? "Halbbruder" : "Bruder") : og === "w" ? (g.halb ? "Halbschwester" : "Schwester") : (g.halb ? "Halbgeschwister" : "Geschwister");
+    const eltern = g.eltern.map((id) => {
+      const pg = treePersonGender(treePerson(id));
+      return `${escTree(treePersonLabel(id))} (${pg === "m" ? "Vater" : pg === "w" ? "Mutter" : "Elternteil"})`;
     }).join(" und ");
-    const jahre = treeYearsText(c.person);
-    return `<li><span class="tree-cousins__name">${escTree(treePersonLabel(c.person.id))}</span>${jahre ? ` <span class="tree-cousins__years">${escTree(jahre)}</span>` : ""}<small>Kind von ${via}${c.halb ? " · über Halbgeschwister eines Elternteils" : ""}</small></li>`;
+    const zeilen = g.kinder.map((k) => {
+      const kg = treePersonGender(k);
+      const tag = kg === "m" ? `<span class="tree-cousins__tag tree-cousins__tag--m">Cousin</span>` : kg === "w" ? `<span class="tree-cousins__tag tree-cousins__tag--w">Cousine</span>` : "";
+      return `<li><span class="tree-cousins__name">${escTree(treePersonLabel(k.id))}</span>${jahreHtml(k)}${tag}</li>`;
+    }).join("");
+    return `<h4 class="tree-cousins__group"><span class="tree-cousins__role">${rolle}</span> ${escTree(treePersonLabel(g.onkelTante.id))}${jahreHtml(g.onkelTante)}<small>${geschwister} von ${eltern} · ${g.kinder.length} ${g.kinder.length === 1 ? "Kind" : "Kinder"}</small></h4><ul class="tree-cousins__list">${zeilen}</ul>`;
   };
-  result.innerHTML = titel + gruppen.filter((g) => g.eintraege.length)
-    .map((g) => `<h4 class="tree-cousins__group">${g.titel} – ${g.eintraege.length}</h4><ul class="tree-cousins__list">${g.eintraege.map(zeile).join("")}</ul>`).join("");
+  result.innerHTML = `${titel}<p class="tree-cousins__summary">${personen.length} insgesamt: ${summe}</p>${gruppen.map(gruppeHtml).join("")}${ohneKinderHinweis}`;
 }
 
 function treeCousinsRefreshIfOpen(rootId) {
