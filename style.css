@@ -1485,3 +1485,17 @@ select[name*="Year"] {
 .detail-header{border-bottom:1px solid #d7e1d6;padding-bottom:.6rem;margin-bottom:.8rem}
 .detail-header h2{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:700;font-size:1.25rem;color:#174f3b}
 @media(min-width:701px){#tab-liste #search-input{grid-column:1;grid-row:1}#tab-liste .personen-cache-status{grid-column:2;grid-row:1}#tab-liste #refresh-btn{grid-column:3;grid-row:1}#tab-liste .personen-suchtreffer{grid-column:1/-1;grid-row:2}#tab-liste .personen-suchtreffer:empty{display:none}}
+
+/* Familienspuren v327 – Cousins und Cousinen */
+#tab-stammbaum .tree-relationship-launch-row{display:flex;flex-wrap:wrap;gap:.6rem}
+#tab-stammbaum #tree-cousins-panel{border-color:#d8e0d8;border-radius:15px;background:#fff;box-shadow:0 2px 8px rgba(23,79,59,.045)}
+#tab-stammbaum .tree-cousins-result{font-size:.95rem;color:#273d30}
+#tab-stammbaum .tree-cousins-result>strong{display:block;margin-bottom:.4rem;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.02rem;color:#174f3b}
+#tab-stammbaum .tree-cousins__hint{margin:.4rem 0 0;color:#65756b}
+#tab-stammbaum .tree-cousins__group{margin:.9rem 0 .35rem;font-size:.95rem;color:#24583f;border-bottom:1px solid #e0e8df;padding-bottom:.25rem}
+#tab-stammbaum .tree-cousins__list{list-style:none;margin:0;padding:0;display:grid;gap:.45rem}
+#tab-stammbaum .tree-cousins__list li{padding:.55rem .75rem;border:1px solid #d8e0d8;border-radius:11px;background:#fdfefc}
+#tab-stammbaum .tree-cousins__name{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;color:#263d30}
+#tab-stammbaum .tree-cousins__years{color:#6c746d;font-size:.86rem;margin-left:.3rem}
+#tab-stammbaum .tree-cousins__list small{display:block;margin-top:.15rem;color:#66756a;font-size:.78rem}
+@media(min-width:700px){#tab-stammbaum .tree-cousins__list{grid-template-columns:repeat(2,minmax(0,1fr))}}

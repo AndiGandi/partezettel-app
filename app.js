@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 326
+// Partezettel Archiv – Version 327
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7166,6 +7166,7 @@ function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = ""
 }
 
 function renderStammbaum(rootId) {
+  treeCousinsRefreshIfOpen(rootId);
   if (treeViewMode === "classic") { renderKlassischerStammbaum(rootId); return; }
   const stage = document.getElementById("tree-stage");
   const message = document.getElementById("tree-message");
@@ -7829,6 +7830,122 @@ function fillTreeRelationshipSelects() {
   selects.forEach((s, i) => { if (current[i] && treePerson(current[i])) s.value = current[i]; });
 }
 
+// ---------- v327: Cousins und Cousinen der Ausgangsperson ----------
+function treeYearsText(person) {
+  return [
+    person.geburtsdatum ? person.geburtsdatum.split("-")[0] : (person.geburtsjahr ? String(person.geburtsjahr) : ""),
+    person.sterbedatum ? person.sterbedatum.split("-")[0] : (person.sterbejahr ? String(person.sterbejahr) : "")
+  ].filter(Boolean).join(" – ");
+}
+
+// Cousins/Cousinen 1. Grades: Kinder der Geschwister der Eltern. Geschwister, die nur ein
+// Elternteil gemeinsam haben (Halbgeschwister), werden mitgeführt und als solche markiert.
+function treeCousinsOf(personId) {
+  const parentIds = new Set();
+  for (const fam of treeParentFamiliesForPerson(personId)) {
+    [fam.partner_a_id, fam.partner_b_id].filter(Boolean).forEach((id) => parentIds.add(id));
+  }
+  if (!parentIds.size) return { parents: 0, cousins: [] };
+
+  // Onkel/Tanten: Geschwister der Eltern
+  const uncles = new Map(); // id -> { halb }
+  for (const parentId of parentIds) {
+    const grandFamilies = treeParentFamiliesForPerson(parentId);
+    const grandFamilyIds = new Set(grandFamilies.map((f) => f.id));
+    const grandIds = new Set();
+    grandFamilies.forEach((f) => [f.partner_a_id, f.partner_b_id].filter(Boolean).forEach((id) => grandIds.add(id)));
+    if (!grandIds.size) continue;
+    for (const fam of treeData.familien) {
+      if (!grandIds.has(fam.partner_a_id) && !grandIds.has(fam.partner_b_id)) continue;
+      const halb = !grandFamilyIds.has(fam.id);
+      for (const kind of treeChildrenForFamily(fam.id)) {
+        const uncleId = kind.kind_id;
+        if (parentIds.has(uncleId) || uncleId === personId) continue;
+        const vorhanden = uncles.get(uncleId);
+        if (!vorhanden || (vorhanden.halb && !halb)) uncles.set(uncleId, { halb });
+      }
+    }
+  }
+
+  // Eigene Geschwister sind keine Cousins
+  const ausschliessen = new Set([personId]);
+  for (const fam of treeData.familien) {
+    if (parentIds.has(fam.partner_a_id) || parentIds.has(fam.partner_b_id)) {
+      treeChildrenForFamily(fam.id).forEach((k) => ausschliessen.add(k.kind_id));
+    }
+  }
+
+  const cousins = new Map(); // id -> { person, via:Set, halb }
+  for (const [uncleId, info] of uncles) {
+    for (const fam of treeFamiliesForPerson(uncleId)) {
+      for (const kind of treeChildrenForFamily(fam.id)) {
+        if (ausschliessen.has(kind.kind_id) || !kind.person) continue;
+        const eintrag = cousins.get(kind.kind_id) || { person: kind.person, via: new Set(), halb: info.halb };
+        eintrag.via.add(uncleId);
+        if (!info.halb) eintrag.halb = false;
+        cousins.set(kind.kind_id, eintrag);
+      }
+    }
+  }
+  return { parents: parentIds.size, cousins: [...cousins.values()] };
+}
+
+function treeCousinsRender(personId) {
+  const result = document.getElementById("tree-cousins-result");
+  if (!result) return;
+  if (!personId || !treePerson(personId)) {
+    result.innerHTML = "Bitte zuerst eine Ausgangsperson auswählen.";
+    return;
+  }
+  const { parents, cousins } = treeCousinsOf(personId);
+  const titel = `<strong>Cousins und Cousinen von ${escTree(treePersonLabel(personId))}</strong>`;
+  if (!parents) {
+    result.innerHTML = `${titel}<p class="tree-cousins__hint">Für diese Person sind keine Eltern erfasst, daher können keine Cousins oder Cousinen ermittelt werden.</p>`;
+    return;
+  }
+  if (!cousins.length) {
+    result.innerHTML = `${titel}<p class="tree-cousins__hint">Keine Cousins oder Cousinen erfasst. Das kann auch daran liegen, dass Eltern, Großeltern oder Geschwister der Eltern noch nicht eingetragen sind.</p>`;
+    return;
+  }
+  const sortKey = (p) => (p.geburtsdatum || (p.geburtsjahr ? `${p.geburtsjahr}` : "") || "9999");
+  cousins.sort((x, y) => sortKey(x.person).localeCompare(sortKey(y.person))
+    || `${x.person.nachname || ""} ${x.person.vorname || ""}`.localeCompare(`${y.person.nachname || ""} ${y.person.vorname || ""}`, "de", { sensitivity: "base" }));
+  const gruppen = [
+    { key: "m", titel: "Cousins (männlich)", eintraege: [] },
+    { key: "w", titel: "Cousinen (weiblich)", eintraege: [] },
+    { key: "u", titel: "Geschlecht nicht angegeben", eintraege: [] }
+  ];
+  cousins.forEach((c) => gruppen.find((g) => g.key === treePersonGender(c.person)).eintraege.push(c));
+  const zeile = (c) => {
+    const via = [...c.via].map((id) => {
+      const g = treePersonGender(treePerson(id));
+      return `${escTree(treePersonLabel(id))} (${g === "m" ? "Onkel" : g === "w" ? "Tante" : "Onkel/Tante"})`;
+    }).join(" und ");
+    const jahre = treeYearsText(c.person);
+    return `<li><span class="tree-cousins__name">${escTree(treePersonLabel(c.person.id))}</span>${jahre ? ` <span class="tree-cousins__years">${escTree(jahre)}</span>` : ""}<small>Kind von ${via}${c.halb ? " · über Halbgeschwister eines Elternteils" : ""}</small></li>`;
+  };
+  result.innerHTML = titel + gruppen.filter((g) => g.eintraege.length)
+    .map((g) => `<h4 class="tree-cousins__group">${g.titel} – ${g.eintraege.length}</h4><ul class="tree-cousins__list">${g.eintraege.map(zeile).join("")}</ul>`).join("");
+}
+
+function treeCousinsRefreshIfOpen(rootId) {
+  const panel = document.getElementById("tree-cousins-panel");
+  if (panel && !panel.hidden) treeCousinsRender(rootId || document.getElementById("tree-person-select")?.value || "");
+}
+
+function initTreeCousinsUI() {
+  const open = document.getElementById("tree-cousins-open");
+  const close = document.getElementById("tree-cousins-close");
+  const panel = document.getElementById("tree-cousins-panel");
+  if (!open || !panel) return;
+  open.addEventListener("click", () => {
+    panel.hidden = false;
+    treeCousinsRender(document.getElementById("tree-person-select")?.value || "");
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  });
+  close?.addEventListener("click", () => { panel.hidden = true; });
+}
+
 function initTreeRelationshipUI() {
   const open = document.getElementById("tree-relationship-open");
   const close = document.getElementById("tree-relationship-close");
@@ -8007,6 +8124,7 @@ function treeClassicConnectFamily(svg,pos,f){
 }
 
 function renderKlassischerStammbaum(rootId){
+  treeCousinsRefreshIfOpen(rootId);
   const stage=document.getElementById("tree-classic-stage"); if(!stage)return; stage.innerHTML="";
   const info=treeClassicFamilyInfo(rootId); if(!info){stage.innerHTML='<div class="tree-classic-empty">Bitte eine Person auswählen.</div>';return;}
   const mobile=window.innerWidth<=700, card=mobile?125:145, gap=mobile?14:20, rowH=mobile?118:132, vw=document.getElementById("tree-viewport")?.clientWidth||window.innerWidth;
@@ -8351,3 +8469,4 @@ if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeView
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
+initTreeCousinsUI();
