@@ -8344,3 +8344,53 @@ if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeView
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
+
+
+// v326: Auswahllisten alphabetisch sortieren, ohne gespeicherte Daten zu verändern.
+(function initAlphabetischeAuswahllisten() {
+  const deCollator = new Intl.Collator("de-DE", { sensitivity: "base", numeric: true, ignorePunctuation: true });
+  const sortSelect = (select) => {
+    if (!(select instanceof HTMLSelectElement) || select.dataset.preserveOrder === "true") return;
+    const options = Array.from(select.options);
+    if (options.length < 3) return;
+    // Jahres-, Zahlen- und Zeitfolgen behalten ihre fachlich sinnvolle Reihenfolge.
+    const values = options.filter(o => o.value !== "").map(o => o.value.trim());
+    if (values.length > 1 && values.every(v => /^\d{1,4}$/.test(v))) return;
+    if (values.length > 1 && values.every(v => /^\d{4}-\d{2}-\d{2}$/.test(v))) return;
+    const selected = new Set(options.filter(o => o.selected).map(o => o.value));
+    const placeholders = options.filter(o => o.value === "" || o.disabled && !o.value);
+    const sortable = options.filter(o => o.value !== "" && !(o.disabled && !o.value));
+    sortable.sort((a, b) => deCollator.compare(a.textContent.trim(), b.textContent.trim()));
+    const desired = [...placeholders, ...sortable];
+    if (desired.length === options.length && desired.every((option, index) => option === options[index])) return;
+    const fragment = document.createDocumentFragment();
+    placeholders.forEach(o => fragment.appendChild(o));
+    sortable.forEach(o => fragment.appendChild(o));
+    select.appendChild(fragment);
+    options.forEach(o => { o.selected = selected.has(o.value); });
+  };
+  const sortAll = (root = document) => {
+    if (root instanceof HTMLSelectElement) sortSelect(root);
+    root.querySelectorAll?.("select").forEach(sortSelect);
+  };
+  const start = () => {
+    sortAll();
+    const observer = new MutationObserver(records => {
+      const selects = new Set();
+      for (const record of records) {
+        const target = record.target instanceof HTMLSelectElement ? record.target : record.target.closest?.("select");
+        if (target) selects.add(target);
+        record.addedNodes.forEach(node => {
+          if (node instanceof HTMLSelectElement) selects.add(node);
+          node.querySelectorAll?.("select").forEach(sel => selects.add(sel));
+          const parentSelect = node.parentElement?.closest?.("select");
+          if (parentSelect) selects.add(parentSelect);
+        });
+      }
+      selects.forEach(sortSelect);
+    });
+    observer.observe(document.body, { subtree: true, childList: true });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
+})();
