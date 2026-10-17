@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 329 -->
+    <!-- Version 330 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=329">
+<link rel="stylesheet" href="style.css?v=330">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -68,7 +68,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 329</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 330</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -261,13 +261,6 @@
       <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
     </div>
     <div id="pending-banner" class="pending-banner" hidden></div>
-
-    <details class="egress-debug-panel">
-      <summary>Temporäre Egress-Messung</summary>
-      <div id="egress-debug-status" class="egress-debug-status" aria-live="polite"></div>
-      <button type="button" id="egress-debug-reset" class="btn btn--ghost">Messung zurücksetzen</button>
-      <p class="egress-debug-hint">Testanzeige v201: unterscheidet lokale Arbeitsspeicher-Treffer, Browser-Cache-Treffer und erfolgreiche Supabase-Bild-fetchs samt empfangenen Bildbytes. Die Bytes sind Bilddaten, nicht der exakte Abrechnungswert des Supabase-Dashboards.</p>
-    </details>
 
     <div class="personen-sortierung">
       <label class="field"><span>Sortieren nach</span>
@@ -781,6 +774,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=329"></script>
+<script src="app.js?v=330"></script>
 </body>
 </html>
