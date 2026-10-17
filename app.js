@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 337
+// Partezettel Archiv – Version 338
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7388,7 +7388,7 @@ function renderAhnentafel(rootId) {
 
   stage.style.width = `${breite}px`;
   stage.style.height = `${hoehe}px`;
-  stage.innerHTML = `<div class="tree-ped-caption" style="max-width:${Math.min(breite, 380)}px">Ahnentafel von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${bekannt} von ${moeglich} Vorfahren in ${gens} Generationen erfasst</div>`
+  stage.innerHTML = `<div class="tree-ped-caption" style="max-width:${Math.min(breite, 380)}px">Ahnentafel von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${bekannt} von ${moeglich} Vorfahren in ${gens} Generationen erfasst${treeActivePreset?.label ? ` · Linie: ${escTree(treeActivePreset.label)}` : ""}</div>`
     + spaltenKopf
     + `<svg class="tree-ped-lines" width="${breite}" height="${hoehe}" viewBox="0 0 ${breite} ${hoehe}" aria-hidden="true"><path d="${pfade.join("")}"/></svg>`
     + karten;
@@ -7397,10 +7397,123 @@ function renderAhnentafel(rootId) {
   if (message) message.textContent = bekannt === 0 ? "Für diese Person sind keine Eltern erfasst." : "";
 }
 
+// ---------- v338: Nachkommenliste (einklappbar) ----------
+function treeDescendants(personId, pfad = new Set()) {
+  const person = treePerson(personId);
+  const neuerPfad = new Set(pfad);
+  neuerPfad.add(personId);
+  const familien = [];
+  let anzahl = 0;
+  for (const familie of treeFamiliesForPerson(personId)) {
+    const partnerId = familie.partner_a_id === personId ? familie.partner_b_id : familie.partner_a_id;
+    const kinder = [];
+    for (const kind of treeChildrenForFamily(familie.id)) {
+      if (neuerPfad.has(kind.kind_id)) continue;   // Schleifenschutz bei fehlerhaften Daten
+      const unter = treeDescendants(kind.kind_id, neuerPfad);
+      kinder.push(unter);
+      anzahl += 1 + unter.anzahl;
+    }
+    familien.push({ partner: partnerId ? treePerson(partnerId) : null, kinder });
+  }
+  return { person, familien, anzahl };
+}
+
+function treeDescNameHtml(p) {
+  const name = [p.vorname, p.nachname].filter(Boolean).join(" ").trim() || "(ohne Namen)";
+  const ledig = String(p.Ledigenname || p.ledigenname || "").trim();
+  return `${escTree(name)}${ledig ? ` <span class="tree-desc__maiden">(geb. ${escTree(ledig)})</span>` : ""}`;
+}
+
+function treeDescNodeHtml(knoten, tiefe) {
+  const p = knoten.person;
+  if (!p) return "";
+  const g = treePersonGender(p);
+  const jahre = treeYearsText(p);
+  const kopf = `<span class="tree-desc__dot tree-desc__dot--${g}"></span>`
+    + `<span class="tree-desc__text"><span class="tree-desc__name">${treeDescNameHtml(p)}</span>${jahre ? `<span class="tree-desc__years">${escTree(jahre)}</span>` : ""}</span>`
+    + (knoten.anzahl ? `<span class="tree-desc__count" title="Nachkommen insgesamt">${knoten.anzahl}</span>` : "");
+  const partnerZeile = (partner) => partner
+    ? `<div class="tree-desc__partner">⚭ ${treeDescNameHtml(partner)}${treeYearsText(partner) ? ` · ${escTree(treeYearsText(partner))}` : ""}</div>`
+    : `<div class="tree-desc__partner">⚭ Partner unbekannt</div>`;
+  const hatKinder = knoten.familien.some((f) => f.kinder.length);
+  if (!hatKinder) {
+    const partner = knoten.familien.filter((f) => f.partner).map((f) => partnerZeile(f.partner)).join("");
+    return `<li class="tree-desc__item"><div class="tree-desc__row tree-desc__row--leaf" data-tree-open="${escTree(p.id)}" role="button" tabindex="0">${kopf}</div>${partner ? `<div class="tree-desc__leafinfo">${partner}</div>` : ""}</li>`;
+  }
+  const teile = knoten.familien.map((f) => {
+    if (!f.kinder.length && !f.partner) return "";
+    const kinder = f.kinder.length ? `<ul class="tree-desc__list">${f.kinder.map((k) => treeDescNodeHtml(k, tiefe + 1)).join("")}</ul>` : "";
+    return partnerZeile(f.partner) + kinder;
+  }).join("");
+  return `<li class="tree-desc__item"><details${tiefe < 2 ? " open" : ""}><summary class="tree-desc__row">${kopf}<button type="button" class="tree-desc__open" data-tree-open="${escTree(p.id)}" aria-label="Personendaten öffnen" title="Personendaten öffnen">›</button></summary><div class="tree-desc__body">${teile}</div></details></li>`;
+}
+
+function renderNachkommen(rootId) {
+  const stage = document.getElementById("tree-descendants-stage");
+  const message = document.getElementById("tree-message");
+  if (!stage) return;
+  const wurzel = treePerson(rootId);
+  if (!wurzel) {
+    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    return;
+  }
+  const baum = treeDescendants(rootId);
+  const linie = treeActivePreset?.label ? ` · Linie: ${escTree(treeActivePreset.label)}` : "";
+  const titel = baum.anzahl
+    ? `Nachkommen von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${baum.anzahl} ${baum.anzahl === 1 ? "Person" : "Personen"}${linie}`
+    : `<strong>${escTree(treePersonLabel(rootId))}</strong> · keine Nachkommen erfasst${linie}`;
+  stage.innerHTML = `<div class="tree-desc__caption">${titel}</div><ul class="tree-desc__list tree-desc__list--root">${treeDescNodeHtml(baum, 0)}</ul>`;
+  if (message) message.textContent = "";
+}
+
+function initTreeDescendants() {
+  const stage = document.getElementById("tree-descendants-stage");
+  if (!stage) return;
+  const oeffnen = async (event, ziel) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const id = ziel.dataset.treeOpen;
+    if (!id) return;
+    const auswahl = document.getElementById("tree-person-select");
+    if (auswahl) auswahl.value = id;
+    await openPersonDetail(id, { fromTree: true });
+  };
+  stage.addEventListener("click", (event) => {
+    const ziel = event.target.closest("[data-tree-open]");
+    if (ziel) oeffnen(event, ziel);
+  });
+  stage.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    const ziel = event.target.closest(".tree-desc__row--leaf[data-tree-open]");
+    if (ziel) oeffnen(event, ziel);
+  });
+  document.getElementById("tree-list-expand")?.addEventListener("click", () => stage.querySelectorAll("details").forEach((d) => { d.open = true; }));
+  document.getElementById("tree-list-collapse")?.addEventListener("click", () => {
+    stage.querySelectorAll("details").forEach((d, i) => { d.open = i === 0; });
+  });
+}
+
 function renderStammbaum(rootId) {
   treeCousinsRefreshIfOpen(rootId);
+  if (treeActivePreset && !treeFilterAktiv) {
+    treeFilterAktiv = true;
+    const originalFamilien = treeData.familien;
+    const originalKinder = treeData.kinder;
+    try {
+      const teil = treePresetFilter(treeActivePreset.roots, treeActivePreset.direction);
+      treeData.familien = teil.familien;
+      treeData.kinder = teil.kinder;
+      renderStammbaum(rootId);
+    } finally {
+      treeData.familien = originalFamilien;
+      treeData.kinder = originalKinder;
+      treeFilterAktiv = false;
+    }
+    return;
+  }
   if (treeViewMode === "classic") { renderKlassischerStammbaum(rootId); return; }
   if (treeViewMode === "pedigree") { renderAhnentafel(rootId); return; }
+  if (treeViewMode === "descendants") { renderNachkommen(rootId); return; }
   const stage = document.getElementById("tree-stage");
   const message = document.getElementById("tree-message");
   if (!stage) return;
@@ -8657,7 +8770,7 @@ function renderKlassischerStammbaum(rootId){
 }
 
 function setTreeViewMode(mode, rootId = "") {
-  treeViewMode = mode === "classic" ? "classic" : (mode === "pedigree" ? "pedigree" : "cards");
+  treeViewMode = ["classic", "pedigree", "descendants"].includes(mode) ? mode : "cards";
   const panel = document.getElementById("tab-stammbaum");
   const cardStage = document.getElementById("tree-stage");
   const classicStage = document.getElementById("tree-classic-stage");
@@ -8665,11 +8778,16 @@ function setTreeViewMode(mode, rootId = "") {
   if (panel) {
     panel.classList.toggle("tree-view--classic", treeViewMode === "classic");
     panel.classList.toggle("tree-view--pedigree", treeViewMode === "pedigree");
+    panel.classList.toggle("tree-view--descendants", treeViewMode === "descendants");
   }
   if (cardStage) cardStage.hidden = treeViewMode !== "cards";
   if (classicStage) classicStage.hidden = treeViewMode !== "classic";
   if (pedigreeStage) pedigreeStage.hidden = treeViewMode !== "pedigree";
-  for (const [id, art] of [["tree-view-cards", "cards"], ["tree-view-classic", "classic"], ["tree-view-pedigree", "pedigree"]]) {
+  const nachkommenStage = document.getElementById("tree-descendants-stage");
+  if (nachkommenStage) nachkommenStage.hidden = treeViewMode !== "descendants";
+  const listenSteuerung = document.getElementById("tree-list-controls");
+  if (listenSteuerung) listenSteuerung.hidden = treeViewMode !== "descendants";
+  for (const [id, art] of [["tree-view-cards", "cards"], ["tree-view-classic", "classic"], ["tree-view-pedigree", "pedigree"], ["tree-view-descendants", "descendants"]]) {
     const knopf = document.getElementById(id);
     if (!knopf) continue;
     knopf.classList.toggle("is-active", treeViewMode === art);
@@ -8760,11 +8878,26 @@ function treePresetGenderMatches(person, direction) {
   return true;
 }
 
-function renderTreeLinePreset(rootIds, direction) {
+// v338: Eine Stammlinie ist ein Filter (Startpersonen + Richtung der Vorfahren) und gilt für alle Ansichten.
+let treeActivePreset = null;   // { roots, direction, label } – solange gesetzt, wird jede Ansicht mit dem Filter gerendert
+let treeFilterAktiv = false;
+
+function treePresetZuruecksetzen() {
+  treeActivePreset = null;
+  const auswahl = document.getElementById("tree-line-preset");
+  if (auswahl) auswahl.value = "";
+}
+
+function treeStageIdFuerAnsicht() {
+  return treeViewMode === "classic" ? "tree-classic-stage"
+    : treeViewMode === "pedigree" ? "tree-pedigree-stage"
+    : treeViewMode === "descendants" ? "tree-descendants-stage"
+    : "tree-stage";
+}
+
+function treePresetFilter(roots, direction) {
   const originalFamilies = treeData.familien;
   const originalChildren = treeData.kinder;
-  const roots = [...new Set((Array.isArray(rootIds) ? rootIds : [rootIds]).filter(Boolean))];
-  if (!roots.length) return;
   const ancestorIds = new Set(roots);
   const ancestryFamilyIds = new Set();
   let frontier = [...roots];
@@ -8802,12 +8935,17 @@ function renderTreeLinePreset(rootIds, direction) {
   }
   const relevantFamilies = originalFamilies.filter(family => relevantFamilyIds.has(family.id));
   const relevantIds = new Set(relevantFamilies.map(family => family.id));
-  treeData.familien = relevantFamilies;
-  treeData.kinder = originalChildren.filter(link => relevantIds.has(link.familie_id));
-  try { renderStammbaum(roots[0]); }
-  finally { treeData.familien = originalFamilies; treeData.kinder = originalChildren; }
+  return { familien: relevantFamilies, kinder: originalChildren.filter(link => relevantIds.has(link.familie_id)) };
+}
+
+function renderTreeLinePreset(rootIds, direction, label = "") {
+  const roots = [...new Set((Array.isArray(rootIds) ? rootIds : [rootIds]).filter(Boolean))];
+  if (!roots.length) return;
+  treeActivePreset = { roots, direction, label };
+  renderStammbaum(roots[0]);   // renderStammbaum wendet den Filter in jeder Ansicht selbst an
   requestAnimationFrame(() => {
-    const stage = document.getElementById("tree-stage");
+    const stage = document.getElementById(treeStageIdFuerAnsicht());
+    if (treeViewMode === "descendants") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
     const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(roots[0])}"]`);
     centerTreeViewport(rootCard || stage);
   });
@@ -8823,7 +8961,15 @@ function applyTreeLinePreset(value) {
     "fall-linie": { tokens: ["luise"], direction: "maternal", label: "Fall Linie" }
   };
   const preset = presets[value];
-  if (!preset) return;
+  if (!preset) {
+    // „— Stammlinie auswählen —“: Filter aufheben und die aktuelle Person ungefiltert zeigen.
+    if (treeActivePreset) {
+      treeActivePreset = null;
+      if (select?.value) renderStammbaum(select.value);
+      if (message) message.textContent = "Linienfilter aufgehoben.";
+    }
+    return;
+  }
   const root = preset.personType === "mangeng-couple"
     ? treeFindMangengRosina()
     : treeFindPresetPerson(preset.tokens, "Ganahl");
@@ -8840,15 +8986,11 @@ function applyTreeLinePreset(value) {
     }
     roots.push(josef.id);
   }
-  if (treeViewMode !== "cards") {
-    treeViewMode = "cards";
-    setTreeViewMode("cards");
-  }
   if (select) select.value = root.id;
   if (search) search.value = "";
   const confirm = document.getElementById("tree-person-confirm");
   if (confirm) confirm.disabled = true;
-  renderTreeLinePreset(roots, preset.direction);
+  renderTreeLinePreset(roots, preset.direction, preset.label);
   if (message) message.textContent = `${preset.label} angezeigt. Der Stammbaum wurde automatisch neu aufgebaut.`;
 }
 
@@ -8870,10 +9012,12 @@ function centerTreeViewport(target) {
 function setTreePersonSelection(id, { confirmed = false } = {}) {
   if (!treeSelect || !id || !treePerson(id)) return;
   treeSelect.value = id;
+  treePresetZuruecksetzen();   // eine bewusst gewählte Person wird ohne Linienfilter gezeigt
   if (treeViewMode === "classic") renderKlassischerStammbaum(id);
   else renderStammbaum(id);
   requestAnimationFrame(() => {
-    const stage = document.getElementById(treeViewMode === "classic" ? "tree-classic-stage" : (treeViewMode === "pedigree" ? "tree-pedigree-stage" : "tree-stage"));
+    if (treeViewMode === "descendants") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
+    const stage = document.getElementById(treeStageIdFuerAnsicht());
     const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(id)}"]`);
     centerTreeViewport(rootCard || stage);
   });
@@ -8973,6 +9117,8 @@ const treeViewCards = document.getElementById("tree-view-cards");
 const treeViewClassic = document.getElementById("tree-view-classic");
 if (treeViewCards) treeViewCards.addEventListener("click", () => setTreeViewMode("cards"));
 if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeViewMode("classic"));
+const treeViewDescendants = document.getElementById("tree-view-descendants");
+if (treeViewDescendants) treeViewDescendants.addEventListener("click", () => setTreeViewMode("descendants"));
 const treeViewPedigree = document.getElementById("tree-view-pedigree");
 if (treeViewPedigree) treeViewPedigree.addEventListener("click", () => setTreeViewMode("pedigree"));
 const treePedigreeGensSelect = document.getElementById("tree-pedigree-gens");
@@ -8986,4 +9132,5 @@ updateTreeZoom();
 initTreeRelationshipUI();
 initTreeRelationFields();
 initTreeSuggestions();
+initTreeDescendants();
 initTreeCousinsUI();

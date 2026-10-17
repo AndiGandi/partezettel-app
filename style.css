@@ -1620,3 +1620,38 @@ select[name*="Year"] {
 #tab-stammbaum .tree-ped-node--unknown .tree-ped-node__name{font-family:inherit;font-weight:400;font-size:.74rem;text-align:center}
 @media(hover:hover){#tab-stammbaum button.tree-ped-node:hover{transform:translateY(-1px);box-shadow:0 5px 14px rgba(23,79,59,.15)}}
 @media(max-width:700px){#tab-stammbaum .tree-ped-node__name{font-size:.74rem}#tab-stammbaum .tree-ped-node__photo{flex-basis:28px;width:28px;height:28px;font-size:.85rem}#tab-stammbaum .tree-viewport-bar{flex-wrap:wrap}}
+
+/* Familienspuren v338 – Nachkommenliste */
+#tab-stammbaum .tree-list-controls{display:inline-flex;gap:.4rem}
+#tab-stammbaum .tree-list-controls[hidden]{display:none}
+#tab-stammbaum .tree-list-controls .btn{min-height:40px;padding:.3rem .8rem;font-size:.85rem}
+#tab-stammbaum.tree-view--descendants .tree-zoom-controls,#tab-stammbaum.tree-view--descendants .tree-viewport-bar__hint{display:none}
+#tab-stammbaum.tree-view--descendants .tree-viewport-bar{justify-content:flex-end}
+.tree-descendants-stage{max-width:780px;margin:0 auto;padding:.3rem .1rem 1rem}
+.tree-descendants-stage[hidden]{display:none}
+.tree-desc__caption{margin:0 0 .7rem;font-size:.84rem;color:#55745e}
+.tree-desc__caption strong{color:#174f3b;font-family:Georgia,"Iowan Old Style","Times New Roman",serif}
+.tree-desc__list{list-style:none;margin:0;padding:0 0 0 1.05rem;border-left:2px solid #d5e0d3}
+.tree-desc__list--root{padding-left:0;border-left:0}
+.tree-desc__item{margin:.3rem 0;color:#263d30}
+.tree-desc__item details>summary{list-style:none}
+.tree-desc__item details>summary::-webkit-details-marker{display:none}
+.tree-desc__row{display:flex;align-items:center;gap:.6rem;padding:.55rem .7rem;background:#fff;border:1px solid #d8e0d8;border-radius:12px;box-shadow:0 1px 5px rgba(23,79,59,.05);cursor:pointer;-webkit-tap-highlight-color:transparent}
+summary.tree-desc__row::before{content:"▸";flex:0 0 auto;color:#55745e;font-size:.8rem;transition:transform .15s ease}
+details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
+.tree-desc__row--leaf{padding-left:1.55rem}
+.tree-desc__row--leaf::after{content:"›";margin-left:auto;color:#a5b0a6}
+.tree-desc__row:hover{border-color:#9db9a5}
+.tree-desc__dot{flex:0 0 .6rem;width:.6rem;height:.6rem;border-radius:50%;background:#b8c4b6}
+.tree-desc__dot--m{background:#7d9fc0}
+.tree-desc__dot--w{background:#c79aa7}
+.tree-desc__text{display:flex;flex-direction:column;flex:1;min-width:0}
+.tree-desc__name{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.tree-desc__maiden{font-weight:400;color:#6c746d}
+.tree-desc__years{font-size:.78rem;color:#6c746d}
+.tree-desc__count{flex:0 0 auto;min-width:1.7rem;padding:.05rem .5rem;border-radius:999px;background:#edf3eb;border:1px solid #cbdacb;color:#24583f;font-size:.74rem;font-weight:700;text-align:center}
+.tree-desc__open{flex:0 0 auto;width:36px;height:36px;padding:0;border:1px solid #cbd8cf;border-radius:10px;background:#f8faf7;color:#174f3b;font-size:1.15rem;line-height:1;cursor:pointer}
+.tree-desc__body{margin:.2rem 0 .45rem .55rem}
+.tree-desc__partner{margin:.4rem 0 .25rem .35rem;font-size:.82rem;color:#55745e}
+.tree-desc__leafinfo{margin:0 0 0 1.1rem}
+@media(max-width:700px){.tree-desc__list{padding-left:.7rem}.tree-desc__row{padding:.5rem .55rem}}

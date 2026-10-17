@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 337 -->
+    <!-- Version 338 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=337">
+<link rel="stylesheet" href="style.css?v=338">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -68,7 +68,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 337</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 338</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -308,6 +308,7 @@
         <div class="tree-view-switch" role="tablist" aria-label="Stammbaumansicht">
       <button type="button" id="tree-view-cards" class="btn btn--secondary is-active" role="tab" aria-selected="true">Kartenansicht</button>
       <button type="button" id="tree-view-pedigree" class="btn btn--secondary" role="tab" aria-selected="false">Ahnentafel</button>
+      <button type="button" id="tree-view-descendants" class="btn btn--secondary" role="tab" aria-selected="false">Nachkommen</button>
       <button type="button" id="tree-view-classic" class="btn btn--secondary" role="tab" aria-selected="false" hidden>Klassischer Stammbaum</button>
     </div>
       </div>
@@ -350,6 +351,10 @@
     </div>
     <div class="tree-viewport-bar">
       <span class="tree-viewport-bar__hint">Zum Verschieben im Stammbaum wischen, zum Vergrößern + und − nutzen.</span>
+      <span class="tree-list-controls" id="tree-list-controls" hidden>
+        <button type="button" id="tree-list-expand" class="btn btn--ghost">Alle öffnen</button>
+        <button type="button" id="tree-list-collapse" class="btn btn--ghost">Alle schließen</button>
+      </span>
       <label class="tree-ped-gens" id="tree-pedigree-gens-wrap" hidden><span>Generationen</span>
         <select id="tree-pedigree-gens" aria-label="Anzahl der Generationen in der Ahnentafel">
           <option value="3">3</option><option value="4" selected>4</option><option value="5">5</option><option value="6">6</option>
@@ -366,6 +371,7 @@
       <div id="tree-stage" class="tree-stage"></div>
       <div id="tree-classic-stage" class="tree-classic-stage" hidden></div>
       <div id="tree-pedigree-stage" class="tree-pedigree-stage" hidden></div>
+      <div id="tree-descendants-stage" class="tree-descendants-stage" hidden></div>
     </div>
   </section>
 
@@ -783,6 +789,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=337"></script>
+<script src="app.js?v=338"></script>
 </body>
 </html>
