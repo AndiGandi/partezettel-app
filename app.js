@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 333
+// Partezettel Archiv – Version 334
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7047,6 +7047,7 @@ document.getElementById("export-pdf-btn").addEventListener("click", async () => 
 let treeZoom = 1;
 let treeViewMode = "cards";
 let treeData = { personen: [], familien: [], kinder: [], photos: new Map() };
+let treeDataGeladenAm = 0;
 
 function escTree(value) {
   return String(value ?? "").replace(/[&<>\"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -7133,7 +7134,7 @@ function treeParentFamiliesForPerson(id) {
   return treeData.kinder.filter((k) => k.kind_id === id).map((k) => treeData.familien.find((f) => f.id === k.familie_id)).filter(Boolean);
 }
 
-async function loadStammbaumData() {
+async function loadStammbaumData(optionen = {}) {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
     sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
@@ -7148,6 +7149,11 @@ async function loadStammbaumData() {
   treeData.familien = familien || [];
   treeData.kinder = kinder || [];
   treeData.photos = new Map();
+  treeDataGeladenAm = Date.now();
+  // Suchvorschläge stehen ab hier bereit – noch bevor die Schlüsselfotos geladen sind.
+  if (typeof optionen.nachStruktur === "function") {
+    try { optionen.nachStruktur(); } catch (err) { debugLog(`⚠️ Stammbaum-Vorschläge: ${err.message || err}`); }
+  }
 
   const ids = treeData.personen.map((p) => p.id);
   if (ids.length) {
@@ -8071,82 +8077,111 @@ function treePersonSearchText(person) {
   return personenAuswahlText(person);
 }
 
+// v334: Suche im Stammbaum – schnell und ohne Wartezeit auf das Laden des Stammbaums.
+// Ablauf: Vorschläge kommen sofort aus dem bereits geladenen Bestand (personenCache); sobald die
+// Stammbaum-Daten da sind, werden sie verwendet. Die Vorschlagsliste ist auf wenige Einträge begrenzt,
+// weil das System-Auswahlmenü von Safari mit langen Listen deutlich langsamer wird.
+const TREE_VORSCHLAEGE_MAX = 12;
+
+function treeSearchTokens(value, ohneJahre = false) {
+  let clean = treeNormalizeName(value).replace(/\b(geb|geboren|gest|gestorben)\.?/g, " ");
+  if (ohneJahre) clean = clean.replace(/\b\d{4}\b/g, " ");
+  return clean.replace(/[(),.;]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+}
+
 // Löst auch vollständige Datalist-Vorschläge mit Ledigenname und Jahresangaben auf.
 function resolveTreePersonSearch(rawValue) {
   const value = String(rawValue || "").trim();
   if (!value) return [];
   const normalized = treeNormalizeName(value);
   const index = getTreePersonSearchIndex();
-  const exactLabel = index.filter(entry => treeNormalizeName(treePersonSearchText(entry.person)) === normalized);
+  const exactLabel = index.filter(entry => entry.labelNorm === normalized);
   if (exactLabel.length) return exactLabel;
-  const clean = normalized
-    .replace(/\b(geb|geboren|gest|gestorben)\.?/g, " ")
-    .replace(/\b\d{4}\b/g, " ")
-    .replace(/[(),.;]/g, " ")
-    .replace(/\s+/g, " ").trim();
-  const tokens = clean.split(/\s+/).filter(Boolean);
+  const tokens = treeSearchTokens(value, true);
   if (!tokens.length) return [];
-  return index.filter(entry => {
-    const p = entry.person;
-    const names = treeNormalizeName(`${p.vorname || ""} ${p.nachname || ""} ${p.Ledigenname || ""}`);
-    return tokens.every(token => names.includes(token));
-  });
+  return index.filter(entry => tokens.every(token => entry.names.includes(token)));
 }
 
 let treePersonSearchIndexSource = null;
 let treePersonSearchIndex = [];
 
+function treeSuchPersonen() {
+  if (treeData.personen && treeData.personen.length) return treeData.personen;
+  return (typeof personenCacheGeladen !== "undefined" && personenCacheGeladen && Array.isArray(personenCache)) ? personenCache : [];
+}
+
 function getTreePersonSearchIndex() {
-  const people = treeData.personen || [];
+  const people = treeSuchPersonen();
   if (treePersonSearchIndexSource !== people) {
     treePersonSearchIndexSource = people;
     treePersonSearchIndex = people
-      .map((person) => ({
-        person,
-        search: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.geburtsjahr || ""} ${person.geburtsdatum || ""} ${person.sterbejahr || ""} ${person.sterbedatum || ""} ${person.Ledigenname || ""}`)
-      }))
+      .map((person) => {
+        const label = treePersonSearchText(person);
+        return {
+          person,
+          label,
+          labelNorm: treeNormalizeName(label),
+          names: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.Ledigenname || ""}`),
+          search: treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""} ${person.geburtsjahr || ""} ${person.geburtsdatum || ""} ${person.sterbejahr || ""} ${person.sterbedatum || ""} ${person.Ledigenname || ""}`)
+        };
+      })
       .sort((a, b) => personenAuswahlSortierung(a.person, b.person));
   }
   return treePersonSearchIndex;
 }
 
+let treeSelectBuiltFor = null;
+let treeVorschlagKey = "";
+
 function fillTreePersonSelect(searchValue = "", preferredId = "") {
   const select = document.getElementById("tree-person-select");
-  const search = document.getElementById("tree-person-search");
   const options = document.getElementById("tree-person-options");
   if (!select) return "";
-  const query = treeNormalizeName(searchValue);
-  const previous = preferredId || select.value;
   const index = getTreePersonSearchIndex();
-  // Begrenzte Ergebnisliste hält das native Auswahlmenü auf iPad und iPhone flüssig.
-  const limit = query ? 120 : 80;
+  const previous = preferredId || select.value;
+
+  // Das (versteckte) Auswahlfeld enthält immer alle Personen und wird nur einmal pro Datenstand aufgebaut.
+  // So ist jede Person jederzeit auswählbar, auch wenn sie nicht unter den Vorschlägen steht.
+  if (treeSelectBuiltFor !== index) {
+    const fragment = document.createDocumentFragment();
+    for (const entry of index) {
+      const opt = document.createElement("option");
+      opt.value = entry.person.id;
+      opt.textContent = entry.label;
+      fragment.appendChild(opt);
+    }
+    select.replaceChildren(new Option("— Person auswählen —", ""));
+    select.appendChild(fragment);
+    treeSelectBuiltFor = index;
+    treeVorschlagKey = "";
+  }
+
+  const tokens = treeSearchTokens(searchValue);
   const matches = [];
   for (const entry of index) {
-    const tokens = query.split(/\s+/).filter(Boolean);
-    if (!tokens.length || tokens.every(token => entry.search.includes(token))) matches.push(entry.person);
-    if (matches.length >= limit) break;
-  }
-  select.replaceChildren(new Option("— Person auswählen —", ""));
-  if (options) options.replaceChildren();
-  const datalistFragment = options ? document.createDocumentFragment() : null;
-  const selectFragment = document.createDocumentFragment();
-  for (const person of matches) {
-    const opt = document.createElement("option");
-    opt.value = person.id;
-    opt.textContent = treePersonSearchText(person);
-    selectFragment.appendChild(opt);
-    if (datalistFragment) {
-      const suggestion = document.createElement("option");
-      suggestion.value = treePersonSearchText(person);
-      datalistFragment.appendChild(suggestion);
+    if (!tokens.length || tokens.every(token => entry.search.includes(token))) {
+      matches.push(entry);
+      if (matches.length >= TREE_VORSCHLAEGE_MAX) break;
     }
   }
-  select.appendChild(selectFragment);
-  if (options && datalistFragment) options.appendChild(datalistFragment);
-  if (previous && matches.some((person) => person.id === previous)) {
+
+  // Vorschlagsliste nur dann neu aufbauen, wenn sie sich wirklich geändert hat.
+  const key = matches.map(entry => entry.person.id).join("|");
+  if (options && key !== treeVorschlagKey) {
+    treeVorschlagKey = key;
+    const fragment = document.createDocumentFragment();
+    for (const entry of matches) {
+      const suggestion = document.createElement("option");
+      suggestion.value = entry.label;
+      fragment.appendChild(suggestion);
+    }
+    options.replaceChildren(fragment);
+  }
+
+  if (previous && [...select.options].some(opt => opt.value === previous)) {
     select.value = previous;
   } else if (matches.length === 1) {
-    select.value = matches[0].id;
+    select.value = matches[0].person.id;
   }
   return select.value;
 }
@@ -8265,13 +8300,21 @@ function setTreeViewMode(mode, rootId = "") {
   else renderStammbaum(id);
 }
 
+// Daten nur neu laden, wenn sie älter sind (spart Wartezeit und Datenverkehr bei „Auswahl bestätigen“).
+async function treeDatenAktualisieren(maxAlterMs = 120000) {
+  if (treeData.personen.length && Date.now() - treeDataGeladenAm < maxAlterMs) return;
+  await loadStammbaumData();
+}
+
 async function loadStammbaum() {
   const message = document.getElementById("tree-message");
   const select = document.getElementById("tree-person-select");
   const search = document.getElementById("tree-person-search");
   try {
     message.textContent = "Stammbaum wird geladen …";
-    await loadStammbaumData();
+    // Vorschläge sofort aus dem Bestand anbieten, solange der Stammbaum noch lädt.
+    fillTreePersonSelect(search?.value || "", select.value);
+    await loadStammbaumData({ nachStruktur: () => fillTreePersonSelect(search?.value || "", select.value) });
     if (!treeData.personen.length) {
       select.innerHTML = '<option value="">— keine Personen vorhanden —</option>';
       renderStammbaum("");
@@ -8466,14 +8509,13 @@ function refreshTreeConfirmButton() {
 }
 if (treePersonSearch) {
   const updateTreeSearch = () => {
-    refreshTreeConfirmButton();
-    const query = treePersonSearch.value;
     if (treeSearchDebounce) clearTimeout(treeSearchDebounce);
     treeSearchDebounce = setTimeout(() => {
-      fillTreePersonSelect(query, "");
+      fillTreePersonSelect(treePersonSearch.value, "");
       refreshTreeConfirmButton();
-    }, 100);
+    }, 60);
   };
+  treePersonSearch.addEventListener("focus", () => fillTreePersonSelect(treePersonSearch.value, ""));
   treePersonSearch.addEventListener("input", updateTreeSearch);
   treePersonSearch.addEventListener("change", updateTreeSearch);
   treePersonSearch.addEventListener("blur", () => setTimeout(refreshTreeConfirmButton, 0));
@@ -8489,7 +8531,7 @@ if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
     try {
       treePersonConfirm.disabled = true;
       if (message) message.textContent = "Stammbaum wird aktualisiert …";
-      await loadStammbaumData();
+      await treeDatenAktualisieren();
       if (!treePerson(selectedFromDropdown)) throw new Error("Die ausgewählte Person ist in den aktualisierten Daten nicht mehr vorhanden.");
       fillTreePersonSelect("", selectedFromDropdown);
       setTreePersonSelection(selectedFromDropdown, { confirmed: true });
@@ -8522,7 +8564,7 @@ if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
   treePersonConfirm.disabled = true;
   if (message) message.textContent = "Stammbaum wird aktualisiert …";
   try {
-    await loadStammbaumData();
+    await treeDatenAktualisieren();
     if (!treePerson(selectedId)) throw new Error("Die ausgewählte Person ist in den aktualisierten Daten nicht mehr vorhanden.");
     fillTreePersonSelect("", selectedId);
     if (treePersonSearch) treePersonSearch.value = "";
