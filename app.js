@@ -2720,8 +2720,14 @@ function erstellePersonenKarte(p) {
 function aktualisierePersonenKarte(karte, p) {
   karte.person = p;
   karte.li.dataset.personId = p.id;
-  karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
-  karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
+  const vornameAnzeige = String(p.vorname || "").trim();
+  const nachnameAnzeige = String(p.nachname || "").trim();
+  const ledigennameAnzeige = String(p.Ledigenname || p.ledigenname || "").trim();
+  const namensZusatz = ledigennameAnzeige && ledigennameAnzeige.localeCompare(nachnameAnzeige, "de", { sensitivity: "base" }) !== 0
+    ? ` (geb. ${ledigennameAnzeige})`
+    : "";
+  karte.name.textContent = `${vornameAnzeige} ${nachnameAnzeige}${namensZusatz}`.trim();
+  karte.img.alt = `Schlüsselfoto von ${vornameAnzeige} ${nachnameAnzeige}${namensZusatz}`.trim();
 
   const sterbeJahrAnzeige = p.sterbedatum
     ? p.sterbedatum.split("-")[0]
