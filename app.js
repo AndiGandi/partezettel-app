@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 322
+// Familienspuren – Version 329
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
