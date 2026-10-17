@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 322
+// Partezettel Archiv – Version 326
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -1745,7 +1745,7 @@ function personenAuswahlText(person) {
   const geburtsjahr = person.geburtsdatum ? String(person.geburtsdatum).slice(0, 4) : (person.geburtsjahr ? String(person.geburtsjahr) : "");
   const sterbejahr = person.sterbedatum ? String(person.sterbedatum).slice(0, 4) : (person.sterbejahr ? String(person.sterbejahr) : "");
   let text = name;
-  if (ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")) {
+  if (ledigenname) {
     text += ` (geb. ${ledigenname})`;
   }
   if (/^\d{4}$/.test(geburtsjahr)) text += ` (geb. ${geburtsjahr})`;
@@ -2721,6 +2721,13 @@ function aktualisierePersonenKarte(karte, p) {
   karte.person = p;
   karte.li.dataset.personId = p.id;
   karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  const kartenLedigenname = String(p.Ledigenname || p.ledigenname || "").trim();
+  if (kartenLedigenname) {
+    const maiden = document.createElement("span");
+    maiden.className = "person-card__maiden";
+    maiden.textContent = ` (geb. ${kartenLedigenname})`;
+    karte.name.appendChild(maiden);
+  }
   karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
 
   const sterbeJahrAnzeige = p.sterbedatum
@@ -4347,7 +4354,7 @@ function fotoPersonAnzeige(person) {
   if (!person) return { name: "Unbekannte Person", daten: "" };
   const name = [person.vorname, person.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
   const ledigenname = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
-  const nameMitLedigenname = ledigenname && ledigenname.toLocaleLowerCase("de") !== String(person.nachname || "").trim().toLocaleLowerCase("de")
+  const nameMitLedigenname = ledigenname
     ? `${name} (geb. ${ledigenname})` : name;
   return { name: nameMitLedigenname, daten: fotoPersonJahrDatumAnzeige(person) };
 }
@@ -7026,7 +7033,7 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
       : "";
   const ledigenname = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
   const nachname = String(person.nachname || "").trim();
-  const maidenLabel = ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")
+  const maidenLabel = ledigenname
     ? ` <span class="tree-node__maiden-name">, geb. ${escTree(ledigenname)}</span>` : "";
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
@@ -7349,7 +7356,7 @@ function treePersonLabel(id) {
   const base = `${p.vorname || ""} ${p.nachname || ""}`.trim();
   const ledigenname = String(p.Ledigenname || p.ledigenname || p.geburtsname || "").trim();
   const nachname = String(p.nachname || "").trim();
-  return ledigenname && ledigenname.toLocaleLowerCase("de") !== nachname.toLocaleLowerCase("de")
+  return ledigenname
     ? `${base}, geb. ${ledigenname}`
     : base;
 }
