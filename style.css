@@ -1433,3 +1433,22 @@ select[name*="Year"] {
 @media(min-width:900px){#tab-liste .personen-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:.8rem}#tab-liste .person-card{height:100%}}
 @media(max-width:700px){#tab-liste .list-toolbar{grid-template-columns:minmax(0,1fr) auto;gap:.5rem}#tab-liste .personen-cache-status{grid-column:1;grid-row:2;max-width:none;font-size:.72rem}#tab-liste .personen-suchtreffer{grid-column:2;grid-row:2;text-align:right;font-size:.82rem}#tab-liste #refresh-btn{grid-column:2;grid-row:1}#tab-liste .person-card{padding:.7rem .75rem;gap:.7rem;min-height:82px;border-radius:12px}#tab-liste .person-card__photo,#tab-liste .person-card__photo-placeholder{width:56px;height:56px;flex-basis:56px}#tab-liste .person-card__name{font-size:1.02rem}#tab-liste .personen-sortierung{gap:.5rem}}
 @media(prefers-reduced-motion:reduce){#tab-liste .person-card{transition:none}}
+
+
+/* Familienspuren v325: Personenansicht im gleichen Creme-/Waldgrün-Design */
+#person-view-overlay .person-view-sheet{background:#f8f6ef;border:1px solid #d9e2d8;border-radius:22px;box-shadow:0 24px 70px rgba(25,54,39,.24);overflow:hidden}
+#person-view-overlay .person-view-header{background:linear-gradient(135deg,#f8f6ef 0%,#eef3eb 100%);border-bottom:1px solid #d7e1d6;padding:1.25rem 1.4rem;gap:1rem}
+#person-view-overlay .person-view-eyebrow{color:#55745e;letter-spacing:.12em;font-weight:700}
+#person-view-overlay #pv-name{color:#174f3b;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:700;letter-spacing:-.02em}
+#person-view-overlay .person-view-lifetime{color:#786b59}
+#person-view-overlay .person-view-body{background:#f8f6ef;padding:1.25rem;gap:1rem}
+#person-view-overlay .person-view-section{background:#fffefa;border:1px solid #dce5db;border-radius:16px;padding:1rem 1.1rem;box-shadow:0 3px 12px rgba(23,79,59,.045)}
+#person-view-overlay .person-view-section h3{color:#24583f;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;border-bottom:1px solid #e5ebe2;padding-bottom:.55rem;margin-bottom:.8rem}
+#person-view-overlay .person-view-facts dt{color:#66776a}
+#person-view-overlay .person-view-facts dd{color:#273d30}
+#person-view-overlay .person-view-relations a,#person-view-overlay .person-view-links a{color:#24583f}
+#person-view-overlay .person-view-hint{color:#6c756b}
+#person-view-overlay .person-view-actions .btn--primary{background:#174f3b;border-color:#174f3b}
+#person-view-overlay .person-view-actions .btn--secondary{background:#edf3eb;border-color:#cbdacb;color:#24583f}
+#person-view-overlay #pv-close{border-radius:12px;color:#24583f}
+@media(max-width:700px){#person-view-overlay .person-view-sheet{border-radius:18px}#person-view-overlay .person-view-header{padding:1rem;gap:.75rem}#person-view-overlay .person-view-body{padding:.8rem;gap:.75rem}#person-view-overlay .person-view-section{padding:.85rem;border-radius:13px}}

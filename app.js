@@ -1267,8 +1267,8 @@ form.addEventListener("submit", async (e) => {
     erstPartnerschaftArt: document.getElementById("erst-partnerschaft-art")?.value || "Ehe",
   };
 
-  if (!eintrag.vorname || !eintrag.nachname) {
-    formMessage.textContent = "Bitte Vor- und Nachname eintragen.";
+  if (!eintrag.vorname) {
+    formMessage.textContent = "Bitte den Vornamen eintragen.";
     return;
   }
 
