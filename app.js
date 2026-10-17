@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 327
+// Partezettel Archiv – Version 328
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -1236,6 +1236,11 @@ const formMessage = document.getElementById("form-message");
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  if (!document.getElementById("geschlecht").value) {
+    formMessage.textContent = "Bitte das Geschlecht auswählen.";
+    document.getElementById("geschlecht").focus();
+    return;
+  }
   debugLog("Formular abgeschickt – Verarbeitung startet.");
   formMessage.textContent = "Speichere …";
 
@@ -1244,6 +1249,7 @@ form.addEventListener("submit", async (e) => {
     vorname: document.getElementById("vorname").value.trim(),
     nachname: document.getElementById("nachname").value.trim(),
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
+    geschlecht: document.getElementById("geschlecht").value || null,
     geburtsdatum: getDatum("geburtsdatum"),
     geburtsjahr: getDatum("geburtsdatum") ? null : (document.getElementById("geburtsjahr").value.trim() ? Number(document.getElementById("geburtsjahr").value.trim()) : null),
     sterbedatum: getDatum("sterbedatum"),
@@ -1307,6 +1313,7 @@ function resetForm() {
   document.getElementById("trauungsbuch-zeile").value = "";
   document.getElementById("sterbebuch-zeile").value = "";
   document.getElementById("ledigenname").value = "";
+  document.getElementById("geschlecht").value = "";
   if (erstRelation) erstRelation.value = "keine";
   if (erstPerson) erstPerson.innerHTML = '<option value="">— Person auswählen —</option>';
   if (erstFamilie) erstFamilie.innerHTML = '<option value="">— Elternfamilie auswählen —</option>';
@@ -1371,6 +1378,7 @@ async function sendEintrag(eintrag, onProgress) {
         vorname: eintrag.vorname,
         nachname: eintrag.nachname,
         "Ledigenname": eintrag.ledigenname,
+        ...(eintrag.geschlecht ? { geschlecht: eintrag.geschlecht } : {}),
         geburtsdatum: eintrag.geburtsdatum,
         geburtsjahr: eintrag.geburtsjahr,
         sterbedatum: eintrag.sterbedatum,
@@ -3221,6 +3229,7 @@ async function openPersonDetail(personId, options = {}) {
       facts.append(dt, dd);
     };
     addFact("Ledigenname", person.Ledigenname || person.ledigenname);
+    addFact("Geschlecht", person.geschlecht);
     if (birth) addFact(person.geburtsdatum ? "Geboren" : "Geburtsjahr", personViewDatum(birth));
     if (death) addFact(person.sterbedatum ? "Verstorben" : "Todesjahr", personViewDatum(death));
     // Kirchenbücher nur zeigen, wenn mindestens ein Link vorhanden ist.
@@ -3804,6 +3813,7 @@ async function openPersonEdit(personId, options = {}) {
   document.getElementById("d-vorname").value = person.vorname || "";
   document.getElementById("d-nachname").value = person.nachname || "";
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
+  { const g = treePersonGender(person); document.getElementById("d-geschlecht").value = g === "m" ? "männlich" : g === "w" ? "weiblich" : ""; }
   setDatum("d-geburtsdatum", person.geburtsdatum);
   setDatum("d-sterbedatum", person.sterbedatum);
   document.getElementById("d-geburtsjahr").value = person.geburtsjahr ? String(person.geburtsjahr) : "";
@@ -3941,10 +3951,16 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     msg.textContent = "Vor- und Nachname dürfen nicht leer sein.";
     return;
   }
+  const geschlechtWert = document.getElementById("d-geschlecht").value;
+  if (!geschlechtWert) {
+    msg.textContent = "Bitte das Geschlecht auswählen.";
+    return;
+  }
   const { error } = await sb.from("personen").update({
     vorname,
     nachname,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
+    geschlecht: geschlechtWert,
     geburtsdatum: getDatum("d-geburtsdatum"),
     geburtsjahr: getDatum("d-geburtsdatum") ? null : (document.getElementById("d-geburtsjahr").value.trim() ? Number(document.getElementById("d-geburtsjahr").value.trim()) : null),
     sterbedatum: getDatum("d-sterbedatum"),
