@@ -1402,3 +1402,34 @@ select[name*="Year"] {
 .tab-btn.is-active{background:linear-gradient(135deg,#205c45,#174f3b);color:#fff;border-bottom-color:transparent;font-weight:700;box-shadow:0 2px 5px rgba(16,61,46,.15)}
 @media(max-width:700px){.app-header--familienspuren{align-items:flex-start;padding:.9rem .8rem;gap:.5rem}.app-header__brand{gap:.65rem}.app-header__logo{width:58px;height:60px;flex-basis:58px}.app-header--familienspuren h1{font-size:clamp(1.25rem,5vw,1.8rem);letter-spacing:-.025em}.app-header--familienspuren .app-header__subtitle{font-size:.76rem;line-height:1.3}.app-header__meta{gap:.25rem}.app-header--familienspuren .app-header__version{font-size:.72rem}.app-header--familienspuren .login-logout{font-size:.75rem;min-height:30px;padding:.25rem .45rem}.tabs{padding:.4rem .45rem;gap:.2rem}.tab-btn{padding:.65rem .72rem;font-size:.83rem}}
 @media(max-width:420px){.app-header__logo{width:46px;height:50px;flex-basis:46px}.app-header__brand{gap:.45rem}.app-header--familienspuren h1{font-size:1.18rem}.app-header--familienspuren .app-header__subtitle{max-width:190px}.app-header__meta{max-width:75px}.app-header--familienspuren .app-header__version{font-size:.66rem}}
+
+
+/* Familienspuren v324 – visuelle Überarbeitung des Bereichs „Bestand“ */
+#tab-liste{max-width:1120px;padding:1.15rem clamp(.75rem,2.4vw,1.6rem) 2rem}
+#tab-liste .list-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:.65rem;margin:0 0 .85rem}
+#tab-liste #search-input{min-height:48px;padding:.75rem 1rem;border:1px solid #cbd8cf;border-radius:12px;background:#fff;box-shadow:0 2px 8px rgba(23,79,59,.045);font-size:1rem}
+#tab-liste #search-input:focus{outline:3px solid rgba(23,79,59,.14);border-color:#39775b}
+#tab-liste .personen-cache-status{font-size:.76rem;color:#65756b;max-width:14rem}
+#tab-liste .personen-suchtreffer{font-size:.9rem;color:#174f3b;font-weight:650;white-space:nowrap}
+#tab-liste #refresh-btn,#tab-liste #personen-sort-richtung{min-width:46px;min-height:46px;border-radius:11px;border-color:#cbd8cf;background:#f8faf7;color:#174f3b}
+#tab-liste .pending-banner{background:#edf4ee;border:1px solid #cadbce;border-radius:11px;color:#315b43}
+#tab-liste .egress-debug-panel{margin:.5rem 0 1rem;border:1px dashed #cbd8cf;border-radius:11px;background:rgba(255,255,255,.72);color:#647168;padding:.7rem .85rem}
+#tab-liste .egress-debug-panel summary{font-weight:650;color:#53665a;cursor:pointer}
+#tab-liste .personen-sortierung{align-items:end;gap:.7rem;margin:0 0 1rem}
+#tab-liste .personen-sortierung .field span{font-size:.8rem;font-weight:600;color:#617065;letter-spacing:.01em}
+#tab-liste .personen-sortierung select{min-height:46px;border-radius:11px;border-color:#cbd8cf;background:#fff;padding:.65rem .8rem}
+#tab-liste .personen-list{gap:.65rem}
+#tab-liste .person-card{position:relative;gap:1rem;padding:.85rem 1rem;min-height:94px;border:1px solid #d8e0d8;border-radius:15px;background:linear-gradient(115deg,#fff 0%,#fdfefc 100%);box-shadow:0 2px 8px rgba(23,79,59,.045);transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+#tab-liste .person-card:hover{border-color:#9db9a5;box-shadow:0 5px 16px rgba(23,79,59,.09)}
+#tab-liste .person-card:active{transform:scale(.997)}
+#tab-liste .person-card__photo,#tab-liste .person-card__photo-placeholder{width:66px;height:66px;flex-basis:66px;border:2px solid #e0e8df;box-shadow:0 1px 3px rgba(23,79,59,.08)}
+#tab-liste .person-card__photo-placeholder{background:#edf3ec;color:#52715d;font-size:1.45rem}
+#tab-liste .person-card__name{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.12rem;font-weight:600;line-height:1.3;color:#263d30}
+#tab-liste .person-card__years{font-size:.86rem;color:#6c746d;margin-top:.15rem}
+#tab-liste .person-card__relations{font-size:.78rem;color:#66756a;margin-top:.2rem}
+#tab-liste .person-card__note{font-size:.84rem;color:#596b5d;margin-top:.3rem}
+#tab-liste .key-photo-btn{background:#edf4ee;color:#28563d;border:1px solid #d4e2d5;border-radius:9px}
+#tab-liste .list-empty{padding:3rem 1rem;color:#647168}
+@media(min-width:900px){#tab-liste .personen-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:.8rem}#tab-liste .person-card{height:100%}}
+@media(max-width:700px){#tab-liste .list-toolbar{grid-template-columns:minmax(0,1fr) auto;gap:.5rem}#tab-liste .personen-cache-status{grid-column:1;grid-row:2;max-width:none;font-size:.72rem}#tab-liste .personen-suchtreffer{grid-column:2;grid-row:2;text-align:right;font-size:.82rem}#tab-liste #refresh-btn{grid-column:2;grid-row:1}#tab-liste .person-card{padding:.7rem .75rem;gap:.7rem;min-height:82px;border-radius:12px}#tab-liste .person-card__photo,#tab-liste .person-card__photo-placeholder{width:56px;height:56px;flex-basis:56px}#tab-liste .person-card__name{font-size:1.02rem}#tab-liste .personen-sortierung{gap:.5rem}}
+@media(prefers-reduced-motion:reduce){#tab-liste .person-card{transition:none}}
