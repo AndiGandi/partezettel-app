@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 341
+// Partezettel Archiv – Version 342
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7569,6 +7569,7 @@ function renderStammbaum(rootId) {
   if (treeViewMode === "classic") { renderKlassischerStammbaum(rootId); return; }
   if (treeViewMode === "pedigree") { renderAhnentafel(rootId); return; }
   if (treeViewMode === "descendants") { renderNachkommen(rootId); return; }
+  if (treeViewMode === "tree3d") { renderBaum3D(rootId); return; }
   const stage = document.getElementById("tree-stage");
   const message = document.getElementById("tree-message");
   if (!stage) return;
@@ -8970,8 +8971,63 @@ function renderKlassischerStammbaum(rootId){
   canvas.querySelectorAll("[data-classic-person]").forEach(el=>{el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;renderStammbaum(id);});el.addEventListener("dblclick",async e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;await openPersonDetail(id,{fromTree:true});});});
 }
 
+// ---------- v342: 3D-Wurzelbaum (Prototyp) ----------
+// Die Ansicht liegt in tree3d.js und wird erst beim ersten Öffnen geladen (samt three.js vom CDN).
+// Sie nutzt nur bereits geladene Namen und Jahre – es werden keine zusätzlichen Daten oder Fotos von Supabase abgerufen.
+let treeModul3D = null;
+let tree3dLadeLauf = 0;
+let tree3dGens = 5;
+
+async function renderBaum3D(rootId) {
+  const stage = document.getElementById("tree-3d-stage");
+  const message = document.getElementById("tree-message");
+  if (!stage) return;
+  if (!treePerson(rootId)) {
+    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    return;
+  }
+  // Daten sofort zusammenstellen (solange ein Linienfilter aktiv ist), erst danach das Modul laden.
+  const gens = tree3dGens;
+  const knoten = treePedigreeCollect(rootId, gens).map((k) => ({
+    gen: k.gen, idx: k.idx, id: k.person ? k.person.id : null,
+    name: k.person ? PersonSuche.name(k.person) : "", jahre: k.person ? PersonSuche.jahre(k.person) : "",
+    geschlecht: k.person ? treePersonGender(k.person) : "u", rolle: k.rolle
+  }));
+  const bekannt = knoten.filter((k) => k.id && k.gen > 0).length;
+  const titel = treePersonLabel(rootId);
+  const linie = treeActivePreset?.label ? ` · Linie: ${treeActivePreset.label}` : "";
+  const lauf = ++tree3dLadeLauf;
+  try {
+    if (!treeModul3D) {
+      stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
+      treeModul3D = await import("./tree3d.js?v=342");
+    }
+    if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
+    await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
+      alsMitte: (id) => {
+        const auswahl = document.getElementById("tree-person-select");
+        if (auswahl) auswahl.value = id;
+        renderStammbaum(id);
+      },
+      oeffnen: async (id) => {
+        const auswahl = document.getElementById("tree-person-select");
+        if (auswahl) auswahl.value = id;
+        await openPersonDetail(id, { fromTree: true });
+      }
+    });
+    if (lauf === tree3dLadeLauf && treeViewMode === "tree3d") treeModul3D.fortsetzen();
+    if (message) message.textContent = `Wurzelbaum von ${titel} · ${bekannt} von ${2 ** gens - 2} Vorfahren in ${gens} Generationen erfasst${linie}`;
+  } catch (err) {
+    debugLog(`❌ 3D-Ansicht: ${err.message || err}`);
+    stage.innerHTML = `<div class="tree-empty">Die 3D-Ansicht konnte nicht geladen werden.<br><small>${escTree(err.message || String(err))}</small><br><small>Sie braucht beim ersten Öffnen eine Internetverbindung.</small></div>`;
+    treeModul3D = null;
+  }
+}
+
 function setTreeViewMode(mode, rootId = "") {
-  treeViewMode = ["classic", "pedigree", "descendants"].includes(mode) ? mode : "cards";
+  const vorherigeAnsicht = treeViewMode;
+  treeViewMode = ["classic", "pedigree", "descendants", "tree3d"].includes(mode) ? mode : "cards";
+  if (vorherigeAnsicht === "tree3d" && treeViewMode !== "tree3d" && treeModul3D) treeModul3D.pausieren();
   const panel = document.getElementById("tab-stammbaum");
   const cardStage = document.getElementById("tree-stage");
   const classicStage = document.getElementById("tree-classic-stage");
@@ -8980,7 +9036,10 @@ function setTreeViewMode(mode, rootId = "") {
     panel.classList.toggle("tree-view--classic", treeViewMode === "classic");
     panel.classList.toggle("tree-view--pedigree", treeViewMode === "pedigree");
     panel.classList.toggle("tree-view--descendants", treeViewMode === "descendants");
+    panel.classList.toggle("tree-view--3d", treeViewMode === "tree3d");
   }
+  const dreiDStage = document.getElementById("tree-3d-stage");
+  if (dreiDStage) dreiDStage.hidden = treeViewMode !== "tree3d";
   if (cardStage) cardStage.hidden = treeViewMode !== "cards";
   if (classicStage) classicStage.hidden = treeViewMode !== "classic";
   if (pedigreeStage) pedigreeStage.hidden = treeViewMode !== "pedigree";
@@ -8988,14 +9047,18 @@ function setTreeViewMode(mode, rootId = "") {
   if (nachkommenStage) nachkommenStage.hidden = treeViewMode !== "descendants";
   const listenSteuerung = document.getElementById("tree-list-controls");
   if (listenSteuerung) listenSteuerung.hidden = treeViewMode !== "descendants";
-  for (const [id, art] of [["tree-view-cards", "cards"], ["tree-view-classic", "classic"], ["tree-view-pedigree", "pedigree"], ["tree-view-descendants", "descendants"]]) {
+  for (const [id, art] of [["tree-view-cards", "cards"], ["tree-view-classic", "classic"], ["tree-view-pedigree", "pedigree"], ["tree-view-descendants", "descendants"], ["tree-view-3d", "tree3d"]]) {
     const knopf = document.getElementById(id);
     if (!knopf) continue;
     knopf.classList.toggle("is-active", treeViewMode === art);
     knopf.setAttribute("aria-selected", treeViewMode === art ? "true" : "false");
   }
   const generationen = document.getElementById("tree-pedigree-gens-wrap");
-  if (generationen) generationen.hidden = treeViewMode !== "pedigree";
+  if (generationen) generationen.hidden = treeViewMode !== "pedigree" && treeViewMode !== "tree3d";
+  const generationenAuswahl = document.getElementById("tree-pedigree-gens");
+  if (generationenAuswahl && (treeViewMode === "pedigree" || treeViewMode === "tree3d")) {
+    generationenAuswahl.value = String(treeViewMode === "tree3d" ? tree3dGens : treePedigreeGens);
+  }
   const select = document.getElementById("tree-person-select");
   const id = rootId || select?.value || treeData.personen[0]?.id || "";
   renderStammbaum(id);
@@ -9092,6 +9155,7 @@ function treeStageIdFuerAnsicht() {
   return treeViewMode === "classic" ? "tree-classic-stage"
     : treeViewMode === "pedigree" ? "tree-pedigree-stage"
     : treeViewMode === "descendants" ? "tree-descendants-stage"
+    : treeViewMode === "tree3d" ? "tree-3d-stage"
     : "tree-stage";
 }
 
@@ -9145,7 +9209,7 @@ function renderTreeLinePreset(rootIds, direction, label = "") {
   renderStammbaum(roots[0]);   // renderStammbaum wendet den Filter in jeder Ansicht selbst an
   requestAnimationFrame(() => {
     const stage = document.getElementById(treeStageIdFuerAnsicht());
-    if (treeViewMode === "descendants") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
+    if (treeViewMode === "descendants" || treeViewMode === "tree3d") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
     const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(roots[0])}"]`);
     centerTreeViewport(rootCard || stage);
   });
@@ -9216,7 +9280,7 @@ function setTreePersonSelection(id, { confirmed = false } = {}) {
   treePresetZuruecksetzen();   // eine bewusst gewählte Person wird ohne Linienfilter gezeigt
   renderStammbaum(id);
   requestAnimationFrame(() => {
-    if (treeViewMode === "descendants") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
+    if (treeViewMode === "descendants" || treeViewMode === "tree3d") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
     const stage = document.getElementById(treeStageIdFuerAnsicht());
     const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(id)}"]`);
     centerTreeViewport(rootCard || stage);
@@ -9318,14 +9382,21 @@ const treeViewClassic = document.getElementById("tree-view-classic");
 if (treeViewCards) treeViewCards.addEventListener("click", () => setTreeViewMode("cards"));
 if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeViewMode("classic"));
 setTreeViewMode(treeViewMode);   // Startzustand der Ansichtstasten und Flächen
+const treeView3D = document.getElementById("tree-view-3d");
+if (treeView3D) treeView3D.addEventListener("click", () => {
+  setTreeViewMode("tree3d");
+  // Auf dem Handy liegt die Zeichenfläche unter den Bedienfeldern: bei Bedarf ins Bild holen.
+  setTimeout(() => document.querySelector("#tab-stammbaum .tree-viewport-bar")?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+});
 const treeViewDescendants = document.getElementById("tree-view-descendants");
 if (treeViewDescendants) treeViewDescendants.addEventListener("click", () => setTreeViewMode("descendants"));
 const treeViewPedigree = document.getElementById("tree-view-pedigree");
 if (treeViewPedigree) treeViewPedigree.addEventListener("click", () => setTreeViewMode("pedigree"));
 const treePedigreeGensSelect = document.getElementById("tree-pedigree-gens");
 if (treePedigreeGensSelect) treePedigreeGensSelect.addEventListener("change", () => {
-  treePedigreeGens = Math.min(6, Math.max(2, Number(treePedigreeGensSelect.value) || 4));
-  if (treeViewMode === "pedigree" && treeSelect?.value) renderAhnentafel(treeSelect.value);
+  const wert = Math.min(6, Math.max(2, Number(treePedigreeGensSelect.value) || 4));
+  if (treeViewMode === "tree3d") tree3dGens = wert; else treePedigreeGens = wert;
+  if ((treeViewMode === "pedigree" || treeViewMode === "tree3d") && treeSelect?.value) renderStammbaum(treeSelect.value);
 });
 window.addEventListener("resize", () => { if (treeViewMode === "pedigree" && treeSelect?.value) renderAhnentafel(treeSelect.value); });
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });

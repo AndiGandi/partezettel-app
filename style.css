@@ -1703,3 +1703,30 @@ details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
 #detail-photo-viewer .btn--ghost{background:#f8faf7;border:1px solid #cbd8cf;color:#174f3b}
 @media(min-width:761px){.detail-photo-viewer__legend{width:min(300px,34vw);flex:0 0 auto}}
 .detail-photo-viewer__assign .person-picker{flex:1 1 100%;min-width:0}
+
+/* Familienspuren v342 – 3D-Wurzelbaum (Prototyp) */
+.tree-3d-stage{position:absolute;inset:0}
+.tree-3d-stage[hidden]{display:none}
+.tree-3d-stage canvas{display:block;width:100%;height:100%;touch-action:none;outline:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#tab-stammbaum.tree-view--3d .tree-viewport{overflow:hidden;padding:0;height:clamp(420px,66vh,780px);min-height:0;max-height:none}
+#tab-stammbaum.tree-view--3d .tree-zoom-controls,#tab-stammbaum.tree-view--3d .tree-viewport-bar__hint{display:none}
+#tab-stammbaum.tree-view--3d .tree-viewport-bar{justify-content:flex-end}
+.tree-3d-stage .tree-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;padding:1.2rem;text-align:center}
+.tree3d__hud{position:absolute;left:.6rem;right:.6rem;top:.6rem;display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem;pointer-events:none}
+.tree3d__hint{max-width:min(24rem,62%);padding:.4rem .7rem;border:1px solid #cbdacb;border-radius:12px;background:rgba(248,246,239,.9);color:#55745e;font-size:.76rem;line-height:1.35;transition:opacity .6s ease}
+.tree3d__hint.is-weg{opacity:0}
+.tree3d__tools{display:flex;gap:.4rem;pointer-events:auto}
+.tree3d__tool{min-height:40px;padding:.3rem .75rem;border:1px solid #cbdacb;border-radius:11px;background:rgba(248,246,239,.94);color:#174f3b;font:inherit;font-size:.82rem;font-weight:600;cursor:pointer}
+.tree3d__bar{position:absolute;left:.6rem;right:.6rem;bottom:.6rem;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:.6rem;padding:.6rem .8rem;border:1px solid #cbdacb;border-radius:14px;background:rgba(248,246,239,.96);box-shadow:0 8px 22px rgba(23,79,59,.18)}
+.tree3d__bar[hidden]{display:none}
+.tree3d__bar-text{display:flex;flex-direction:column;min-width:0}
+.tree3d__bar-text strong{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;color:#263d30;overflow-wrap:anywhere}
+.tree3d__bar-text span{font-size:.8rem;color:#6c746d}
+.tree3d__bar-actions{display:flex;gap:.45rem}
+.tree3d__bar-actions button{min-height:42px;padding:.4rem .85rem;border:1px solid #cbdacb;border-radius:11px;background:#edf3eb;color:#24583f;font:inherit;font-size:.86rem;font-weight:600;cursor:pointer}
+.tree3d__bar-actions button[data-aktion="mitte"]{background:#174f3b;border-color:#174f3b;color:#fff}
+@media(max-width:700px){#tab-stammbaum .tree-controls__actions .tree-view-switch .btn:last-child:nth-child(odd){grid-column:1 / -1}}
+.tree-3d-stage.is-vollbild{position:fixed;inset:0;z-index:6000;background:linear-gradient(180deg,#f9faf6 0%,#e8efe5 100%)}
+.tree-3d-stage.is-vollbild .tree3d__hud{top:calc(.6rem + env(safe-area-inset-top,0px));left:calc(.6rem + env(safe-area-inset-left,0px));right:calc(.6rem + env(safe-area-inset-right,0px))}
+.tree-3d-stage.is-vollbild .tree3d__bar{bottom:calc(.6rem + env(safe-area-inset-bottom,0px))}
+body.tree3d-vollbild{overflow:hidden}
