@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 342
+// Partezettel Archiv – Version 343
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -9000,7 +9000,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=342");
+      treeModul3D = await import("./tree3d.js?v=343");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -9060,7 +9060,7 @@ function setTreeViewMode(mode, rootId = "") {
     generationenAuswahl.value = String(treeViewMode === "tree3d" ? tree3dGens : treePedigreeGens);
   }
   const select = document.getElementById("tree-person-select");
-  const id = rootId || select?.value || treeData.personen[0]?.id || "";
+  const id = rootId || select?.value || treeStandardPerson();
   renderStammbaum(id);
 }
 
@@ -9085,7 +9085,7 @@ async function loadStammbaum() {
       message.textContent = "";
       return;
     }
-    const current = select.value && treePerson(select.value) ? select.value : treeData.personen[0].id;
+    const current = select.value && treePerson(select.value) ? select.value : treeStandardPerson();
     fillTreePersonSelect(search?.value || "", current);
     if (!select.value) {
       select.value = current;
@@ -9108,6 +9108,16 @@ function updateTreeZoom() {
   if (classicStage) classicStage.style.transform = `scale(${treeZoom})`;
   if (pedigreeStage) pedigreeStage.style.transform = `scale(${treeZoom})`;
   if (value) value.textContent = `${Math.round(treeZoom * 100)} %`;
+}
+
+// v343: Ist im Stammbaum noch keine Person gewählt, werden Hubert und Luise Ganahl gezeigt
+// (Hubert als Ausgangsperson, Luise erscheint als seine Partnerin). Fallback: Luise, sonst die erste Person.
+function treeStandardPerson() {
+  const hubert = treeFindPresetPerson(["hubert"], "Ganahl");
+  if (hubert) return hubert.id;
+  const luise = treeFindPresetPerson(["luise"], "Ganahl");
+  if (luise) return luise.id;
+  return treeData.personen[0]?.id || "";
 }
 
 function treeFindPresetPerson(tokens, surname) {
