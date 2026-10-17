@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 331
+// Partezettel Archiv – Version 332
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -1677,7 +1677,7 @@ function sortierJahr(person, feld) {
 }
 function lebensalterInTagen(person) {
   if (!person?.geburtsdatum && !person?.geburtsjahr) return null;
-  const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${person.geburtsjahr}-07-01T00:00:00`);
+  const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T00:00:00`);
   if (Number.isNaN(geburt.getTime())) return null;
   let ende = null;
   if (person.sterbedatum) {
@@ -1685,7 +1685,7 @@ function lebensalterInTagen(person) {
   } else if (person.sterbejahr) {
     const jahr = Number(person.sterbejahr);
     if (!Number.isInteger(jahr) || jahr < 1000 || jahr > 3000) return null;
-    ende = new Date(`${jahr}-12-31T00:00:00`);
+    ende = new Date(`${String(jahr).padStart(4, "0")}-12-31T00:00:00`);
   } else {
     return null;
   }
@@ -1694,14 +1694,14 @@ function lebensalterInTagen(person) {
 }
 function lebensalterSortierungInTagen(person) {
   if (!person?.geburtsdatum && !person?.geburtsjahr) return null;
-  const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T12:00:00`) : new Date(`${person.geburtsjahr}-07-01T12:00:00`);
+  const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T12:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T12:00:00`);
   if (Number.isNaN(geburt.getTime())) return null;
   let ende = null;
   if (person.sterbedatum) ende = new Date(`${person.sterbedatum}T12:00:00`);
   else if (person.sterbejahr) {
     const jahr = Number(person.sterbejahr);
     if (!Number.isInteger(jahr) || jahr < 1000 || jahr > 3000) return null;
-    ende = new Date(`${jahr}-12-31T12:00:00`);
+    ende = new Date(`${String(jahr).padStart(4, "0")}-12-31T12:00:00`);
   } else {
     // Ohne bekanntes Sterbedatum oder Sterbejahr ist das Lebensalter
     // für diese genealogische Sortierung nicht verlässlich und bleibt außen vor.
@@ -1717,15 +1717,31 @@ function lebensalterAnzeige(person) {
   const nurSterbejahr = !person.sterbedatum && !!person.sterbejahr;
   return `${nurSterbejahr ? "ca. " : ""}${jahre} Jahre`;
 }
+function sortierNachnameSchluessel(p) {
+  return String(p?.nachname || p?.Ledigenname || p?.ledigenname || "").trim();
+}
 function sortierNameVergleich(a, b) {
-  const nc = String(a.nachname || "").localeCompare(String(b.nachname || ""), "de", { sensitivity: "base" });
+  const ka = sortierNachnameSchluessel(a), kb = sortierNachnameSchluessel(b);
+  if (!ka && kb) return 1;
+  if (ka && !kb) return -1;
+  const nc = ka.localeCompare(kb, "de", { sensitivity: "base" });
   return nc || String(a.vorname || "").localeCompare(String(b.vorname || ""), "de", { sensitivity: "base" }) || String(a.id || "").localeCompare(String(b.id || ""));
+}
+// Zeitstempel robust lesen (Safari/WebKit verträgt "2026-09-28 06:16:42+00" nicht).
+function sortierZeitstempel(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim().replace(" ", "T").replace(/(\.\d{3})\d+/, "$1").replace(/([+-]\d{2})$/, "$1:00");
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : null;
 }
 function personenVergleich(a, b) {
   let av = null, bv = null, cmp = 0;
   if (personenSortierung === "name") {
-    cmp = sortierNameVergleich(a, b) * personenSortRichtung;
-    return cmp;
+    // Personen ganz ohne Namen stehen in beiden Richtungen am Ende.
+    const ka = sortierNachnameSchluessel(a), kb = sortierNachnameSchluessel(b);
+    if (!ka && kb) return 1;
+    if (ka && !kb) return -1;
+    return sortierNameVergleich(a, b) * personenSortRichtung;
   }
   if (personenSortierung === "alter") {
     av = lebensalterSortierungInTagen(a); bv = lebensalterSortierungInTagen(b);
@@ -1734,8 +1750,8 @@ function personenVergleich(a, b) {
   } else if (personenSortierung === "erstellt") {
     const aRaw = a.erstellt_am || a.created_at;
     const bRaw = b.erstellt_am || b.created_at;
-    av = aRaw ? new Date(aRaw).getTime() : null;
-    bv = bRaw ? new Date(bRaw).getTime() : null;
+    av = sortierZeitstempel(aRaw);
+    bv = sortierZeitstempel(bRaw);
   } else if (personenSortierung === "familie") {
     av = String(a._familienSortKey || a.nachname || "").trim();
     bv = String(b._familienSortKey || b.nachname || "").trim();
@@ -2522,18 +2538,16 @@ function invalidierePersonenCache() {
 }
 
 function aktualisierePersonenCacheStatus() {
-  const el = document.getElementById("personen-cache-status");
-  if (!el) return;
+  const btn = document.getElementById("refresh-btn");
+  if (!btn) return;
+  let text = "Aktualisieren";
   if (personenCacheGeladen) {
     const zeit = personenCacheZeitpunkt ? new Date(personenCacheZeitpunkt).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "";
     const lokal = personenCacheQuelle === "localStorage" || personenCacheQuelle === "IndexedDB";
-    const quelleText = lokal ? "lokal" : "Supabase";
-    el.textContent = `Cache: ${personenCache.length} Personen geladen${zeit ? ` · ${zeit}` : ""} · ${quelleText}`;
-    el.classList.add("is-loaded");
-  } else {
-    el.textContent = "Cache: wird geladen …";
-    el.classList.remove("is-loaded");
+    text = `Aktualisieren – ${personenCache.length} Personen geladen${zeit ? ` um ${zeit}` : ""} (${lokal ? "lokal" : "Supabase"})`;
   }
+  btn.title = text;
+  btn.setAttribute("aria-label", text);
 }
 
 const schluesselfotoCache = new Map(); // personenId -> { url, gueltigBis }
@@ -2948,6 +2962,10 @@ async function renderPersonenList(personen) {
   }
   list.appendChild(fragment);
   beobachteSchluesselfotos();
+  // Trefferzähler („272 Personen“) nach jedem Neuaufbau der Liste aktualisieren.
+  if (typeof window.partezettelPersonenSuche === "function") {
+    window.partezettelPersonenSuche(document.getElementById("search-input")?.value || "");
+  }
 }
 
 
@@ -3050,7 +3068,7 @@ async function aktualisierePersonenSortierung() {
   await renderPersonenList(personenCache);
   const feld = document.getElementById("search-input");
   const q = (feld?.value || "").trim();
-  if (q) window.partezettelPersonenSuche(q);
+  window.partezettelPersonenSuche(q);
 }
 
 let egressSuchSchrittTimer = null;
@@ -3084,8 +3102,19 @@ document.addEventListener("input", (event) => {
   }
 });
 
-if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;aktualisierePersonenSortierung();});
-if(personenSortButton)personenSortButton.addEventListener("click",()=>{personenSortRichtung*=-1;personenSortButton.textContent=personenSortRichtung===1?"↑":"↓";aktualisierePersonenSortierung();});
+// v332: Standardrichtung je Sortierfeld (Zuletzt erfasst = neueste zuerst), Richtungstaste beschriftet.
+const PERSONEN_SORT_STANDARDRICHTUNG = { name: 1, alter: 1, geburtsjahr: 1, sterbejahr: 1, erstellt: -1, familie: 1 };
+function aktualisiereSortRichtungButton() {
+  if (!personenSortButton) return;
+  const aufsteigend = personenSortRichtung === 1;
+  personenSortButton.textContent = aufsteigend ? "↑" : "↓";
+  const text = aufsteigend ? "Aufsteigend sortiert – antippen für absteigend" : "Absteigend sortiert – antippen für aufsteigend";
+  personenSortButton.title = text;
+  personenSortButton.setAttribute("aria-label", text);
+}
+if(personenSortSelect)personenSortSelect.addEventListener("change",()=>{personenSortierung=personenSortSelect.value;personenSortRichtung=PERSONEN_SORT_STANDARDRICHTUNG[personenSortierung]??1;aktualisiereSortRichtungButton();aktualisierePersonenSortierung();});
+if(personenSortButton)personenSortButton.addEventListener("click",()=>{personenSortRichtung*=-1;aktualisiereSortRichtungButton();aktualisierePersonenSortierung();});
+aktualisiereSortRichtungButton();
 
 document.getElementById("refresh-btn").addEventListener("click", () => loadPersonen(true));
 
@@ -3162,7 +3191,7 @@ function personViewDatum(value) {
 function personViewAlter(person, bisDatum = null) {
   const birthValue = person?.geburtsdatum || person?.geburtsjahr;
   if (!birthValue) return "";
-  const birth = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${person.geburtsjahr}-07-01T00:00:00`);
+  const birth = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T00:00:00`);
   if (!Number.isFinite(birth.getTime())) return "";
   const end = bisDatum ? new Date(`${bisDatum}T00:00:00`) : new Date();
   if (!Number.isFinite(end.getTime()) || end < birth) return "";

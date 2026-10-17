@@ -1507,3 +1507,10 @@ select[name*="Year"] {
 #tab-stammbaum .tree-cousins__role{display:inline-block;padding:.05rem .5rem;border-radius:999px;background:#edf3eb;border:1px solid #cbdacb;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.72rem;font-weight:650;color:#24583f}
 #tab-stammbaum .tree-cousins__tag{display:inline-block;margin-left:.45rem;padding:0 .45rem;border-radius:999px;font-size:.72rem;font-weight:600;border:1px solid #cbd8cf;color:#315b49;background:#f8faf7}
 #tab-stammbaum .tree-cousins__tag--w{color:#7a4d62;border-color:#e3d0d9;background:#fbf6f8}
+
+/* Familienspuren v332 – Bestand: Werkzeugleiste ohne Cache-Text */
+#tab-liste .list-toolbar{grid-template-columns:minmax(0,1fr) auto}
+#tab-liste #search-input{grid-column:1;grid-row:1}
+#tab-liste #refresh-btn{grid-column:2;grid-row:1}
+#tab-liste .personen-suchtreffer{grid-column:1/-1;grid-row:2;text-align:left;font-size:.9rem}
+#tab-liste .personen-suchtreffer:empty{display:none}
