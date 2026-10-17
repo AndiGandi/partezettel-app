@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="theme-color" content="#2B2A28">
+<meta name="theme-color" content="#214C3B">
 <title>Familienspuren</title>
-    <!-- Version 325 -->
+    <!-- Version 333 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=325">
+<link rel="stylesheet" href="style.css?v=333">
 <style>
   .login-card--familienspuren { text-align: center; }
-  .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
+  .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #8b6b45; }
   .familienspuren-logo svg { display: block; width: 100%; height: 100%; }
   .login-card--familienspuren h1 { margin-top: 0; }
   .familienspuren-tagline { margin: -4px 0 22px; color: #74695d; font-size: .95rem; letter-spacing: .015em; }
@@ -25,15 +25,15 @@
 <div id="login-screen" class="login-screen">
   <div class="login-card login-card--familienspuren">
     <div class="familienspuren-logo" aria-hidden="true">
-      <svg viewBox="0 0 160 130" role="img" focusable="false">
-        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter">
-          <path d="M80 16 L52 34 L24 54 L24 91 M80 16 L108 34 L136 54 L136 91 M24 54 L52 70 L80 91 L108 70 L136 54 M52 70 L52 100 M108 70 L108 100 M80 91 L80 124"/>
-          <path d="M65 91 C55 81 48 82 43 82 C43 95 51 103 65 105 Z M95 91 C105 81 112 82 117 82 C117 95 109 103 95 105 Z"/>
+      <svg viewBox="0 0 120 88" role="img" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M60 18 L30 42 L60 66 L90 42 Z" />
+          <path d="M30 42 L60 42 L90 42 M60 18 L60 42 L60 66" />
         </g>
-        <g fill="#f8f6ef" stroke="currentColor" stroke-width="5">
-          <path d="M80 2 L94 10 L94 26 L80 34 L66 26 L66 10 Z"/>
-          <path d="M24 38 L38 46 L38 62 L24 70 L10 62 L10 46 Z"/>
-          <path d="M136 38 L150 46 L150 62 L136 70 L122 62 L122 46 Z"/>
+        <g fill="currentColor" stroke="#fff" stroke-width="2.5">
+          <circle cx="60" cy="18" r="8"/><circle cx="30" cy="42" r="8"/>
+          <circle cx="90" cy="42" r="8"/><circle cx="60" cy="66" r="8"/>
+          <circle cx="60" cy="42" r="7"/>
         </g>
       </svg>
     </div>
@@ -50,25 +50,11 @@
 </div>
 
 <div id="app-shell" hidden>
-<header class="app-header app-header--familienspuren">
-  <div class="app-header__brand">
-    <div class="app-header__logo" aria-hidden="true">
-      <svg viewBox="0 0 160 130" focusable="false">
-        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter">
-          <path d="M80 16 L52 34 L24 54 L24 91 M80 16 L108 34 L136 54 L136 91 M24 54 L52 70 L80 91 L108 70 L136 54 M52 70 L52 100 M108 70 L108 100 M80 91 L80 124"/>
-          <path d="M65 91 C55 81 48 82 43 82 C43 95 51 103 65 105 Z M95 91 C105 81 112 82 117 82 C117 95 109 103 95 105 Z"/>
-        </g>
-        <g fill="#f8f6ef" stroke="currentColor" stroke-width="5">
-          <path d="M80 2 L94 10 L94 26 L80 34 L66 26 L66 10 Z"/><path d="M24 38 L38 46 L38 62 L24 70 L10 62 L10 46 Z"/><path d="M136 38 L150 46 L150 62 L136 70 L122 62 L122 46 Z"/>
-        </g>
-      </svg>
-    </div>
-    <div class="app-header__brand-copy">
-      <h1>Familienspuren</h1>
-      <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
-    </div>
-  </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 325</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+<header class="app-header">
+  <h1>Familienspuren</h1>
+  <p id="app-version" class="app-header__version">Version 333</p>
+  <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
+  <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -97,7 +83,7 @@
 
         <label class="field">
           <span>Nachname *</span>
-          <input type="text" id="nachname">
+          <input type="text" id="nachname" required>
         </label>
 
         <label class="field">
@@ -323,6 +309,7 @@
     </div>
     <div class="tree-relationship-launch-row">
       <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft ermitteln</button>
+      <button type="button" id="tree-cousin-open" class="btn btn--primary tree-cousin-open">👩 Cousinen anzeigen</button>
     </div>
     <p id="tree-message" class="form-message"></p>
     <div class="tree-view-switch" role="tablist" aria-label="Stammbaumansicht">
@@ -397,7 +384,7 @@
   <!-- ===================== TAB: HILFE ===================== -->
   <section id="tab-hilfe" class="tab-panel">
     <div class="field-group" style="padding:1rem;border-radius:14px;">
-      <h2 style="margin-top:0;">Hilfe zum Partezettel Archiv</h2>
+      <h2 style="margin-top:0;">Hilfe zu Familienspuren</h2>
       <p>Hier findest du eine einfache Erklärung der Bereiche und eine Kurzanleitung für die wichtigsten Arbeitsschritte.</p>
       <h3>Kurzanleitung</h3>
       <ol style="padding-left:1.4rem;line-height:1.65;">
@@ -763,6 +750,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=322"></script>
+<script src="app.js?v=333"></script>
 </body>
 </html>
