@@ -1,4 +1,4 @@
-// Familienspuren – Version 332
+// Partezettel Archiv – Version 322
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -2720,14 +2720,8 @@ function erstellePersonenKarte(p) {
 function aktualisierePersonenKarte(karte, p) {
   karte.person = p;
   karte.li.dataset.personId = p.id;
-  const vornameAnzeige = String(p.vorname || "").trim();
-  const nachnameAnzeige = String(p.nachname || "").trim();
-  const ledigennameAnzeige = String(p.Ledigenname || p.ledigenname || "").trim();
-  const namensZusatz = ledigennameAnzeige && ledigennameAnzeige.localeCompare(nachnameAnzeige, "de", { sensitivity: "base" }) !== 0
-    ? ` (geb. ${ledigennameAnzeige})`
-    : "";
-  karte.name.textContent = `${vornameAnzeige} ${nachnameAnzeige}${namensZusatz}`.trim();
-  karte.img.alt = `Schlüsselfoto von ${vornameAnzeige} ${nachnameAnzeige}${namensZusatz}`.trim();
+  karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
 
   const sterbeJahrAnzeige = p.sterbedatum
     ? p.sterbedatum.split("-")[0]
@@ -7869,123 +7863,6 @@ function initTreeRelationshipUI() {
   });
 }
 
-
-
-// v334: zeigt ausschließlich Cousinen und Cousins ersten Grades der im Stammbaum ausgewählten Person.
-function initTreeCousinFinder() {
-  const treeTab = document.getElementById('tab-stammbaum');
-  const openButton = document.getElementById('tree-cousin-open');
-  if (!treeTab || !openButton || document.getElementById('tree-cousin-finder')) return;
-
-  const panel = document.createElement('section');
-  panel.id = 'tree-cousin-finder';
-  panel.className = 'tree-relationship-panel';
-  panel.hidden = true;
-  panel.innerHTML = `
-    <div class="tree-relationship-panel__header">
-      <strong>Cousinen und Cousins</strong>
-      <button type="button" id="tree-cousin-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
-    </div>
-    <p>Hier werden die Cousinen und Cousins ersten Grades der aktuell ausgewählten Person angezeigt.</p>
-    <div id="tree-cousin-results" aria-live="polite"></div>`;
-  const anchor = treeTab.querySelector('#tree-relationship-panel') || treeTab.querySelector('#tree-person-select')?.closest('.form-group') || treeTab.firstElementChild;
-  if (anchor?.parentNode) anchor.parentNode.insertBefore(panel, anchor.nextSibling);
-  else treeTab.appendChild(panel);
-
-  const results = panel.querySelector('#tree-cousin-results');
-  const closeButton = panel.querySelector('#tree-cousin-close');
-  const selectedTreePerson = () => {
-    const select = document.getElementById('tree-person-select');
-    return select?.value || (typeof treeSelect !== 'undefined' ? treeSelect?.value : '') || '';
-  };
-
-  const showCousins = () => {
-    const personId = selectedTreePerson();
-    results.replaceChildren();
-    if (!personId) {
-      results.textContent = 'Bitte zuerst im Stammbaum eine Person auswählen.';
-      return;
-    }
-
-    const parentMap = new Map();
-    const childrenByParent = new Map();
-    for (const family of treeData.familien || []) {
-      const parents = [family.partner_a_id, family.partner_b_id].filter(Boolean);
-      for (const child of treeChildrenForFamily(family.id)) {
-        const childId = child.person?.id || child.kind_id;
-        if (!childId || !(treeData.personen || []).some(person => person.id === childId)) continue;
-        if (!parentMap.has(childId)) parentMap.set(childId, new Set());
-        for (const parentId of parents) {
-          parentMap.get(childId).add(parentId);
-          if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, new Set());
-          childrenByParent.get(parentId).add(childId);
-        }
-      }
-    }
-
-    // Erste Cousins sind ausschließlich Kinder der Geschwister eines Elternteils.
-    const parentsOfSelected = parentMap.get(personId) || new Set();
-    const auntUncleIds = new Set();
-    for (const parentId of parentsOfSelected) {
-      for (const grandparentId of (parentMap.get(parentId) || new Set())) {
-        for (const auntUncleId of (childrenByParent.get(grandparentId) || new Set())) {
-          if (auntUncleId !== parentId && auntUncleId !== personId) auntUncleIds.add(auntUncleId);
-        }
-      }
-    }
-
-    const cousinIds = new Set();
-    for (const auntUncleId of auntUncleIds) {
-      for (const childId of (childrenByParent.get(auntUncleId) || new Set())) {
-        if (childId !== personId) cousinIds.add(childId);
-      }
-    }
-    const matches = [...cousinIds]
-      .map(id => (treeData.personen || []).find(person => person.id === id))
-      .filter(Boolean)
-      .sort((a, b) => personenAuswahlSortierung(a, b));
-
-    if (!matches.length) {
-      results.textContent = 'Keine Cousinen oder Cousins ersten Grades anhand der gespeicherten Eltern- und Familienverknüpfungen gefunden.';
-      return;
-    }
-
-    const list = document.createElement('ul');
-    list.className = 'tree-relationship-results';
-    for (const match of matches) {
-      const item = document.createElement('li');
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'link-button';
-      button.textContent = treePersonLabel(match.id);
-      button.addEventListener('click', () => {
-        const select = document.getElementById('tree-person-select');
-        if (select) {
-          select.value = match.id;
-          select.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        if (typeof renderStammbaum === 'function') renderStammbaum(match.id);
-      });
-      item.append(button);
-      list.append(item);
-    }
-    const summary = document.createElement('p');
-    summary.textContent = `${matches.length} Cousine${matches.length === 1 ? '' : 'n'} / Cousin${matches.length === 1 ? '' : 's'} ersten Grades gefunden.`;
-    results.append(summary, list);
-  };
-
-  openButton.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) {
-      showCousins();
-      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  });
-  closeButton.addEventListener('click', () => { panel.hidden = true; });
-  document.getElementById('tree-person-select')?.addEventListener('change', () => {
-    if (!panel.hidden) showCousins();
-  });
-}
 function treePersonSearchText(person) {
   return personenAuswahlText(person);
 }
@@ -8467,54 +8344,3 @@ if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeView
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
-initTreeCousinFinder();
-
-
-// v334: Cousinen-/Cousinsanzeige nutzt die im Stammbaum ausgewählte Person.
-(function initAlphabetischeAuswahllisten() {
-  const deCollator = new Intl.Collator("de-DE", { sensitivity: "base", numeric: true, ignorePunctuation: true });
-  const sortSelect = (select) => {
-    if (!(select instanceof HTMLSelectElement) || select.dataset.preserveOrder === "true") return;
-    const options = Array.from(select.options);
-    if (options.length < 3) return;
-    // Jahres-, Zahlen- und Zeitfolgen behalten ihre fachlich sinnvolle Reihenfolge.
-    const values = options.filter(o => o.value !== "").map(o => o.value.trim());
-    if (values.length > 1 && values.every(v => /^\d{1,4}$/.test(v))) return;
-    if (values.length > 1 && values.every(v => /^\d{4}-\d{2}-\d{2}$/.test(v))) return;
-    const selected = new Set(options.filter(o => o.selected).map(o => o.value));
-    const placeholders = options.filter(o => o.value === "" || o.disabled && !o.value);
-    const sortable = options.filter(o => o.value !== "" && !(o.disabled && !o.value));
-    sortable.sort((a, b) => deCollator.compare(a.textContent.trim(), b.textContent.trim()));
-    const desired = [...placeholders, ...sortable];
-    if (desired.length === options.length && desired.every((option, index) => option === options[index])) return;
-    const fragment = document.createDocumentFragment();
-    placeholders.forEach(o => fragment.appendChild(o));
-    sortable.forEach(o => fragment.appendChild(o));
-    select.appendChild(fragment);
-    options.forEach(o => { o.selected = selected.has(o.value); });
-  };
-  const sortAll = (root = document) => {
-    if (root instanceof HTMLSelectElement) sortSelect(root);
-    root.querySelectorAll?.("select").forEach(sortSelect);
-  };
-  const start = () => {
-    sortAll();
-    const observer = new MutationObserver(records => {
-      const selects = new Set();
-      for (const record of records) {
-        const target = record.target instanceof HTMLSelectElement ? record.target : record.target.closest?.("select");
-        if (target) selects.add(target);
-        record.addedNodes.forEach(node => {
-          if (node instanceof HTMLSelectElement) selects.add(node);
-          node.querySelectorAll?.("select").forEach(sel => selects.add(sel));
-          const parentSelect = node.parentElement?.closest?.("select");
-          if (parentSelect) selects.add(parentSelect);
-        });
-      }
-      selects.forEach(sortSelect);
-    });
-    observer.observe(document.body, { subtree: true, childList: true });
-  };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
-  else start();
-})();
