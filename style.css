@@ -1655,3 +1655,13 @@ details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
 .tree-desc__partner{margin:.4rem 0 .25rem .35rem;font-size:.82rem;color:#55745e}
 .tree-desc__leafinfo{margin:0 0 0 1.1rem}
 @media(max-width:700px){.tree-desc__list{padding-left:.7rem}.tree-desc__row{padding:.5rem .55rem}}
+
+/* Familienspuren v339 – Familienansicht (Eltern, Geschwister, Partner, Kinder) im Home-Design */
+.tree-classic-stage{background:transparent}
+.tree-classic-svg line{stroke:#9db9a5;stroke-width:2;stroke-linecap:round}
+.tree-classic-svg .tree-classic-family{stroke:#9db9a5;stroke-width:2}
+.tree-classic-svg .tree-classic-spouse{stroke:#6f9a7f;stroke-width:3}
+.tree-classic-level__label{left:14px;width:auto;text-align:left;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;font-size:.68rem;font-style:normal;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#55745e}
+#tab-stammbaum .tree-classic-node--spouse .tree-node{border-color:#d8e0d8}
+#tab-stammbaum .tree-classic-node--root .tree-node,#tab-stammbaum .tree-classic-node--family-root .tree-node{background:#f1f7f2;box-shadow:0 0 0 4px rgba(23,79,59,.14),0 8px 20px rgba(23,79,59,.18)}
+@media(max-width:700px){#tab-stammbaum .tree-controls__actions .tree-view-switch{display:grid;grid-template-columns:1fr 1fr;width:100%}}

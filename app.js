@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 338
+// Partezettel Archiv – Version 339
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7045,7 +7045,7 @@ document.getElementById("export-pdf-btn").addEventListener("click", async () => 
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
-let treeViewMode = "cards";
+let treeViewMode = "classic";   // v339: Standardansicht ist die Familienansicht
 let treeData = { personen: [], familien: [], kinder: [], photos: new Map() };
 let treeDataGeladenAm = 0;
 
@@ -8766,7 +8766,7 @@ function renderKlassischerStammbaum(rootId){
     if(families.length===1){const f=families[0],r=pos.get(`person:${rootId}:middle`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&s){const l=r.centerX<s.centerX?r:s,q=l===r?s:r,y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse");const j=(r.centerX+s.centerX)/2;treeClassicLine(svg,r.centerX,r.bottom,r.centerX,y);if(cs.length){const pb=Math.max(r.bottom,s.bottom),ct=Math.min(...cs.map(p=>p.top)),by=pb+Math.max(22,Math.min(46,(ct-pb)*.42));treeClassicLine(svg,j,y,j,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}else if(families.length===1&&f.childIds.length){const r=pos.get(`person:${rootId}:middle`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&cs.length){const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42));treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}}
     if(families.length>1)families.forEach(f=>treeClassicConnectFamily(svg,pos,f));
   });
-  canvas.querySelectorAll("[data-classic-person]").forEach(el=>{el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;renderKlassischerStammbaum(id);});el.addEventListener("dblclick",async e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;await openPersonDetail(id,{fromTree:true});});});
+  canvas.querySelectorAll("[data-classic-person]").forEach(el=>{el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;renderStammbaum(id);});el.addEventListener("dblclick",async e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;await openPersonDetail(id,{fromTree:true});});});
 }
 
 function setTreeViewMode(mode, rootId = "") {
@@ -8797,8 +8797,7 @@ function setTreeViewMode(mode, rootId = "") {
   if (generationen) generationen.hidden = treeViewMode !== "pedigree";
   const select = document.getElementById("tree-person-select");
   const id = rootId || select?.value || treeData.personen[0]?.id || "";
-  if (treeViewMode === "classic") renderKlassischerStammbaum(id);
-  else renderStammbaum(id);
+  renderStammbaum(id);
 }
 
 // Daten nur neu laden, wenn sie älter sind (spart Wartezeit und Datenverkehr bei „Auswahl bestätigen“).
@@ -8990,6 +8989,7 @@ function applyTreeLinePreset(value) {
   if (search) search.value = "";
   const confirm = document.getElementById("tree-person-confirm");
   if (confirm) confirm.disabled = true;
+  if (treeViewMode === "classic") setTreeViewMode("cards", root.id);   // eine Linie braucht die Gesamtübersicht
   renderTreeLinePreset(roots, preset.direction, preset.label);
   if (message) message.textContent = `${preset.label} angezeigt. Der Stammbaum wurde automatisch neu aufgebaut.`;
 }
@@ -9013,8 +9013,7 @@ function setTreePersonSelection(id, { confirmed = false } = {}) {
   if (!treeSelect || !id || !treePerson(id)) return;
   treeSelect.value = id;
   treePresetZuruecksetzen();   // eine bewusst gewählte Person wird ohne Linienfilter gezeigt
-  if (treeViewMode === "classic") renderKlassischerStammbaum(id);
-  else renderStammbaum(id);
+  renderStammbaum(id);
   requestAnimationFrame(() => {
     if (treeViewMode === "descendants") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
     const stage = document.getElementById(treeStageIdFuerAnsicht());
@@ -9117,6 +9116,7 @@ const treeViewCards = document.getElementById("tree-view-cards");
 const treeViewClassic = document.getElementById("tree-view-classic");
 if (treeViewCards) treeViewCards.addEventListener("click", () => setTreeViewMode("cards"));
 if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeViewMode("classic"));
+setTreeViewMode(treeViewMode);   // Startzustand der Ansichtstasten und Flächen
 const treeViewDescendants = document.getElementById("tree-view-descendants");
 if (treeViewDescendants) treeViewDescendants.addEventListener("click", () => setTreeViewMode("descendants"));
 const treeViewPedigree = document.getElementById("tree-view-pedigree");
