@@ -7869,6 +7869,116 @@ function initTreeRelationshipUI() {
   });
 }
 
+
+
+// v328: Cousinen- und Cousinsuche direkt im Stammbaum.
+function initTreeCousinFinder() {
+  const treeTab = document.querySelector('[data-tab="stammbaum"]')?.closest('.tab-panel')
+    || document.getElementById('stammbaum');
+  if (!treeTab || document.getElementById('tree-cousin-finder')) return;
+  const panel = document.createElement('section');
+  panel.id = 'tree-cousin-finder';
+  panel.className = 'tree-relationship-panel';
+  panel.style.cssText = 'margin:16px 0;padding:16px;border:1px solid var(--border-color,#d9dfd8);border-radius:12px;background:var(--card-bg,#fff);';
+  panel.innerHTML = `
+    <h3 style="margin-top:0">Cousinen und Cousins finden</h3>
+    <p>Wähle eine Ausgangsperson. Die Suche verwendet die gespeicherten Eltern- und Familienverknüpfungen.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
+      <label style="flex:1;min-width:220px">Ausgangsperson
+        <select id="tree-cousin-person" style="display:block;width:100%;margin-top:5px"><option value="">Person auswählen …</option></select>
+      </label>
+      <label style="min-width:160px">Ergebnis
+        <select id="tree-cousin-scope" style="display:block;width:100%;margin-top:5px">
+          <option value="all">Cousinen und Cousins</option><option value="female">Nur Cousinen</option><option value="male">Nur Cousins</option>
+        </select>
+      </label>
+      <label style="min-width:190px">Verwandtschaftsgrad
+        <select id="tree-cousin-degree" style="display:block;width:100%;margin-top:5px">
+          <option value="all">Auch entferntere</option><option value="1">Nur ersten Grades</option>
+        </select>
+      </label>
+      <button type="button" id="tree-cousin-search" class="btn btn-primary">Cousinen/Cousins suchen</button>
+    </div>
+    <div id="tree-cousin-results" aria-live="polite" style="margin-top:14px"></div>`;
+  const anchor = treeTab.querySelector('#tree-relationship-panel') || treeTab.querySelector('#tree-person-select')?.closest('.form-group') || treeTab.firstElementChild;
+  if (anchor?.parentNode) anchor.parentNode.insertBefore(panel, anchor.nextSibling);
+  else treeTab.appendChild(panel);
+
+  const personSelect = panel.querySelector('#tree-cousin-person');
+  const scopeSelect = panel.querySelector('#tree-cousin-scope');
+  const degreeSelect = panel.querySelector('#tree-cousin-degree');
+  const results = panel.querySelector('#tree-cousin-results');
+  const fill = () => {
+    const previous = personSelect.value;
+    const people = [...(treeData.personen || [])].sort((a,b) => personenAuswahlSortierung(a,b));
+    personSelect.replaceChildren(new Option('Person auswählen …',''));
+    for (const person of people) personSelect.add(new Option(treePersonLabel(person.id), person.id));
+    if (previous && people.some(p=>p.id===previous)) personSelect.value=previous;
+    else if (treeSelect?.value && people.some(p=>p.id===treeSelect.value)) personSelect.value=treeSelect.value;
+  };
+  fill();
+  const oldRender = window.renderStammbaum;
+  document.getElementById('tree-cousin-search').addEventListener('click', () => {
+    const personId = personSelect.value;
+    if (!personId) { results.textContent = 'Bitte zuerst eine Person auswählen.'; return; }
+    const parentMap = new Map();
+    for (const f of treeData.familien || []) {
+      for (const child of treeChildrenForFamily(f.id)) {
+        const childId = child.person?.id || child.kind_id;
+        if (!childId) continue;
+        if (!parentMap.has(childId)) parentMap.set(childId, new Set());
+        if (f.partner_a_id) parentMap.get(childId).add(f.partner_a_id);
+        if (f.partner_b_id) parentMap.get(childId).add(f.partner_b_id);
+      }
+    }
+    const model = { parentMap };
+    const baseAncestors = treeAncestorDistances(personId, model);
+    const matches = [];
+    for (const candidate of treeData.personen || []) {
+      if (candidate.id === personId) continue;
+      const rawGender = String(candidate.geschlecht || '').toLocaleLowerCase('de');
+      const gender = ['w','f','frau','weiblich','female'].includes(rawGender) ? 'w' : (['m','mann','männlich','maennlich','male'].includes(rawGender) ? 'm' : 'u');
+      if (scopeSelect.value === 'female' && gender !== 'w') continue;
+      if (scopeSelect.value === 'male' && gender !== 'm') continue;
+      const candidateAncestors = treeAncestorDistances(candidate.id, model);
+      let best = null;
+      for (const [ancestorId, dA] of baseAncestors) {
+        const dB = candidateAncestors.get(ancestorId);
+        if (dB == null || dA < 2 || dB < 2) continue;
+        const degree = Math.min(dA,dB)-1;
+        const removed = Math.abs(dA-dB);
+        const score = dA+dB;
+        if (!best || score < best.score) best = {degree,removed,score,ancestorId,dA,dB};
+      }
+      if (!best || (degreeSelect.value === '1' && best.degree !== 1)) continue;
+      matches.push({person:candidate,...best});
+    }
+    matches.sort((a,b)=>a.degree-b.degree || personenAuswahlSortierung(a.person,b.person));
+    if (!matches.length) { results.textContent = 'Keine passenden Cousinen oder Cousins anhand der gespeicherten Familienverknüpfungen gefunden.'; return; }
+    const list = document.createElement('ul');
+    list.style.cssText='padding-left:22px;display:grid;gap:8px';
+    for (const match of matches) {
+      const li=document.createElement('li');
+      const button=document.createElement('button'); button.type='button'; button.className='link-button';
+      button.textContent=treePersonLabel(match.person.id);
+      button.addEventListener('click',()=>{
+        const select=document.getElementById('tree-person-select');
+        if (select) { select.value=match.person.id; select.dispatchEvent(new Event('change',{bubbles:true})); }
+        if (typeof renderStammbaum === 'function') renderStammbaum(match.person.id);
+      });
+      li.append(button);
+      const details=document.createElement('span');
+      details.textContent=` — Cousin/Cousine ${match.degree}. Grades${match.removed ? `, ${match.removed} Generation${match.removed===1?'':'en'} entfernt` : ''}; gemeinsamer Vorfahr: ${treePersonLabel(match.ancestorId)}`;
+      li.append(details); list.append(li);
+    }
+    results.replaceChildren();
+    const summary=document.createElement('p'); summary.textContent=`${matches.length} Treffer gefunden.`; results.append(summary,list);
+  });
+  // Refresh the selector when the Stammbaum data is reloaded.
+  const observer = new MutationObserver(() => { if ((treeData.personen||[]).length && personSelect.options.length !== (treeData.personen.length+1)) fill(); });
+  observer.observe(panel,{childList:true,subtree:true});
+}
+
 function treePersonSearchText(person) {
   return personenAuswahlText(person);
 }
@@ -8350,9 +8460,10 @@ if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeView
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
+initTreeCousinFinder();
 
 
-// v326: Auswahllisten alphabetisch sortieren, ohne gespeicherte Daten zu verändern.
+// v328: Cousinen- und Cousinsuche im Stammbaum; v326: Auswahllisten alphabetisch sortieren, ohne gespeicherte Daten zu verändern.
 (function initAlphabetischeAuswahllisten() {
   const deCollator = new Intl.Collator("de-DE", { sensitivity: "base", numeric: true, ignorePunctuation: true });
   const sortSelect = (select) => {
