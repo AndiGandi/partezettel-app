@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 328 -->
+    <!-- Version 329 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=328">
+<link rel="stylesheet" href="style.css?v=329">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -68,7 +68,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 328</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 329</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -96,7 +96,7 @@
         </label>
 
         <label class="field">
-          <span>Nachname *</span>
+          <span>Nachname (falls bekannt)</span>
           <input type="text" id="nachname">
         </label>
 
@@ -563,7 +563,7 @@
         <div class="person-name-keyphoto-row">
           <div class="person-name-fields">
             <label class="field"><span>Vorname *</span><input type="text" id="d-vorname"></label>
-            <label class="field"><span>Nachname *</span><input type="text" id="d-nachname"></label>
+            <label class="field"><span>Nachname (falls bekannt)</span><input type="text" id="d-nachname"></label>
             <label class="field"><span>Ledigenname</span><input type="text" id="d-ledigenname"></label>
             <label class="field"><span>Geschlecht *</span><select id="d-geschlecht"><option value="">— bitte wählen —</option><option value="männlich">männlich</option><option value="weiblich">weiblich</option></select></label>
           </div>
@@ -781,6 +781,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=328"></script>
+<script src="app.js?v=329"></script>
 </body>
 </html>

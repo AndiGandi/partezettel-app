@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 328
+// Partezettel Archiv – Version 329
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -1230,15 +1230,28 @@ async function speichereErstverwandtschaft(eintrag) {
   }
 }
 
+// v329: Fehlendes Pflichtfeld markieren – der Cursor springt direkt in das Feld.
+function fokussiereFehlerFeld(feld) {
+  if (!feld) return;
+  try { feld.scrollIntoView({ block: "center", behavior: "smooth" }); } catch (_) { /* ältere Browser */ }
+  feld.focus({ preventScroll: true });
+}
+
 // ---------- Formular absenden ----------
 const form = document.getElementById("person-form");
 const formMessage = document.getElementById("form-message");
 
 form.addEventListener("submit", async (e) => {
   e.preventDefault();
+  // Pflichtfelder: nur Vorname und Geschlecht (Nachname kann unbekannt sein, z. B. nur Ledigenname bekannt).
+  if (!document.getElementById("vorname").value.trim()) {
+    formMessage.textContent = "Bitte den Vornamen eingeben.";
+    fokussiereFehlerFeld(document.getElementById("vorname"));
+    return;
+  }
   if (!document.getElementById("geschlecht").value) {
     formMessage.textContent = "Bitte das Geschlecht auswählen.";
-    document.getElementById("geschlecht").focus();
+    fokussiereFehlerFeld(document.getElementById("geschlecht"));
     return;
   }
   debugLog("Formular abgeschickt – Verarbeitung startet.");
@@ -3947,13 +3960,15 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   const elternMutterId = document.getElementById("d-mutter")?.value || null;
   const vorname = document.getElementById("d-vorname").value.trim();
   const nachname = document.getElementById("d-nachname").value.trim();
-  if (!vorname || !nachname) {
-    msg.textContent = "Vor- und Nachname dürfen nicht leer sein.";
+  if (!vorname) {
+    msg.textContent = "Bitte den Vornamen eingeben.";
+    fokussiereFehlerFeld(document.getElementById("d-vorname"));
     return;
   }
   const geschlechtWert = document.getElementById("d-geschlecht").value;
   if (!geschlechtWert) {
     msg.textContent = "Bitte das Geschlecht auswählen.";
+    fokussiereFehlerFeld(document.getElementById("d-geschlecht"));
     return;
   }
   const { error } = await sb.from("personen").update({
