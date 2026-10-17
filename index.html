@@ -5,16 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 322 -->
+    <!-- Version 323 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=322">
+<link rel="stylesheet" href="style.css?v=323">
 <style>
   .login-card--familienspuren { text-align: center; }
-  .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #8b6b45; }
+  .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
   .familienspuren-logo svg { display: block; width: 100%; height: 100%; }
   .login-card--familienspuren h1 { margin-top: 0; }
   .familienspuren-tagline { margin: -4px 0 22px; color: #74695d; font-size: .95rem; letter-spacing: .015em; }
@@ -25,15 +25,15 @@
 <div id="login-screen" class="login-screen">
   <div class="login-card login-card--familienspuren">
     <div class="familienspuren-logo" aria-hidden="true">
-      <svg viewBox="0 0 120 100" role="img" focusable="false">
-        <g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M60 22 L28 43 L28 79 M60 22 L92 43 L92 79 M28 43 L60 62 L92 43 M60 62 L60 88" />
-          <path d="M49 76 C39 74 34 67 34 59 C44 60 50 66 49 76 Z M71 76 C81 74 86 67 86 59 C76 60 70 66 71 76 Z" />
+      <svg viewBox="0 0 160 130" role="img" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter">
+          <path d="M80 16 L52 34 L24 54 L24 91 M80 16 L108 34 L136 54 L136 91 M24 54 L52 70 L80 91 L108 70 L136 54 M52 70 L52 100 M108 70 L108 100 M80 91 L80 124"/>
+          <path d="M65 91 C55 81 48 82 43 82 C43 95 51 103 65 105 Z M95 91 C105 81 112 82 117 82 C117 95 109 103 95 105 Z"/>
         </g>
-        <g fill="var(--paper, #f5f1e8)" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round">
-          <path d="M60 4 L73 11.5 L73 26.5 L60 34 L47 26.5 L47 11.5 Z" />
-          <path d="M28 30 L40 37 L40 51 L28 58 L16 51 L16 37 Z" />
-          <path d="M92 30 L104 37 L104 51 L92 58 L80 51 L80 37 Z" />
+        <g fill="#f8f6ef" stroke="currentColor" stroke-width="5">
+          <path d="M80 2 L94 10 L94 26 L80 34 L66 26 L66 10 Z"/>
+          <path d="M24 38 L38 46 L38 62 L24 70 L10 62 L10 46 Z"/>
+          <path d="M136 38 L150 46 L150 62 L136 70 L122 62 L122 46 Z"/>
         </g>
       </svg>
     </div>
@@ -51,25 +51,24 @@
 
 <div id="app-shell" hidden>
 <header class="app-header app-header--familienspuren">
-  <div class="app-brand-mark" aria-hidden="true">
-    <svg viewBox="0 0 120 100" focusable="false">
-        <g fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M60 22 L28 43 L28 79 M60 22 L92 43 L92 79 M28 43 L60 62 L92 43 M60 62 L60 88" />
-          <path d="M49 76 C39 74 34 67 34 59 C44 60 50 66 49 76 Z M71 76 C81 74 86 67 86 59 C76 60 70 66 71 76 Z" />
+  <div class="app-header__brand">
+    <div class="app-header__logo" aria-hidden="true">
+      <svg viewBox="0 0 160 130" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="square" stroke-linejoin="miter">
+          <path d="M80 16 L52 34 L24 54 L24 91 M80 16 L108 34 L136 54 L136 91 M24 54 L52 70 L80 91 L108 70 L136 54 M52 70 L52 100 M108 70 L108 100 M80 91 L80 124"/>
+          <path d="M65 91 C55 81 48 82 43 82 C43 95 51 103 65 105 Z M95 91 C105 81 112 82 117 82 C117 95 109 103 95 105 Z"/>
         </g>
-        <g fill="var(--paper)" stroke="currentColor" stroke-width="3.5" stroke-linejoin="round">
-          <path d="M60 4 L73 11.5 L73 26.5 L60 34 L47 26.5 L47 11.5 Z" />
-          <path d="M28 30 L40 37 L40 51 L28 58 L16 51 L16 37 Z" />
-          <path d="M92 30 L104 37 L104 51 L92 58 L80 51 L80 37 Z" />
+        <g fill="#f8f6ef" stroke="currentColor" stroke-width="5">
+          <path d="M80 2 L94 10 L94 26 L80 34 L66 26 L66 10 Z"/><path d="M24 38 L38 46 L38 62 L24 70 L10 62 L10 46 Z"/><path d="M136 38 L150 46 L150 62 L136 70 L122 62 L122 46 Z"/>
         </g>
       </svg>
+    </div>
+    <div class="app-header__brand-copy">
+      <h1>Familienspuren</h1>
+      <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
+    </div>
   </div>
-  <div class="app-brand-copy">
-    <h1>Familienspuren</h1>
-    <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
-  </div>
-  <p id="app-version" class="app-header__version">Version 322</p>
-  <button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button>
+  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 323</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">

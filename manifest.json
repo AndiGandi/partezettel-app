@@ -1,10 +1,10 @@
 {
-  "name": "Partezettel Archiv",
-  "short_name": "Partezettel",
+  "name": "Familienspuren",
+  "short_name": "Familienspuren",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#2B2A28",
-  "theme_color": "#2B2A28",
+  "background_color": "#f8f6ef",
+  "theme_color": "#174f3b",
   "lang": "de"
 }
