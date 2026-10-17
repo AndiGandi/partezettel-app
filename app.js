@@ -1,4 +1,4 @@
-// Familienspuren – Version 332
+// Partezettel Archiv – Version 322
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -2720,14 +2720,8 @@ function erstellePersonenKarte(p) {
 function aktualisierePersonenKarte(karte, p) {
   karte.person = p;
   karte.li.dataset.personId = p.id;
-  const vornameAnzeige = String(p.vorname || "").trim();
-  const nachnameAnzeige = String(p.nachname || "").trim();
-  const ledigennameAnzeige = String(p.Ledigenname || p.ledigenname || "").trim();
-  const namensZusatz = ledigennameAnzeige && ledigennameAnzeige.localeCompare(nachnameAnzeige, "de", { sensitivity: "base" }) !== 0
-    ? ` (geb. ${ledigennameAnzeige})`
-    : "";
-  karte.name.textContent = `${vornameAnzeige} ${nachnameAnzeige}${namensZusatz}`.trim();
-  karte.img.alt = `Schlüsselfoto von ${vornameAnzeige} ${nachnameAnzeige}${namensZusatz}`.trim();
+  karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
 
   const sterbeJahrAnzeige = p.sterbedatum
     ? p.sterbedatum.split("-")[0]
@@ -7869,140 +7863,6 @@ function initTreeRelationshipUI() {
   });
 }
 
-
-
-// v332: Cousinen/Cousins exakt als Kinder der Tanten und Onkel; Designbasis v329 erhalten.
-function initTreeCousinFinder() {
-  const treeTab = document.getElementById('tab-stammbaum');
-  if (!treeTab || document.getElementById('tree-cousin-finder')) return;
-  const panel = document.createElement('section');
-  panel.id = 'tree-cousin-finder';
-  panel.className = 'tree-relationship-panel';
-  panel.hidden = true;
-  panel.style.cssText = 'margin:16px 0;padding:16px;border:1px solid var(--border-color,#d9dfd8);border-radius:12px;background:var(--card-bg,#fff);';
-  panel.innerHTML = `
-    <h3 style="margin-top:0">Cousinen anzeigen</h3>
-    <p>Es wird die im Stammbaum ausgewählte Person verwendet. Die Suche berücksichtigt gespeicherte Eltern- und Familienverknüpfungen.</p>
-    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end">
-      <label style="flex:1;min-width:220px">Ausgangsperson
-        <select id="tree-cousin-person" style="display:block;width:100%;margin-top:5px"><option value="">Person auswählen …</option></select>
-      </label>
-      <label style="min-width:160px">Ergebnis
-        <select id="tree-cousin-scope" style="display:block;width:100%;margin-top:5px">
-          <option value="female" selected>Nur Cousinen</option><option value="all">Cousinen und Cousins</option><option value="male">Nur Cousins</option>
-        </select>
-      </label>
-      <label style="min-width:190px">Verwandtschaftsgrad
-        <select id="tree-cousin-degree" style="display:block;width:100%;margin-top:5px">
-          <option value="all">Auch entferntere</option><option value="1">Nur ersten Grades</option>
-        </select>
-      </label>
-      <button type="button" id="tree-cousin-search" class="btn btn--primary">Cousinen suchen</button>
-    </div>
-    <div id="tree-cousin-results" aria-live="polite" style="margin-top:14px"></div>`;
-  const anchor = treeTab.querySelector('#tree-relationship-panel') || treeTab.querySelector('#tree-person-select')?.closest('.form-group') || treeTab.firstElementChild;
-  if (anchor?.parentNode) anchor.parentNode.insertBefore(panel, anchor.nextSibling);
-  else treeTab.appendChild(panel);
-
-  const personSelect = panel.querySelector('#tree-cousin-person');
-  const scopeSelect = panel.querySelector('#tree-cousin-scope');
-  const degreeSelect = panel.querySelector('#tree-cousin-degree');
-  const results = panel.querySelector('#tree-cousin-results');
-  const fill = () => {
-    const previous = personSelect.value;
-    const people = [...(treeData.personen || [])].sort((a,b) => personenAuswahlSortierung(a,b));
-    personSelect.replaceChildren(new Option('Person auswählen …',''));
-    for (const person of people) personSelect.add(new Option(treePersonLabel(person.id), person.id));
-    if (previous && people.some(p=>p.id===previous)) personSelect.value=previous;
-    else if (treeSelect?.value && people.some(p=>p.id===treeSelect.value)) personSelect.value=treeSelect.value;
-  };
-  fill();
-  const openButton = document.getElementById('tree-cousin-open');
-  const syncSelectedPerson = () => {
-    fill();
-    if (treeSelect?.value && [...personSelect.options].some(option => option.value === treeSelect.value)) {
-      personSelect.value = treeSelect.value;
-    }
-  };
-  openButton?.addEventListener('click', () => {
-    panel.hidden = !panel.hidden;
-    if (!panel.hidden) {
-      syncSelectedPerson();
-      if (personSelect.value) document.getElementById('tree-cousin-search')?.click();
-      panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
-  });
-  treeSelect?.addEventListener('change', () => {
-    if (!panel.hidden) syncSelectedPerson();
-  });
-  document.getElementById('tree-cousin-search').addEventListener('click', () => {
-    const personId = personSelect.value || treeSelect?.value;
-    if (!personId) { results.textContent = 'Bitte zuerst eine Ausgangsperson im Stammbaum auswählen.'; return; }
-    const parentMap = new Map();
-    const childrenByParent = new Map();
-    for (const f of treeData.familien || []) {
-      const parents = [f.partner_a_id, f.partner_b_id].filter(Boolean);
-      for (const child of treeChildrenForFamily(f.id)) {
-        const childId = child.person?.id || child.kind_id;
-        if (!childId) continue;
-        if (!parentMap.has(childId)) parentMap.set(childId, new Set());
-        for (const parentId of parents) {
-          parentMap.get(childId).add(parentId);
-          if (!childrenByParent.has(parentId)) childrenByParent.set(parentId, new Set());
-          childrenByParent.get(parentId).add(childId);
-        }
-      }
-    }
-    // Cousins are strictly the children of the siblings of either parent.
-    const parentsOfSelected = parentMap.get(personId) || new Set();
-    const auntUncleIds = new Set();
-    for (const parentId of parentsOfSelected) {
-      for (const grandparentId of (parentMap.get(parentId) || new Set())) {
-        for (const auntUncleId of (childrenByParent.get(grandparentId) || new Set())) {
-          if (auntUncleId !== parentId && auntUncleId !== personId) auntUncleIds.add(auntUncleId);
-        }
-      }
-    }
-    const cousinIds = new Set();
-    for (const auntUncleId of auntUncleIds) {
-      for (const childId of (childrenByParent.get(auntUncleId) || new Set())) {
-        if (childId !== personId) cousinIds.add(childId);
-      }
-    }
-    const matches = [...cousinIds].map(id => (treeData.personen || []).find(p => p.id === id)).filter(Boolean).filter(candidate => {
-      const rawGender = String(candidate.geschlecht || '').toLocaleLowerCase('de');
-      const gender = ['w','f','frau','weiblich','female'].includes(rawGender) ? 'w' : (['m','mann','männlich','maennlich','male'].includes(rawGender) ? 'm' : 'u');
-      if (scopeSelect.value === 'female' && gender !== 'w') return false;
-      if (scopeSelect.value === 'male' && gender !== 'm') return false;
-      return true;
-    }).sort((a,b) => personenAuswahlSortierung(a,b));
-    if (!matches.length) { results.textContent = 'Keine Cousinen oder Cousins ersten Grades anhand der gespeicherten Eltern- und Familienverknüpfungen gefunden.'; return; }
-    const list = document.createElement('ul');
-    list.style.cssText='padding-left:22px;display:grid;gap:8px';
-    for (const match of matches) {
-      const li=document.createElement('li');
-      const button=document.createElement('button'); button.type='button'; button.className='link-button';
-      button.textContent=treePersonLabel(match.id);
-      button.addEventListener('click',()=>{
-        const select=document.getElementById('tree-person-select');
-        if (select) { select.value=match.id; select.dispatchEvent(new Event('change',{bubbles:true})); }
-        if (typeof renderStammbaum === 'function') renderStammbaum(match.id);
-      });
-      li.append(button); list.append(li);
-    }
-    results.replaceChildren();
-    const summary=document.createElement('p'); summary.textContent=`${matches.length} Cousine${matches.length===1?'':'n'} / Cousin${matches.length===1?'':'s'} ersten Grades gefunden.`; results.append(summary,list);
-  });
-  // Keep the selected person in sync with the main Stammbaum selector.
-  const stage = document.getElementById('tree-stage');
-  if (stage && typeof MutationObserver !== 'undefined') {
-    const observer = new MutationObserver(() => {
-      if ((treeData.personen || []).length && personSelect.options.length !== treeData.personen.length + 1) syncSelectedPerson();
-    });
-    observer.observe(stage, { childList: true, subtree: true });
-  }
-}
-
 function treePersonSearchText(person) {
   return personenAuswahlText(person);
 }
@@ -8484,54 +8344,3 @@ if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeView
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
-initTreeCousinFinder();
-
-
-// v332: Cousinen/Cousins sind ausschließlich Kinder der Geschwister der Eltern; Designbasis v329.
-(function initAlphabetischeAuswahllisten() {
-  const deCollator = new Intl.Collator("de-DE", { sensitivity: "base", numeric: true, ignorePunctuation: true });
-  const sortSelect = (select) => {
-    if (!(select instanceof HTMLSelectElement) || select.dataset.preserveOrder === "true") return;
-    const options = Array.from(select.options);
-    if (options.length < 3) return;
-    // Jahres-, Zahlen- und Zeitfolgen behalten ihre fachlich sinnvolle Reihenfolge.
-    const values = options.filter(o => o.value !== "").map(o => o.value.trim());
-    if (values.length > 1 && values.every(v => /^\d{1,4}$/.test(v))) return;
-    if (values.length > 1 && values.every(v => /^\d{4}-\d{2}-\d{2}$/.test(v))) return;
-    const selected = new Set(options.filter(o => o.selected).map(o => o.value));
-    const placeholders = options.filter(o => o.value === "" || o.disabled && !o.value);
-    const sortable = options.filter(o => o.value !== "" && !(o.disabled && !o.value));
-    sortable.sort((a, b) => deCollator.compare(a.textContent.trim(), b.textContent.trim()));
-    const desired = [...placeholders, ...sortable];
-    if (desired.length === options.length && desired.every((option, index) => option === options[index])) return;
-    const fragment = document.createDocumentFragment();
-    placeholders.forEach(o => fragment.appendChild(o));
-    sortable.forEach(o => fragment.appendChild(o));
-    select.appendChild(fragment);
-    options.forEach(o => { o.selected = selected.has(o.value); });
-  };
-  const sortAll = (root = document) => {
-    if (root instanceof HTMLSelectElement) sortSelect(root);
-    root.querySelectorAll?.("select").forEach(sortSelect);
-  };
-  const start = () => {
-    sortAll();
-    const observer = new MutationObserver(records => {
-      const selects = new Set();
-      for (const record of records) {
-        const target = record.target instanceof HTMLSelectElement ? record.target : record.target.closest?.("select");
-        if (target) selects.add(target);
-        record.addedNodes.forEach(node => {
-          if (node instanceof HTMLSelectElement) selects.add(node);
-          node.querySelectorAll?.("select").forEach(sel => selects.add(sel));
-          const parentSelect = node.parentElement?.closest?.("select");
-          if (parentSelect) selects.add(parentSelect);
-        });
-      }
-      selects.forEach(sortSelect);
-    });
-    observer.observe(document.body, { subtree: true, childList: true });
-  };
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
-  else start();
-})();

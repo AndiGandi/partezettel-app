@@ -1385,113 +1385,70 @@ select[name*="Year"] {
 .tree-node__maiden-name { display: block; font-size: 0.88em; font-weight: 400; line-height: 1.2; overflow-wrap: anywhere; }
 
 
-/* Familienspuren v329 – einheitliches, responsives Design für alle Bereiche */
-:root {
-  color-scheme: light;
-  --paper: #F5F4EE;
-  --ink: #20352D;
-  --ink-soft: #5D6D64;
-  --accent: #286247;
-  --accent-soft: #E1ECE4;
-  --line: #D4DED6;
-  --card: #FFFFFF;
-  --danger: #A33F3A;
-  --radius: 14px;
-  --surface-secondary: #E9EFE9;
-  --shadow-soft: 0 3px 14px rgba(31, 65, 48, .06);
-}
-html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scroll-behavior: smooth; }
-body { background: var(--paper); color: var(--ink); min-width: 320px; padding-bottom: max(2rem, env(safe-area-inset-bottom)); }
-button, input, select, textarea { font: inherit; }
-button, .btn, select, input[type="checkbox"], input[type="radio"] { touch-action: manipulation; }
-button, .btn { min-height: 42px; }
-:where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { min-height: 44px; font-size: 16px; }
-:where(input, select, textarea, button, a, summary):focus-visible { outline: 3px solid #77A98A; outline-offset: 2px; }
-.app-header { position: relative; padding: clamp(1.2rem, 3vw, 2rem) 1rem 1.1rem; text-align: center; background: linear-gradient(180deg, #FBFCF8 0%, var(--paper) 100%); border-bottom: 1px solid var(--line); }
-.app-header h1 { color: #214C3B; font-family: Georgia, "Iowan Old Style", "Times New Roman", serif; font-weight: 600; font-size: clamp(1.65rem, 3.3vw, 2.25rem); letter-spacing: -.025em; }
-.app-header__version { color: var(--accent); font-size: .78rem; }
-.app-header__subtitle { color: var(--ink-soft); font-size: clamp(.86rem, 2vw, 1rem); }
-.login-logout { margin-top: .65rem; }
-.tabs { gap: .25rem; padding: .4rem max(.5rem, env(safe-area-inset-left)); background: rgba(251,252,248,.97); border-bottom: 1px solid var(--line); box-shadow: 0 2px 8px rgba(32,53,45,.04); overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
-.tab-btn { flex: 0 0 auto; min-height: 44px; padding: .65rem .9rem; border: 1px solid transparent; border-radius: 10px; color: var(--ink-soft); font-size: .9rem; white-space: nowrap; }
-.tab-btn.is-active { background: var(--accent-soft); color: #214C3B; border-color: #C7D9CC; border-bottom: 1px solid #C7D9CC; font-weight: 700; }
-main { width: 100%; }
-.tab-panel { width: 100%; max-width: 1040px; padding: clamp(.8rem, 2.5vw, 1.5rem); }
-#tab-stammbaum.tab-panel { max-width: 1500px; }
-.field-group { border-color: var(--line); border-radius: var(--radius); padding: clamp(.8rem, 2vw, 1.15rem); background: var(--card); box-shadow: var(--shadow-soft); }
-.field-group legend { padding: 0 .45rem; color: #214C3B; font-family: inherit; font-weight: 700; font-size: 1rem; }
-.field span, .field label, label span { color: var(--ink-soft); }
-input[type="text"], input[type="search"], input[type="email"], input[type="password"], input[type="url"], input[type="number"], input[type="date"], input[type="tel"], select, textarea { width: 100%; max-width: 100%; min-width: 0; padding: .68rem .75rem; border: 1px solid #C9D5CC; border-radius: 10px; background: #FFF; color: var(--ink); box-shadow: inset 0 1px 2px rgba(20,50,35,.025); }
-input::placeholder, textarea::placeholder { color: #85938A; opacity: 1; }
-input:focus, select:focus, textarea:focus { border-color: #4C8766; box-shadow: 0 0 0 3px rgba(76,135,102,.14); outline: none; }
-textarea { min-height: 96px; }
-.btn { border-radius: 10px; padding: .7rem 1rem; font-weight: 650; transition: background-color .15s ease, transform .15s ease; }
-.btn--primary { background: #245B40; color: #fff; }
-.btn--primary:hover { background: #19462F; }
-.btn--secondary { background: #E1ECE4; color: #214C3B; border: 1px solid #CADCCF; }
-.btn--ghost { background: #FFF; color: #355847; border: 1px solid #CBD8CE; }
-.btn:active { transform: translateY(1px); }
-.person-card, .detail-media-item, .tree-node, .login-card, .person-view-section, .photo-editor__sheet { border-color: var(--line); border-radius: var(--radius); box-shadow: var(--shadow-soft); }
-.person-card { background: #FFF; padding: .8rem .9rem; min-height: 76px; }
-.person-card:hover { border-color: #A8C8B3; }
-.person-card__name { color: #214C3B; font-weight: 600; }
-.person-card__years, .person-card__relations, .person-card__note { color: var(--ink-soft); }
-.list-toolbar { align-items: stretch; }
-.list-toolbar input { min-width: 0; }
-.pending-banner { background: #EDF4E8; border-color: #D5E4D1; color: #3C5B43; border-radius: 10px; }
-.tree-viewport { background: #EDF1EA; border-color: #D0DCD1; border-radius: 14px; }
-.tree-toolbar { flex-wrap: wrap; }
-.tree-person-select { min-width: 0; }
-.tree-zoom-controls { flex-wrap: wrap; }
-.detail-sheet { background: var(--paper); }
-.detail-header { background: rgba(245,244,238,.97); border-bottom: 1px solid var(--line); }
-.detail-header h2 { color: #214C3B; }
-.detail-media-item { background: #FFF; }
-.login-screen { padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom)); }
-.login-card { width: min(100%, 460px); padding: clamp(1.1rem, 4vw, 2rem); background: #FFF; border: 1px solid var(--line); }
-.familienspuren-logo { color: #286247; }
-.familienspuren-tagline { color: var(--ink-soft); }
-.capture-status, .form-message { color: var(--ink-soft); }
-.preview-img { border-radius: 10px; }
-/* Grid-based form rows expand on tablets and desktop, stay single-column on phones. */
-@media (min-width: 760px) {
-  .tab-panel:not(.tree-panel) { max-width: 1120px; }
-  #person-form > .field-group { padding: 1.25rem; }
-  .field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; align-items: start; }
-  .field-row > .field { min-width: 0; }
-  .personen-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; }
-  .list-toolbar { max-width: 100%; }
-}
-@media (max-width: 759px) {
-  .app-header { padding-left: .8rem; padding-right: .8rem; }
-  .tabs { justify-content: flex-start; }
-  .tab-btn { padding: .62rem .75rem; font-size: .86rem; }
-  .tab-panel { padding: .75rem; }
-  .field-group { margin-bottom: .75rem; }
-  .field { margin-bottom: .8rem; }
-  .date-parts--with-year { max-width: 100%; }
-  .source-links-row { grid-template-columns: minmax(0, 1fr); }
-  .tree-toolbar { align-items: stretch; }
-  .tree-person-select { grid-template-columns: minmax(0, 1fr); width: 100%; }
-  .tree-zoom-controls { justify-content: flex-start; }
-  .tree-viewport { min-height: 420px; max-height: 68dvh; padding: .75rem; }
-  .list-toolbar { flex-wrap: wrap; }
-  .list-toolbar input { flex: 1 1 100%; }
-  .personen-sortierung { align-items: stretch; flex-wrap: wrap; }
-  .personen-sortierung .field { flex: 1 1 100%; }
-  .detail-sheet { padding-left: max(.8rem, env(safe-area-inset-left)); padding-right: max(.8rem, env(safe-area-inset-right)); }
-  .detail-header { padding-top: max(1rem, env(safe-area-inset-top)); }
-}
-@media (max-width: 390px) {
-  .date-parts--with-year { gap: .2rem; }
-  .date-parts--with-year > select { max-width: 29%; }
-  .date-year-only-field { gap: .15rem; }
-  .date-year-only-field span { max-width: 4.7rem; white-space: normal; }
-  .date-year-only-field select { width: 4.1rem !important; min-width: 4.1rem; max-width: 4.1rem; }
-  .person-card { gap: .55rem; padding: .6rem; }
-  .person-card__photo, .person-card__photo-placeholder { width: 46px; height: 46px; flex-basis: 46px; }
-}
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
-}
+/* Familienspuren v323 – Marken-Kopf und Navigation */
+:root{--fs-forest:#174f3b;--fs-forest-deep:#103d2e;--fs-cream:#f8f6ef;--fs-sage:#edf1e9;--fs-gold:#8b7047}
+.app-header--familienspuren{display:flex;align-items:center;justify-content:space-between;gap:1.25rem;text-align:left;padding:1.2rem clamp(1rem,3vw,2.5rem);background:var(--fs-cream);border-bottom:1px solid #d8dfd4}
+.app-header__brand{display:flex;align-items:center;gap:1.25rem;min-width:0}
+.app-header__logo{width:100px;height:88px;flex:0 0 100px;color:var(--fs-forest)}
+.app-header__logo svg{display:block;width:100%;height:100%}
+.app-header--familienspuren h1{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:clamp(1.65rem,3.1vw,2.8rem);font-weight:750;letter-spacing:-.035em;line-height:1.08;color:var(--fs-forest);margin:0 0 .35rem}
+.app-header--familienspuren .app-header__subtitle{font-size:clamp(.85rem,1.45vw,1.15rem);font-style:normal;letter-spacing:.01em;color:var(--fs-gold);margin:0}
+.app-header__meta{display:flex;flex-direction:column;align-items:flex-end;gap:.35rem;flex:0 0 auto}
+.app-header--familienspuren .app-header__version{font-size:.86rem;color:var(--fs-forest);margin:0;white-space:nowrap}
+.app-header--familienspuren .login-logout{margin:0;min-height:34px;padding:.35rem .7rem}
+.tabs{display:flex;align-items:stretch;gap:.25rem;padding:.55rem clamp(.5rem,1.5vw,1.4rem);background:var(--fs-sage);border-bottom:3px solid var(--fs-forest);box-shadow:0 5px 16px rgba(23,79,59,.07);overflow-x:auto;scrollbar-width:thin}
+.tab-btn{flex:1 0 auto;min-width:max-content;padding:.78rem .9rem;border:0;border-radius:10px 10px 8px 8px;border-bottom:0;color:#315b49;font-size:clamp(.82rem,1.1vw,.98rem);font-weight:550;transition:background .15s ease,color .15s ease}
+.tab-btn:hover{background:rgba(23,79,59,.08);color:var(--fs-forest-deep)}
+.tab-btn.is-active{background:linear-gradient(135deg,#205c45,#174f3b);color:#fff;border-bottom-color:transparent;font-weight:700;box-shadow:0 2px 5px rgba(16,61,46,.15)}
+@media(max-width:700px){.app-header--familienspuren{align-items:flex-start;padding:.9rem .8rem;gap:.5rem}.app-header__brand{gap:.65rem}.app-header__logo{width:58px;height:60px;flex-basis:58px}.app-header--familienspuren h1{font-size:clamp(1.25rem,5vw,1.8rem);letter-spacing:-.025em}.app-header--familienspuren .app-header__subtitle{font-size:.76rem;line-height:1.3}.app-header__meta{gap:.25rem}.app-header--familienspuren .app-header__version{font-size:.72rem}.app-header--familienspuren .login-logout{font-size:.75rem;min-height:30px;padding:.25rem .45rem}.tabs{padding:.4rem .45rem;gap:.2rem}.tab-btn{padding:.65rem .72rem;font-size:.83rem}}
+@media(max-width:420px){.app-header__logo{width:46px;height:50px;flex-basis:46px}.app-header__brand{gap:.45rem}.app-header--familienspuren h1{font-size:1.18rem}.app-header--familienspuren .app-header__subtitle{max-width:190px}.app-header__meta{max-width:75px}.app-header--familienspuren .app-header__version{font-size:.66rem}}
+
+
+/* Familienspuren v324 – visuelle Überarbeitung des Bereichs „Bestand“ */
+#tab-liste{max-width:1120px;padding:1.15rem clamp(.75rem,2.4vw,1.6rem) 2rem}
+#tab-liste .list-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:.65rem;margin:0 0 .85rem}
+#tab-liste #search-input{min-height:48px;padding:.75rem 1rem;border:1px solid #cbd8cf;border-radius:12px;background:#fff;box-shadow:0 2px 8px rgba(23,79,59,.045);font-size:1rem}
+#tab-liste #search-input:focus{outline:3px solid rgba(23,79,59,.14);border-color:#39775b}
+#tab-liste .personen-cache-status{font-size:.76rem;color:#65756b;max-width:14rem}
+#tab-liste .personen-suchtreffer{font-size:.9rem;color:#174f3b;font-weight:650;white-space:nowrap}
+#tab-liste #refresh-btn,#tab-liste #personen-sort-richtung{min-width:46px;min-height:46px;border-radius:11px;border-color:#cbd8cf;background:#f8faf7;color:#174f3b}
+#tab-liste .pending-banner{background:#edf4ee;border:1px solid #cadbce;border-radius:11px;color:#315b43}
+#tab-liste .egress-debug-panel{margin:.5rem 0 1rem;border:1px dashed #cbd8cf;border-radius:11px;background:rgba(255,255,255,.72);color:#647168;padding:.7rem .85rem}
+#tab-liste .egress-debug-panel summary{font-weight:650;color:#53665a;cursor:pointer}
+#tab-liste .personen-sortierung{align-items:end;gap:.7rem;margin:0 0 1rem}
+#tab-liste .personen-sortierung .field span{font-size:.8rem;font-weight:600;color:#617065;letter-spacing:.01em}
+#tab-liste .personen-sortierung select{min-height:46px;border-radius:11px;border-color:#cbd8cf;background:#fff;padding:.65rem .8rem}
+#tab-liste .personen-list{gap:.65rem}
+#tab-liste .person-card{position:relative;gap:1rem;padding:.85rem 1rem;min-height:94px;border:1px solid #d8e0d8;border-radius:15px;background:linear-gradient(115deg,#fff 0%,#fdfefc 100%);box-shadow:0 2px 8px rgba(23,79,59,.045);transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+#tab-liste .person-card:hover{border-color:#9db9a5;box-shadow:0 5px 16px rgba(23,79,59,.09)}
+#tab-liste .person-card:active{transform:scale(.997)}
+#tab-liste .person-card__photo,#tab-liste .person-card__photo-placeholder{width:66px;height:66px;flex-basis:66px;border:2px solid #e0e8df;box-shadow:0 1px 3px rgba(23,79,59,.08)}
+#tab-liste .person-card__photo-placeholder{background:#edf3ec;color:#52715d;font-size:1.45rem}
+#tab-liste .person-card__name{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.12rem;font-weight:600;line-height:1.3;color:#263d30}
+#tab-liste .person-card__years{font-size:.86rem;color:#6c746d;margin-top:.15rem}
+#tab-liste .person-card__relations{font-size:.78rem;color:#66756a;margin-top:.2rem}
+#tab-liste .person-card__note{font-size:.84rem;color:#596b5d;margin-top:.3rem}
+#tab-liste .key-photo-btn{background:#edf4ee;color:#28563d;border:1px solid #d4e2d5;border-radius:9px}
+#tab-liste .list-empty{padding:3rem 1rem;color:#647168}
+@media(min-width:900px){#tab-liste .personen-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:stretch;gap:.8rem}#tab-liste .person-card{height:100%}}
+@media(max-width:700px){#tab-liste .list-toolbar{grid-template-columns:minmax(0,1fr) auto;gap:.5rem}#tab-liste .personen-cache-status{grid-column:1;grid-row:2;max-width:none;font-size:.72rem}#tab-liste .personen-suchtreffer{grid-column:2;grid-row:2;text-align:right;font-size:.82rem}#tab-liste #refresh-btn{grid-column:2;grid-row:1}#tab-liste .person-card{padding:.7rem .75rem;gap:.7rem;min-height:82px;border-radius:12px}#tab-liste .person-card__photo,#tab-liste .person-card__photo-placeholder{width:56px;height:56px;flex-basis:56px}#tab-liste .person-card__name{font-size:1.02rem}#tab-liste .personen-sortierung{gap:.5rem}}
+@media(prefers-reduced-motion:reduce){#tab-liste .person-card{transition:none}}
+
+
+/* Familienspuren v325: Personenansicht im gleichen Creme-/Waldgrün-Design */
+#person-view-overlay .person-view-sheet{background:#f8f6ef;border:1px solid #d9e2d8;border-radius:22px;box-shadow:0 24px 70px rgba(25,54,39,.24);overflow:hidden}
+#person-view-overlay .person-view-header{background:linear-gradient(135deg,#f8f6ef 0%,#eef3eb 100%);border-bottom:1px solid #d7e1d6;padding:1.25rem 1.4rem;gap:1rem}
+#person-view-overlay .person-view-eyebrow{color:#55745e;letter-spacing:.12em;font-weight:700}
+#person-view-overlay #pv-name{color:#174f3b;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:700;letter-spacing:-.02em}
+#person-view-overlay .person-view-lifetime{color:#786b59}
+#person-view-overlay .person-view-body{background:#f8f6ef;padding:1.25rem;gap:1rem}
+#person-view-overlay .person-view-section{background:#fffefa;border:1px solid #dce5db;border-radius:16px;padding:1rem 1.1rem;box-shadow:0 3px 12px rgba(23,79,59,.045)}
+#person-view-overlay .person-view-section h3{color:#24583f;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;border-bottom:1px solid #e5ebe2;padding-bottom:.55rem;margin-bottom:.8rem}
+#person-view-overlay .person-view-facts dt{color:#66776a}
+#person-view-overlay .person-view-facts dd{color:#273d30}
+#person-view-overlay .person-view-relations a,#person-view-overlay .person-view-links a{color:#24583f}
+#person-view-overlay .person-view-hint{color:#6c756b}
+#person-view-overlay .person-view-actions .btn--primary{background:#174f3b;border-color:#174f3b}
+#person-view-overlay .person-view-actions .btn--secondary{background:#edf3eb;border-color:#cbdacb;color:#24583f}
+#person-view-overlay #pv-close{border-radius:12px;color:#24583f}
+@media(max-width:700px){#person-view-overlay .person-view-sheet{border-radius:18px}#person-view-overlay .person-view-header{padding:1rem;gap:.75rem}#person-view-overlay .person-view-body{padding:.8rem;gap:.75rem}#person-view-overlay .person-view-section{padding:.85rem;border-radius:13px}}
