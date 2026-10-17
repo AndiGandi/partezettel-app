@@ -1681,3 +1681,25 @@ details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
 .person-picker .person-picker__input.is-gewaehlt{background:#f1f7f2 !important;border-color:#9db9a5 !important}
 .parent-link-field > .person-picker{grid-column:1 / -1}
 .parent-link-field:has(> .person-picker:not([hidden])) .parent-edit-btn{display:none}
+
+/* Familienspuren v341 – Personenansicht: Ledigenname im Kopf */
+#person-view-overlay .person-view-maiden{margin:.1rem 0 .25rem;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.08rem;font-style:italic;color:#55745e}
+#person-view-overlay .person-view-maiden[hidden]{display:none}
+
+/* Familienspuren v341 – Gruppenfoto-Betrachter im grünen Home-Design */
+.detail-photo-viewer{background:rgba(12,34,25,.92)}
+.detail-photo-viewer__close{border-color:rgba(248,246,239,.55);background:rgba(23,79,59,.7);color:#f8f6ef}
+.detail-photo-viewer__stage{background:#0e1a14;border:1px solid rgba(248,246,239,.14);box-shadow:0 14px 40px rgba(0,0,0,.45)}
+.detail-photo-viewer__marker{background:#f8f6ef;color:#174f3b;border:2px solid #174f3b;box-shadow:0 0 0 2px rgba(248,246,239,.92),0 2px 8px rgba(0,0,0,.55)}
+.detail-photo-viewer__legend{background:#f8f6ef;border:1px solid #d9e2d8;border-radius:16px;box-shadow:0 14px 40px rgba(0,0,0,.4);color:#263d30}
+.detail-photo-viewer__legend-item{border-bottom:1px solid #e3eae1}
+.detail-photo-viewer__legend-num{background:#fff;color:#174f3b;border:2px solid #174f3b}
+.detail-photo-viewer__legend-name{flex:1;min-width:0;padding:.45rem .65rem;border:1px solid #cbdacb;border-radius:12px;background:#edf3eb;color:#263d30;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;font-size:.9rem;line-height:1.25;text-align:center;cursor:pointer;overflow-wrap:anywhere;-webkit-appearance:none;appearance:none}
+.detail-photo-viewer__legend-name:hover{background:#e2ede2}
+.detail-photo-viewer__legend-name.is-unknown{background:transparent;border:1px dashed #9db9a5;color:#55745e;font-weight:400}
+.detail-photo-viewer__assign{background:#fff;border-color:#d8e0d8;border-radius:12px}
+#detail-photo-viewer .btn{border-radius:11px;min-height:46px}
+#detail-photo-viewer .btn--secondary{background:#edf3eb;border:1px solid #cbdacb;color:#24583f}
+#detail-photo-viewer .btn--ghost{background:#f8faf7;border:1px solid #cbd8cf;color:#174f3b}
+@media(min-width:761px){.detail-photo-viewer__legend{width:min(300px,34vw);flex:0 0 auto}}
+.detail-photo-viewer__assign .person-picker{flex:1 1 100%;min-width:0}

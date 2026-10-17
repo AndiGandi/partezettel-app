@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 340 -->
+    <!-- Version 341 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=340">
+<link rel="stylesheet" href="style.css?v=341">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -68,7 +68,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 340</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 341</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -514,16 +514,13 @@
       <div class="person-view-heading">
         <p class="person-view-eyebrow">BESTAND</p>
         <h2 id="pv-name">Person</h2>
+        <p id="pv-maiden" class="person-view-maiden" hidden></p>
         <p id="pv-lifetime" class="person-view-lifetime"></p>
       </div>
       <img id="pv-keyphoto" class="person-view-keyphoto" alt="Schlüsselfoto" hidden>
       <button type="button" id="pv-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
     </header>
     <div class="person-view-body">
-      <section class="person-view-section">
-        <h3>Person</h3>
-        <dl class="person-view-facts" id="pv-basics"></dl>
-      </section>
       <section class="person-view-section" id="pv-parents-section" hidden>
         <h3>Eltern</h3><div id="pv-parents-list" class="person-view-relations"></div>
       </section>
@@ -789,6 +786,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=340"></script>
+<script src="app.js?v=341"></script>
 </body>
 </html>

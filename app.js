@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 340
+// Partezettel Archiv – Version 341
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -3321,6 +3321,9 @@ async function openPersonDetail(personId, options = {}) {
     }
     const name = [person.vorname, person.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
     document.getElementById("pv-name").textContent = name;
+    const kopfLedig = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
+    const kopfLedigElement = document.getElementById("pv-maiden");
+    if (kopfLedigElement) { kopfLedigElement.textContent = kopfLedig ? `geb. ${kopfLedig}` : ""; kopfLedigElement.hidden = !kopfLedig; }
     const personAudioPanel = document.getElementById("pv-audio-panel");
     if (personAudioPanel) {
       personAudioPanel.replaceChildren();
@@ -3362,18 +3365,6 @@ async function openPersonDetail(personId, options = {}) {
       keyphoto.removeAttribute("title");
     }
 
-    const facts = document.getElementById("pv-basics");
-    facts.replaceChildren();
-    const addFact = (label, value) => {
-      if (value === null || value === undefined || String(value).trim() === "") return;
-      const dt = document.createElement("dt"); dt.textContent = label;
-      const dd = document.createElement("dd"); dd.textContent = String(value);
-      facts.append(dt, dd);
-    };
-    addFact("Ledigenname", person.Ledigenname || person.ledigenname);
-    addFact("Geschlecht", person.geschlecht);
-    if (birth) addFact(person.geburtsdatum ? "Geboren" : "Geburtsjahr", personViewDatum(birth));
-    if (death) addFact(person.sterbedatum ? "Verstorben" : "Todesjahr", personViewDatum(death));
     // Kirchenbücher nur zeigen, wenn mindestens ein Link vorhanden ist.
     // Die Zeilennummer steht unmittelbar beim jeweiligen Link.
     const booksSection = document.getElementById("pv-books-section");
@@ -3498,10 +3489,9 @@ async function openPersonDetail(personId, options = {}) {
       const death = related.sterbedatum || related.sterbejahr;
       const life = [birth, death].filter(Boolean).map(personViewDatum).join(" – ");
       const details = [name];
-      if (options.showMaidenName) {
-        const maiden = String(related.Ledigenname || "").trim();
-        if (maiden && maiden.toLocaleLowerCase() !== String(related.nachname || "").trim().toLocaleLowerCase()) details.push(`geb. ${maiden}`);
-      }
+      // Ledigenname steht immer dabei, wenn vorhanden (auch wenn er dem Nachnamen entspricht).
+      const maiden = String(related.Ledigenname || related.ledigenname || related.geburtsname || "").trim();
+      if (maiden) details.push(`geb. ${maiden}`);
       if (life) details.push(life);
       // Das Alter wird nur für verstorbene Personen ergänzt. Bei unvollständigen
       // Daten (nur Jahreszahlen) ist es ausdrücklich eine ungefähre Angabe.
@@ -4671,7 +4661,9 @@ const gruppenfotoMetadatenMessage = document.getElementById("gruppenfoto-metadat
 function fotoPersonName(id) {
   if (!id) return "unbekannte Person";
   const p = personenCache.find(x => x.id === id);
-  return p ? `${p.vorname || ""} ${p.nachname || ""}`.trim() : "unbekannte Person";
+  if (!p) return "unbekannte Person";
+  const n = PersonSuche.name(p);
+  return n && n !== "(unbekannte Person)" ? n : "unbekannte Person";   // v341: mit „(geb. …)“
 }
 
 function gruppenfotoPersonenAlter(id, foto) {
@@ -5314,10 +5306,6 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
         name.hidden = true;
         const wrap = document.createElement("div");
         wrap.className = "detail-photo-viewer__assign";
-        const search = document.createElement("input");
-        search.type = "search";
-        search.placeholder = "Name suchen …";
-        search.autocomplete = "off";
         const select = document.createElement("select");
         select.innerHTML = '<option value="">— Person auswählen —</option>';
         const save = document.createElement("button");
@@ -5328,20 +5316,8 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
         const verfuegbar = (personenCache || [])
           .filter(p => !detailViewerMarkierungen.some(x => x.id !== row.id && x.personen_id === p.id))
           .slice()
-          .sort((a,b) => `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de"));
-        const fill = () => {
-          const q = search.value;
-          const list = normalizePersonenSuchtext(q) ? verfuegbar.filter(p => {
-            const a = fotoPersonAnzeige(p);
-            return personenSuchTreffer(p, q, a.daten || "");
-          }) : verfuegbar;
-          select.innerHTML = '<option value="">— Person auswählen —</option>' + list.map(p => {
-            const a = fotoPersonAnzeige(p);
-            return `<option value="${p.id}">${escapeHtml(a.name)}${a.daten ? ` — ${escapeHtml(a.daten)}` : ""}</option>`;
-          }).join("");
-        };
-        fill();
-        search.addEventListener("input", fill);
+          .sort(PersonSuche.sort);
+        verfuegbar.forEach(p => select.appendChild(personOption(p)));
         save.addEventListener("click", async () => {
           const neueId = select.value;
           if (!neueId) return;
@@ -5357,9 +5333,10 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
           renderGruppenfotoViewer(detailViewerUrl, detailViewerMarkierungen, detailViewerFoto);
         });
         cancel.addEventListener("click", () => renderGruppenfotoViewer(detailViewerUrl, detailViewerMarkierungen, detailViewerFoto));
-        wrap.append(search, select, save, cancel);
+        wrap.append(select, save, cancel);
         legend.appendChild(wrap);
-        search.focus();
+        const auswahl = personPickerFuerSelect(select, { platzhalter: "Name suchen …" });   // v341: gemeinsame Personenauswahl
+        if (auswahl) auswahl.input.focus();
       };
       name.addEventListener("click", openChooser);
       name.addEventListener("pointerup", (event) => { if (event.pointerType === "touch") openChooser(event); });
