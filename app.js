@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 336
+// Partezettel Archiv – Version 337
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7231,9 +7231,176 @@ function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = ""
   return section;
 }
 
+// ---------- v337: Ahnentafel (Vorfahren-Diagramm) ----------
+// Die ausgewählte Person steht links, nach rechts folgen Eltern, Großeltern, Urgroßeltern usw.
+// Nummerierung nach Kekulé: 1 = Person, 2 = Vater, 3 = Mutter, 4/5 = Eltern des Vaters, 6/7 = Eltern der Mutter ...
+let treePedigreeGens = 4;
+
+function treePedigreeMaße() {
+  const klein = window.innerWidth < 900; // iPad hochkant und Handy: schmalere Karten, damit 4 Generationen ohne Wischen passen
+  return klein
+    ? { cardW: 160, cardH: 62, gap: 34, slotH: 74, head: 72 }
+    : { cardW: 198, cardH: 64, gap: 52, slotH: 78, head: 58 };
+}
+
+// Eltern einer Person: bevorzugt die biologische Familie; Vater = männlich, Mutter = weiblich.
+function treePedigreeParents(personId) {
+  const links = treeData.kinder.filter((k) => k.kind_id === personId);
+  const link = links.find((k) => !k.beziehungstyp || k.beziehungstyp === "biologisch") || links[0];
+  const familie = link ? treeData.familien.find((f) => f.id === link.familie_id) : null;
+  if (!familie) return { vater: null, mutter: null };
+  const partner = [familie.partner_a_id, familie.partner_b_id].map((id) => (id ? treePerson(id) : null));
+  let vater = null;
+  let mutter = null;
+  for (const p of partner) {
+    if (!p) continue;
+    const g = treePersonGender(p);
+    if (g === "m" && !vater) vater = p;
+    else if (g === "w" && !mutter) mutter = p;
+  }
+  for (const p of partner) {
+    if (!p || p === vater || p === mutter) continue;
+    if (!vater) vater = p;
+    else if (!mutter) mutter = p;
+  }
+  return { vater, mutter };
+}
+
+function treePedigreeCollect(rootId, gens) {
+  const knoten = [];
+  const wurzel = treePerson(rootId);
+  if (!wurzel) return knoten;
+  const rec = (person, gen, idx, pfad, rolle) => {
+    knoten.push({ gen, idx, person, rolle, kekule: (2 ** gen) + idx });
+    if (!person || gen >= gens - 1) return;
+    const { vater, mutter } = treePedigreeParents(person.id);
+    const neuerPfad = new Set(pfad);
+    neuerPfad.add(person.id);
+    rec(vater && !neuerPfad.has(vater.id) ? vater : null, gen + 1, idx * 2, neuerPfad, "Vater");
+    rec(mutter && !neuerPfad.has(mutter.id) ? mutter : null, gen + 1, idx * 2 + 1, neuerPfad, "Mutter");
+  };
+  rec(wurzel, 0, 0, new Set(), "");
+  return knoten;
+}
+
+function treePedigreeNodeHtml(k, m, y, rootId) {
+  const style = `left:${k.gen * (m.cardW + m.gap)}px;top:${y - m.cardH / 2}px;width:${m.cardW}px;height:${m.cardH}px`;
+  if (!k.person) {
+    return `<div class="tree-ped-node tree-ped-node--unknown" style="${style}"><span class="tree-ped-node__name">${escTree(k.rolle)} unbekannt</span><span class="tree-ped-node__nr">${k.kekule}</span></div>`;
+  }
+  const p = k.person;
+  const g = treePersonGender(p);
+  const name = [p.vorname, p.nachname].filter(Boolean).join(" ").trim() || "(ohne Namen)";
+  const ledig = String(p.Ledigenname || p.ledigenname || "").trim();
+  const jahre = treeYearsText(p);
+  const foto = treeData.photos.get(p.id);
+  return `<button type="button" class="tree-ped-node tree-ped-node--${g}${p.id === rootId ? " tree-ped-node--root" : ""}" data-tree-person="${escTree(p.id)}" style="${style}">`
+    + (foto ? `<span class="tree-ped-node__photo"><img src="${escTree(foto)}" alt=""></span>` : "")
+    + `<span class="tree-ped-node__text"><span class="tree-ped-node__name">${escTree(name)}${ledig ? ` <span class="tree-ped-node__maiden">(geb. ${escTree(ledig)})</span>` : ""}</span>${jahre ? `<span class="tree-ped-node__years">${escTree(jahre)}</span>` : ""}</span>`
+    + `<span class="tree-ped-node__nr">${k.kekule}</span></button>`;
+}
+
+// Antippen = Person als neue Mitte, Doppelklick/Doppeltippen = Personendaten öffnen (wie in der Kartenansicht).
+function treeBindPersonInteractions(container) {
+  let unterdruecken = false;
+  let letzterTipp = { id: null, zeit: 0 };
+  container.querySelectorAll("[data-tree-person]").forEach((el) => {
+    el.addEventListener("click", (event) => {
+      event.preventDefault();
+      if (unterdruecken) { unterdruecken = false; event.stopPropagation(); return; }
+      const id = el.dataset.treePerson;
+      if (!id) return;
+      const auswahl = document.getElementById("tree-person-select");
+      if (auswahl) auswahl.value = id;
+      renderStammbaum(id);
+    });
+    el.addEventListener("dblclick", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const id = el.dataset.treePerson;
+      if (!id) return;
+      const auswahl = document.getElementById("tree-person-select");
+      if (auswahl) auswahl.value = id;
+      await openPersonDetail(id, { fromTree: true });
+    });
+    el.addEventListener("pointerup", async (event) => {
+      if (event.pointerType !== "touch") return;
+      const id = el.dataset.treePerson;
+      if (!id) return;
+      const jetzt = Date.now();
+      if (letzterTipp.id === id && jetzt - letzterTipp.zeit <= 450) {
+        letzterTipp = { id: null, zeit: 0 };
+        unterdruecken = true;
+        event.preventDefault();
+        event.stopPropagation();
+        const auswahl = document.getElementById("tree-person-select");
+        if (auswahl) auswahl.value = id;
+        await openPersonDetail(id, { fromTree: true });
+      } else {
+        letzterTipp = { id, zeit: jetzt };
+      }
+    });
+  });
+}
+
+function renderAhnentafel(rootId) {
+  const stage = document.getElementById("tree-pedigree-stage");
+  const message = document.getElementById("tree-message");
+  if (!stage) return;
+  stage.innerHTML = "";
+  const wurzel = treePerson(rootId);
+  if (!wurzel) {
+    stage.style.width = "";
+    stage.style.height = "";
+    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    return;
+  }
+  const gens = treePedigreeGens;
+  const m = treePedigreeMaße();
+  const knoten = treePedigreeCollect(rootId, gens);
+  const blatt = 2 ** (gens - 1);
+  const breite = gens * m.cardW + (gens - 1) * m.gap;
+  const hoehe = m.head + blatt * m.slotH;
+  const mitteY = (k) => m.head + ((k.idx + 0.5) * (blatt / 2 ** k.gen)) * m.slotH;
+  const nachSchluessel = new Map(knoten.map((k) => [`${k.gen}:${k.idx}`, k]));
+
+  // Verbindungslinien Kind → Eltern
+  const pfade = [];
+  for (const k of knoten) {
+    if (!k.person || k.gen >= gens - 1) continue;
+    const vater = nachSchluessel.get(`${k.gen + 1}:${k.idx * 2}`);
+    const mutter = nachSchluessel.get(`${k.gen + 1}:${k.idx * 2 + 1}`);
+    if (!vater || !mutter) continue;
+    const x1 = k.gen * (m.cardW + m.gap) + m.cardW;
+    const x2 = (k.gen + 1) * (m.cardW + m.gap);
+    const xm = x1 + m.gap / 2;
+    const y1 = mitteY(k);
+    const yv = mitteY(vater);
+    const ym = mitteY(mutter);
+    pfade.push(`M${x1} ${y1}H${xm}M${xm} ${yv}V${ym}M${xm} ${yv}H${x2}M${xm} ${ym}H${x2}`);
+  }
+
+  const bekannt = knoten.filter((k) => k.person && k.gen > 0).length;
+  const moeglich = 2 ** gens - 2;
+  const spaltenKopf = Array.from({ length: gens }, (_, g) =>
+    `<div class="tree-ped-colhead" style="left:${g * (m.cardW + m.gap)}px;top:${m.head - 26}px;width:${m.cardW}px">${g === 0 ? "Ausgangsperson" : escTree(treeGenerationName(g, "up"))}</div>`).join("");
+  const karten = knoten.map((k) => treePedigreeNodeHtml(k, m, mitteY(k), rootId)).join("");
+
+  stage.style.width = `${breite}px`;
+  stage.style.height = `${hoehe}px`;
+  stage.innerHTML = `<div class="tree-ped-caption" style="max-width:${Math.min(breite, 380)}px">Ahnentafel von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${bekannt} von ${moeglich} Vorfahren in ${gens} Generationen erfasst</div>`
+    + spaltenKopf
+    + `<svg class="tree-ped-lines" width="${breite}" height="${hoehe}" viewBox="0 0 ${breite} ${hoehe}" aria-hidden="true"><path d="${pfade.join("")}"/></svg>`
+    + karten;
+  treeBindPersonInteractions(stage);
+  updateTreeZoom();
+  if (message) message.textContent = bekannt === 0 ? "Für diese Person sind keine Eltern erfasst." : "";
+}
+
 function renderStammbaum(rootId) {
   treeCousinsRefreshIfOpen(rootId);
   if (treeViewMode === "classic") { renderKlassischerStammbaum(rootId); return; }
+  if (treeViewMode === "pedigree") { renderAhnentafel(rootId); return; }
   const stage = document.getElementById("tree-stage");
   const message = document.getElementById("tree-message");
   if (!stage) return;
@@ -8490,17 +8657,26 @@ function renderKlassischerStammbaum(rootId){
 }
 
 function setTreeViewMode(mode, rootId = "") {
-  treeViewMode = mode === "classic" ? "classic" : "cards";
+  treeViewMode = mode === "classic" ? "classic" : (mode === "pedigree" ? "pedigree" : "cards");
   const panel = document.getElementById("tab-stammbaum");
-  const cards = document.getElementById("tree-view-cards");
-  const classic = document.getElementById("tree-view-classic");
   const cardStage = document.getElementById("tree-stage");
   const classicStage = document.getElementById("tree-classic-stage");
-  if (panel) panel.classList.toggle("tree-view--classic", treeViewMode === "classic");
-  if (cardStage) cardStage.hidden = treeViewMode === "classic";
+  const pedigreeStage = document.getElementById("tree-pedigree-stage");
+  if (panel) {
+    panel.classList.toggle("tree-view--classic", treeViewMode === "classic");
+    panel.classList.toggle("tree-view--pedigree", treeViewMode === "pedigree");
+  }
+  if (cardStage) cardStage.hidden = treeViewMode !== "cards";
   if (classicStage) classicStage.hidden = treeViewMode !== "classic";
-  if (cards) { cards.classList.toggle("is-active", treeViewMode === "cards"); cards.setAttribute("aria-selected", treeViewMode === "cards" ? "true" : "false"); }
-  if (classic) { classic.classList.toggle("is-active", treeViewMode === "classic"); classic.setAttribute("aria-selected", treeViewMode === "classic" ? "true" : "false"); }
+  if (pedigreeStage) pedigreeStage.hidden = treeViewMode !== "pedigree";
+  for (const [id, art] of [["tree-view-cards", "cards"], ["tree-view-classic", "classic"], ["tree-view-pedigree", "pedigree"]]) {
+    const knopf = document.getElementById(id);
+    if (!knopf) continue;
+    knopf.classList.toggle("is-active", treeViewMode === art);
+    knopf.setAttribute("aria-selected", treeViewMode === art ? "true" : "false");
+  }
+  const generationen = document.getElementById("tree-pedigree-gens-wrap");
+  if (generationen) generationen.hidden = treeViewMode !== "pedigree";
   const select = document.getElementById("tree-person-select");
   const id = rootId || select?.value || treeData.personen[0]?.id || "";
   if (treeViewMode === "classic") renderKlassischerStammbaum(id);
@@ -8545,9 +8721,11 @@ async function loadStammbaum() {
 function updateTreeZoom() {
   const stage = document.getElementById("tree-stage");
   const classicStage = document.getElementById("tree-classic-stage");
+  const pedigreeStage = document.getElementById("tree-pedigree-stage");
   const value = document.getElementById("tree-zoom-value");
   if (stage) stage.style.transform = `scale(${treeZoom})`;
   if (classicStage) classicStage.style.transform = `scale(${treeZoom})`;
+  if (pedigreeStage) pedigreeStage.style.transform = `scale(${treeZoom})`;
   if (value) value.textContent = `${Math.round(treeZoom * 100)} %`;
 }
 
@@ -8662,7 +8840,7 @@ function applyTreeLinePreset(value) {
     }
     roots.push(josef.id);
   }
-  if (treeViewMode === "classic") {
+  if (treeViewMode !== "cards") {
     treeViewMode = "cards";
     setTreeViewMode("cards");
   }
@@ -8695,7 +8873,7 @@ function setTreePersonSelection(id, { confirmed = false } = {}) {
   if (treeViewMode === "classic") renderKlassischerStammbaum(id);
   else renderStammbaum(id);
   requestAnimationFrame(() => {
-    const stage = document.getElementById(treeViewMode === "classic" ? "tree-classic-stage" : "tree-stage");
+    const stage = document.getElementById(treeViewMode === "classic" ? "tree-classic-stage" : (treeViewMode === "pedigree" ? "tree-pedigree-stage" : "tree-stage"));
     const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(id)}"]`);
     centerTreeViewport(rootCard || stage);
   });
@@ -8795,6 +8973,14 @@ const treeViewCards = document.getElementById("tree-view-cards");
 const treeViewClassic = document.getElementById("tree-view-classic");
 if (treeViewCards) treeViewCards.addEventListener("click", () => setTreeViewMode("cards"));
 if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeViewMode("classic"));
+const treeViewPedigree = document.getElementById("tree-view-pedigree");
+if (treeViewPedigree) treeViewPedigree.addEventListener("click", () => setTreeViewMode("pedigree"));
+const treePedigreeGensSelect = document.getElementById("tree-pedigree-gens");
+if (treePedigreeGensSelect) treePedigreeGensSelect.addEventListener("change", () => {
+  treePedigreeGens = Math.min(6, Math.max(2, Number(treePedigreeGensSelect.value) || 4));
+  if (treeViewMode === "pedigree" && treeSelect?.value) renderAhnentafel(treeSelect.value);
+});
+window.addEventListener("resize", () => { if (treeViewMode === "pedigree" && treeSelect?.value) renderAhnentafel(treeSelect.value); });
 window.addEventListener("resize", () => { if (treeViewMode === "classic" && treeSelect?.value) renderKlassischerStammbaum(treeSelect.value); });
 updateTreeZoom();
 initTreeRelationshipUI();
