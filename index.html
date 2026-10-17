@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
-<title>Partezettel Archiv</title>
+<title>Familienspuren</title>
     <!-- Version 322 -->
 <link rel="manifest" href="manifest.json">
 
@@ -12,12 +12,33 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Partezettel">
 <link rel="stylesheet" href="style.css?v=322">
+<style>
+  .login-card--familienspuren { text-align: center; }
+  .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #8b6b45; }
+  .familienspuren-logo svg { display: block; width: 100%; height: 100%; }
+  .login-card--familienspuren h1 { margin-top: 0; }
+  .familienspuren-tagline { margin: -4px 0 22px; color: #74695d; font-size: .95rem; letter-spacing: .015em; }
+</style>
 </head>
 <body>
 
 <div id="login-screen" class="login-screen">
-  <div class="login-card">
-    <h1>Partezettel Archiv</h1>
+  <div class="login-card login-card--familienspuren">
+    <div class="familienspuren-logo" aria-hidden="true">
+      <svg viewBox="0 0 120 88" role="img" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M60 18 L30 42 L60 66 L90 42 Z" />
+          <path d="M30 42 L60 42 L90 42 M60 18 L60 42 L60 66" />
+        </g>
+        <g fill="currentColor" stroke="#fff" stroke-width="2.5">
+          <circle cx="60" cy="18" r="8"/><circle cx="30" cy="42" r="8"/>
+          <circle cx="90" cy="42" r="8"/><circle cx="60" cy="66" r="8"/>
+          <circle cx="60" cy="42" r="7"/>
+        </g>
+      </svg>
+    </div>
+    <h1>Familienspuren</h1>
+    <p class="familienspuren-tagline">Menschen. Generationen. Geschichten.</p>
     <p class="login-subtitle">Anmelden</p>
     <form id="login-form" autocomplete="on">
       <label class="field"><span>E-Mail</span><input type="email" id="login-email" autocomplete="username" value="gan.stammbaum@gmail.com" required></label>
