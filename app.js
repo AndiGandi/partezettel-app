@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 354
+// Partezettel Archiv – Version 355
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -3897,7 +3897,28 @@ function personViewAlter(person, bisDatum = null) {
 }
 
 let currentPersonViewId = null;
+// ---------- v355: Rückkehr zum Gruppenfoto ----------
+// Öffnet man aus dem Gruppenfoto eine Person, führt das ✕ der Personenansicht wieder zurück in dasselbe Gruppenfoto
+// (und zu der Ansicht, aus der das Foto geöffnet wurde).
+let rueckkehrNachPerson = null;
+
+async function kehreZumGruppenfotoZurueck() {
+  const ziel = rueckkehrNachPerson;
+  rueckkehrNachPerson = null;
+  if (!ziel) return false;
+  const aktiv = document.querySelector(".tab-btn.is-active")?.dataset.tab;
+  if (ziel.tab && aktiv !== ziel.tab) document.querySelector(`.tab-btn[data-tab="${ziel.tab}"]`)?.click();
+  if (ziel.personId) {
+    try { await openPersonDetail(ziel.personId, { fromTree: ziel.tab === "stammbaum" }); }
+    catch (err) { debugLog(`⚠️ Rückkehr zur Person: ${err?.message || err}`); }
+  }
+  if (ziel.viewer?.url) renderGruppenfotoViewer(ziel.viewer.url, ziel.viewer.markierungen, ziel.viewer.foto);
+  return true;
+}
+
 async function openPersonDetail(personId, options = {}) {
+  // Eine Rückkehr bleibt nur beim Öffnen aus dem Gruppenfoto und beim Weiterklicken zu Verwandten erhalten.
+  if (!options.vonGruppenfoto && !options.behalteRueckkehr) rueckkehrNachPerson = null;
   currentPersonViewId = personId;
   try {
     await ensureSession();
@@ -4110,7 +4131,7 @@ async function openPersonDetail(personId, options = {}) {
       }
       if (extra) details.push(extra);
       button.textContent = details.join(" · ");
-      button.addEventListener("click", () => openPersonDetail(related.id)); container.appendChild(button);
+      button.addEventListener("click", () => openPersonDetail(related.id, { behalteRueckkehr: true })); container.appendChild(button);
     };
     const parentsSection = document.getElementById("pv-parents-section");
     const parentsList = document.getElementById("pv-parents-list");
@@ -4465,6 +4486,7 @@ async function openPersonDetail(personId, options = {}) {
     document.getElementById("pv-notes-section").hidden = !notes;
     document.getElementById("pv-notes").textContent = notes;
     document.getElementById("pv-tree").onclick = async () => {
+      rueckkehrNachPerson = null;
       overlay.hidden = true; document.body.classList.remove("person-view-open");
       const treeTab = document.querySelector('.tab-btn[data-tab="stammbaum"]');
       if (treeTab) treeTab.click();
@@ -4473,6 +4495,7 @@ async function openPersonDetail(personId, options = {}) {
       document.getElementById("tab-stammbaum")?.scrollIntoView({ block: "start", behavior: "auto" });
     };
     document.getElementById("pv-edit").onclick = async () => {
+      rueckkehrNachPerson = null;
       overlay.hidden = true; document.body.classList.remove("person-view-open");
       await openPersonEdit(personId, options);
     };
@@ -4485,11 +4508,13 @@ async function openPersonDetail(personId, options = {}) {
 document.getElementById("pv-close")?.addEventListener("click", () => {
   document.getElementById("person-view-overlay").hidden = true;
   document.body.classList.remove("person-view-open");
+  void kehreZumGruppenfotoZurueck();
 });
 document.getElementById("person-view-overlay")?.addEventListener("click", (event) => {
   if (event.target.id === "person-view-overlay") {
     event.currentTarget.hidden = true;
     document.body.classList.remove("person-view-open");
+    void kehreZumGruppenfotoZurueck();
   }
 });
 
@@ -5947,12 +5972,19 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
         event.preventDefault();
         event.stopPropagation();
         const personId = row.personen_id;
+        // v355: merken, woher man kam, damit das ✕ der Personenansicht wieder ins Gruppenfoto führt
+        const personOverlay = document.getElementById("person-view-overlay");
+        rueckkehrNachPerson = {
+          tab: document.querySelector(".tab-btn.is-active")?.dataset.tab || "liste",
+          personId: personOverlay && !personOverlay.hidden ? currentPersonViewId : null,
+          viewer: { url: detailViewerUrl, markierungen: detailViewerMarkierungen, foto: detailViewerFoto }
+        };
         closeDetailPhotoViewer();
         // Personen-Tab aktivieren, damit die darunterliegende Ansicht
         // ebenfalls auf dem richtigen Bereich steht.
         document.querySelector('.tab-btn[data-tab="liste"]')?.click();
         try {
-          await openPersonDetail(personId);
+          await openPersonDetail(personId, { vonGruppenfoto: true });
         } catch (err) {
           debugLog(`❌ Person aus Gruppenfoto öffnen: ${err.message || err}`);
         }
@@ -10049,7 +10081,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=354");
+      treeModul3D = await import("./tree3d.js?v=355");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
