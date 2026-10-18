@@ -1801,3 +1801,22 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 /* Familienspuren v353 – Cousins nach Vater- und Mutterseite */
 .tree-cousins__seiten{margin:.15rem 0 .5rem;color:#263d30}
 .tree-cousins__hint-klein{color:#80897f;font-size:.78rem}
+
+/* Familienspuren v354 – Lücken & Inseln */
+.tree-luecken__zahlen{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.2rem,1fr));gap:.5rem;margin:.3rem 0 .6rem}
+.tree-luecken__zahl{padding:.55rem .7rem;border:1px solid #d8e0d8;border-radius:12px;background:#fdfefc}
+.tree-luecken__zahl b{display:block;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.35rem;color:#174f3b}
+.tree-luecken__zahl span{font-size:.78rem;color:#65756b}
+.tree-luecken__titel{margin:1rem 0 .4rem;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.02rem;color:#174f3b}
+.tree-luecken__karte{margin:.5rem 0;padding:.6rem .8rem;border:1px solid #d8e0d8;border-radius:12px;background:#fff}
+.tree-luecken__karte h5{margin:0 0 .35rem;font-size:.9rem;color:#24583f}
+.tree-luecken__liste{list-style:none;margin:0;padding:0;display:grid;gap:.35rem}
+.tree-luecken__liste li{padding:.2rem 0;border-bottom:1px solid #eef1ec}
+.tree-luecken__liste li:last-child{border-bottom:0}
+.tree-luecken__liste--karte{padding:.5rem .8rem;border:1px solid #d8e0d8;border-radius:12px;background:#fff}
+.tree-luecken__person{padding:0;border:0;background:none;font:inherit;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;color:#174f3b;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:#cbdacb;text-underline-offset:3px}
+.tree-luecken__zeilen{display:grid;gap:.1rem;margin-top:.1rem;font-size:.8rem;color:#55645a}
+.tree-luecken__hinweis{color:#80652f}
+.tree-luecken__hinweis .tree-luecken__person{color:#80652f}
+.tree-luecken__details{margin:.6rem 0 0;padding:.4rem .8rem;border:1px solid #d8e0d8;border-radius:12px;background:#fff}
+.tree-luecken__details>summary{padding:.35rem 0;font-weight:600;color:#24583f;cursor:pointer}

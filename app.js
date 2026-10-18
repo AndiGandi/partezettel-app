@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 353
+// Partezettel Archiv – Version 354
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -9255,6 +9255,158 @@ function initTreeCousinsUI() {
   close?.addEventListener("click", () => { panel.hidden = true; });
 }
 
+// ---------- v354: Lücken & Inseln (nur Eigentümer) ----------
+// Zeigt Personen ohne Eltern oder Kinder und „Inseln“: Gruppen, die untereinander verbunden sind,
+// aber nicht mit dem Hauptstammbaum. Es wird nichts verändert oder verbunden, die Ansicht dient dem Überblick.
+function treeLueckenAnalyse(beziehungen, notizen) {
+  const personen = treeData.personen;
+  const byId = new Map(personen.map((p) => [p.id, p]));
+  const eltern = new Map();   // kind -> Set(Elternteile)
+  const kinder = new Map();   // elternteil -> Set(Kinder)
+  const partner = new Map();  // person -> [{id, art}]
+  const verbindungen = new Map(personen.map((p) => [p.id, []]));   // id -> [{text, mit}]
+  const eltAdd = (m, k, v) => { if (!m.has(k)) m.set(k, new Set()); m.get(k).add(v); };
+  const verb = (id, text, mit) => { if (verbindungen.has(id)) verbindungen.get(id).push({ text, mit }); };
+  const elternteile = new Map();
+  for (const f of treeData.familien) {
+    const ps = [f.partner_a_id, f.partner_b_id].filter((id) => byId.has(id));
+    elternteile.set(f.id, ps);
+    if (ps.length === 2) {
+      const art = f.familientyp || "Partnerschaft";
+      verb(ps[0], `${art} mit`, ps[1]);
+      verb(ps[1], `${art} mit`, ps[0]);
+      if (!partner.has(ps[0])) partner.set(ps[0], []); partner.get(ps[0]).push(ps[1]);
+      if (!partner.has(ps[1])) partner.set(ps[1], []); partner.get(ps[1]).push(ps[0]);
+    }
+  }
+  for (const k of treeData.kinder) {
+    if (!byId.has(k.kind_id)) continue;
+    for (const e of elternteile.get(k.familie_id) || []) {
+      eltAdd(eltern, k.kind_id, e); eltAdd(kinder, e, k.kind_id);
+      verb(k.kind_id, "Kind von", e);
+      verb(e, "Elternteil von", k.kind_id);
+    }
+  }
+  const lose = [];
+  for (const b of beziehungen || []) {
+    if (!byId.has(b.personen_a_id) || !byId.has(b.personen_b_id)) continue;
+    const art = b.beziehungstyp || "Beziehung";
+    lose.push(b);
+    verb(b.personen_a_id, `${art} mit`, b.personen_b_id);
+    verb(b.personen_b_id, `${art} mit`, b.personen_a_id);
+  }
+  // Gruppen (zusammenhängende Teile) bestimmen
+  const eltern0 = new Map(personen.map((p) => [p.id, p.id]));
+  const wurzel = (x) => { while (eltern0.get(x) !== x) { eltern0.set(x, eltern0.get(eltern0.get(x))); x = eltern0.get(x); } return x; };
+  const vereine = (a, b) => { const ra = wurzel(a), rb = wurzel(b); if (ra !== rb) eltern0.set(ra, rb); };
+  for (const [id, liste] of verbindungen) for (const v of liste) vereine(id, v.mit);
+  const gruppen = new Map();
+  for (const p of personen) { const r = wurzel(p.id); if (!gruppen.has(r)) gruppen.set(r, []); gruppen.get(r).push(p.id); }
+  const alle = [...gruppen.values()].sort((x, y) => y.length - x.length);
+  const haupt = alle[0] || [];
+  const inseln = alle.slice(1).filter((g) => g.length > 1);
+  const einzeln = alle.slice(1).filter((g) => g.length === 1).map((g) => g[0]);
+  const gruppeVon = new Map();
+  alle.forEach((g, i) => g.forEach((id) => gruppeVon.set(id, i)));
+  // Hinweise: Der Name einer Person steht in der Notiz einer anderen, die in einer anderen Gruppe liegt
+  const tokens = (s) => PersonSuche.normalisiere(s).split(/[^a-z0-9]+/).filter(Boolean);
+  const namen = personen.map((p) => {
+    const vor = tokens(p.vorname), nach = tokens(p.nachname || p.Ledigenname || p.ledigenname);
+    return vor.length && nach.length && vor.join("").length >= 3 ? { id: p.id, folge: [...vor, ...nach] } : null;
+  }).filter(Boolean);
+  const hinweise = [];
+  for (const p of personen) {
+    const text = notizen.get(p.id);
+    if (!text) continue;
+    const tk = tokens(text);
+    for (const n of namen) {
+      if (n.id === p.id || gruppeVon.get(n.id) === gruppeVon.get(p.id)) continue;
+      for (let i = 0; i + n.folge.length <= tk.length; i++) {
+        if (n.folge.every((w, j) => tk[i + j] === w)) { hinweise.push({ von: p.id, nennt: n.id }); break; }
+      }
+    }
+  }
+  const hatKinder = (id) => (kinder.get(id)?.size || 0) > 0;
+  const sortiere = (ids) => [...ids].sort((x, y) => PersonSuche.sort(byId.get(x), byId.get(y)));
+  return {
+    gesamt: personen.length,
+    haupt, inseln, einzeln: sortiere(einzeln),
+    ohneEltern: sortiere(personen.filter((p) => !eltern.has(p.id)).map((p) => p.id)),
+    ohneKinder: sortiere(personen.filter((p) => !hatKinder(p.id)).map((p) => p.id)),
+    verbindungen, hinweise, byId, gruppeVon
+  };
+}
+
+function treeLueckenRender(analyse) {
+  const ziel = document.getElementById("tree-luecken-result");
+  if (!ziel) return;
+  const { byId, verbindungen, hinweise } = analyse;
+  const jahre = (p) => { const j = treeYearsText(p); return j ? ` <span class="tree-cousins__years">${escTree(j)}</span>` : ""; };
+  const nameKnopf = (id) => `<button type="button" class="tree-luecken__person" data-luecken-person="${escTree(id)}">${escTree(treePersonLabel(id))}</button>`;
+  const personZeile = (id, mitVerbindungen) => {
+    const p = byId.get(id);
+    const v = mitVerbindungen ? (verbindungen.get(id) || []) : [];
+    const verbText = v.map((x) => `<span class="tree-luecken__verb">${escTree(x.text)} ${nameKnopf(x.mit)}</span>`).join("");
+    const hin = hinweise.filter((h) => h.von === id).map((h) => `<span class="tree-luecken__hinweis">Hinweis: Notiz nennt ${nameKnopf(h.nennt)}</span>`).join("")
+      + hinweise.filter((h) => h.nennt === id).map((h) => `<span class="tree-luecken__hinweis">Hinweis: genannt in der Notiz von ${nameKnopf(h.von)}</span>`).join("");
+    return `<li>${nameKnopf(id)}${jahre(p)}${verbText || hin ? `<div class="tree-luecken__zeilen">${verbText}${hin}</div>` : ""}</li>`;
+  };
+  const zahl = (n, text) => `<div class="tree-luecken__zahl"><b>${n}</b><span>${text}</span></div>`;
+  const inselPersonen = analyse.inseln.reduce((s, g) => s + g.length, 0);
+  let html = `<div class="tree-luecken__zahlen">${zahl(analyse.gesamt, "Personen")}${zahl(analyse.haupt.length, "im Hauptstammbaum")}${zahl(analyse.inseln.length, `Inseln (${inselPersonen} Personen)`)}${zahl(analyse.einzeln.length, "ganz ohne Verbindung")}${zahl(analyse.ohneEltern.length, "ohne Eltern")}${zahl(analyse.ohneKinder.length, "ohne Kinder")}</div>`;
+  html += `<p class="tree-cousins__hint">Der Hauptstammbaum ist die größte zusammenhängende Gruppe. „Ohne Eltern“ umfasst auch die ältesten erfassten Vorfahren, das ist normal. „Hinweis“ heißt: Der Name steht in einer Notiz, die Personen sind aber noch nicht verbunden. Hier wird nichts verändert.</p>`;
+  if (analyse.inseln.length) {
+    html += `<h4 class="tree-luecken__titel">Inseln</h4>`;
+    analyse.inseln.forEach((g, i) => {
+      const ids = [...g].sort((x, y) => PersonSuche.sort(byId.get(x), byId.get(y)));
+      html += `<section class="tree-luecken__karte"><h5>Gruppe ${i + 1} · ${g.length} Personen</h5><ul class="tree-luecken__liste">${ids.map((id) => personZeile(id, true)).join("")}</ul></section>`;
+    });
+  } else {
+    html += `<p class="tree-cousins__hint">Keine Inseln: Alle verbundenen Personen gehören zum Hauptstammbaum.</p>`;
+  }
+  if (analyse.einzeln.length) {
+    html += `<h4 class="tree-luecken__titel">Ganz ohne Verbindung (${analyse.einzeln.length})</h4><ul class="tree-luecken__liste tree-luecken__liste--karte">${analyse.einzeln.map((id) => personZeile(id, false)).join("")}</ul>`;
+  }
+  const liste = (titel, ids) => ids.length ? `<details class="tree-luecken__details"><summary>${titel} (${ids.length})</summary><ul class="tree-luecken__liste">${ids.map((id) => `<li>${nameKnopf(id)}${jahre(byId.get(id))}</li>`).join("")}</ul></details>` : "";
+  html += liste("Alle Personen ohne Eltern", analyse.ohneEltern) + liste("Alle Personen ohne Kinder", analyse.ohneKinder);
+  ziel.innerHTML = html;
+}
+
+async function treeLueckenOeffnen() {
+  if (!rolleIstEigentuemer()) return;
+  const panel = document.getElementById("tree-luecken-panel");
+  const ziel = document.getElementById("tree-luecken-result");
+  if (!panel || !ziel) return;
+  document.getElementById("tree-cousins-panel")?.setAttribute("hidden", "");
+  panel.hidden = false;
+  ziel.textContent = "Wird ausgewertet …";
+  try {
+    if (!treeData.personen.length) await loadStammbaumData();
+    await ensurePersonenFrisch?.();
+    const notizen = new Map();
+    for (const p of (Array.isArray(personenCache) ? personenCache : [])) if (p.Notiz) notizen.set(p.id, p.Notiz);
+    let beziehungen = [];
+    try {
+      const { data, error } = await sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp");
+      if (!error) beziehungen = data || [];
+    } catch (_) { /* Tabelle optional */ }
+    treeLueckenRender(treeLueckenAnalyse(beziehungen, notizen));
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (err) {
+    ziel.textContent = `Auswertung nicht möglich: ${err.message || err}`;
+  }
+}
+
+function initTreeLueckenUI() {
+  document.getElementById("tree-luecken-open")?.addEventListener("click", () => { void treeLueckenOeffnen(); });
+  document.getElementById("tree-luecken-close")?.addEventListener("click", () => { document.getElementById("tree-luecken-panel").hidden = true; });
+  document.getElementById("tree-luecken-result")?.addEventListener("click", (e) => {
+    const knopf = e.target.closest("[data-luecken-person]");
+    if (knopf) void openPersonDetail(knopf.getAttribute("data-luecken-person"));
+  });
+}
+initTreeLueckenUI();
+
 // ---------- v335: Verwandtschaft – Personenfelder mit Sucheingabe statt langer Auswahlliste ----------
 const treeRelationSides = {};
 function treeRelationGet(key) {
@@ -9897,7 +10049,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=353");
+      treeModul3D = await import("./tree3d.js?v=354");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
