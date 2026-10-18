@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 351
+// Partezettel Archiv – Version 352
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -9094,9 +9094,37 @@ function treeCousinsOf(personId) {
     liste.forEach((k) => einzigartig.set(k.id, k));
     gruppen.push({ onkelTante, halb: info.halb, eltern: [...info.eltern], kinder: liste });
   }
-  gruppen.sort((x, y) => sortierer(x.onkelTante, y.onkelTante));
+  // Doppelcousins: Sind Onkel und Tante miteinander verheiratet (z. B. Bruder der Mutter und Schwester des Vaters),
+  // haben sie dieselben Kinder. Diese erscheinen dann nur einmal, gemeinsam unter beiden, und werden markiert.
+  const zusammen = gruppen.map((g) => ({ mitglieder: [g], kinder: [...g.kinder], doppel: new Set() }));
+  let geaendert = true;
+  while (geaendert) {
+    geaendert = false;
+    suche: for (let i = 0; i < zusammen.length; i++) {
+      for (let j = i + 1; j < zusammen.length; j++) {
+        const ids = new Set(zusammen[i].kinder.map((k) => k.id));
+        if (!zusammen[j].kinder.some((k) => ids.has(k.id))) continue;
+        zusammen[i].mitglieder.push(...zusammen[j].mitglieder);
+        for (const k of zusammen[j].kinder) if (!ids.has(k.id)) zusammen[i].kinder.push(k);
+        zusammen.splice(j, 1);
+        geaendert = true;
+        break suche;
+      }
+    }
+  }
+  const doppelIds = new Set();
+  for (const z of zusammen) {
+    z.kinder.sort(sortierer);
+    z.mitglieder.sort((x, y) => sortierer(x.onkelTante, y.onkelTante));
+    for (const k of z.kinder) {
+      const elternSeiten = new Set();
+      for (const m of z.mitglieder) if (m.kinder.some((x) => x.id === k.id)) m.eltern.forEach((id) => elternSeiten.add(id));
+      if (elternSeiten.size >= 2) { z.doppel.add(k.id); doppelIds.add(k.id); }
+    }
+  }
+  zusammen.sort((x, y) => sortierer(x.mitglieder[0].onkelTante, y.mitglieder[0].onkelTante));
   ohneKinder.sort(sortierer);
-  return { parents: parentIds.size, gruppen, ohneKinder, personen: [...einzigartig.values()] };
+  return { parents: parentIds.size, gruppen: zusammen, ohneKinder, personen: [...einzigartig.values()], doppelIds };
 }
 
 function treeCousinsRender(personId) {
@@ -9106,7 +9134,7 @@ function treeCousinsRender(personId) {
     result.innerHTML = "Bitte zuerst eine Ausgangsperson auswählen.";
     return;
   }
-  const { parents, gruppen, ohneKinder, personen } = treeCousinsOf(personId);
+  const { parents, gruppen, ohneKinder, personen, doppelIds } = treeCousinsOf(personId);
   const titel = `<strong>Cousins und Cousinen von ${escTree(treePersonLabel(personId))}</strong>`;
   if (!parents) {
     result.innerHTML = `${titel}<p class="tree-cousins__hint">Für diese Person sind keine Eltern erfasst, daher können keine Cousins oder Cousinen ermittelt werden.</p>`;
@@ -9120,22 +9148,35 @@ function treeCousinsRender(personId) {
   }
   const anzahl = (g) => personen.filter((p) => treePersonGender(p) === g).length;
   const m = anzahl("m"), w = anzahl("w"), u = anzahl("u");
-  const summe = [`${m} Cousins`, `${w} Cousinen`, u ? `${u} ohne Geschlechtsangabe` : ""].filter(Boolean).join(" · ");
+  const dm = personen.filter((p) => doppelIds.has(p.id) && treePersonGender(p) === "m").length;
+  const dw = personen.filter((p) => doppelIds.has(p.id) && treePersonGender(p) === "w").length;
+  const doppelText = [dm ? `${dm} Doppelcousin${dm === 1 ? "" : "s"}` : "", dw ? `${dw} Doppelcousine${dw === 1 ? "" : "n"}` : ""].filter(Boolean).join(" und ");
+  const summe = [`${m} Cousins`, `${w} Cousinen`, u ? `${u} ohne Geschlechtsangabe` : ""].filter(Boolean).join(" · ")
+    + (doppelText ? ` (davon ${doppelText})` : "");
   const jahreHtml = (p) => { const j = treeYearsText(p); return j ? ` <span class="tree-cousins__years">${escTree(j)}</span>` : ""; };
   const gruppeHtml = (g) => {
-    const og = treePersonGender(g.onkelTante);
-    const rolle = og === "m" ? "Onkel" : og === "w" ? "Tante" : "Onkel/Tante";
-    const geschwister = og === "m" ? (g.halb ? "Halbbruder" : "Bruder") : og === "w" ? (g.halb ? "Halbschwester" : "Schwester") : (g.halb ? "Halbgeschwister" : "Geschwister");
-    const eltern = g.eltern.map((id) => {
-      const pg = treePersonGender(treePerson(id));
-      return `${escTree(treePersonLabel(id))} (${pg === "m" ? "Vater" : pg === "w" ? "Mutter" : "Elternteil"})`;
-    }).join(" und ");
+    const kopfZeilen = g.mitglieder.map((mg, idx) => {
+      const og = treePersonGender(mg.onkelTante);
+      const rolle = og === "m" ? "Onkel" : og === "w" ? "Tante" : "Onkel/Tante";
+      const geschwister = og === "m" ? (mg.halb ? "Halbbruder" : "Bruder") : og === "w" ? (mg.halb ? "Halbschwester" : "Schwester") : (mg.halb ? "Halbgeschwister" : "Geschwister");
+      const eltern = mg.eltern.map((id) => {
+        const pg = treePersonGender(treePerson(id));
+        return `${escTree(treePersonLabel(id))} (${pg === "m" ? "Vater" : pg === "w" ? "Mutter" : "Elternteil"})`;
+      }).join(" und ");
+      const letzte = idx === g.mitglieder.length - 1;
+      const anzahl = letzte ? ` · ${g.kinder.length} ${g.kinder.length === 1 ? "Kind" : "Kinder"}` : "";
+      return `<h4 class="tree-cousins__group${g.mitglieder.length > 1 ? (letzte ? " tree-cousins__group--ende" : " tree-cousins__group--paar") : ""}"><span class="tree-cousins__role">${rolle}</span> ${escTree(treePersonLabel(mg.onkelTante.id))}${jahreHtml(mg.onkelTante)}<small>${geschwister} von ${eltern}${anzahl}</small></h4>`;
+    }).join("");
+    const doppelHinweis = g.doppel.size
+      ? `<p class="tree-cousins__doppel">Doppelcousins: Diese Kinder sind über beide Elternteile von ${escTree(treePersonLabel(personId))} verwandt (Mutter- und Vaterseite), deshalb stehen sie nur einmal unter beiden.</p>` : "";
     const zeilen = g.kinder.map((k) => {
       const kg = treePersonGender(k);
-      const tag = kg === "m" ? `<span class="tree-cousins__tag tree-cousins__tag--m">Cousin</span>` : kg === "w" ? `<span class="tree-cousins__tag tree-cousins__tag--w">Cousine</span>` : "";
+      const doppel = g.doppel.has(k.id);
+      const wort = (doppel ? "Doppelcousin" : "Cousin") + (kg === "w" ? "e" : "");
+      const tag = kg === "m" || kg === "w" ? `<span class="tree-cousins__tag tree-cousins__tag--${kg}${doppel ? " tree-cousins__tag--doppel" : ""}">${wort}</span>` : "";
       return `<li><span class="tree-cousins__name">${escTree(treePersonLabel(k.id))}</span>${jahreHtml(k)}${tag}</li>`;
     }).join("");
-    return `<h4 class="tree-cousins__group"><span class="tree-cousins__role">${rolle}</span> ${escTree(treePersonLabel(g.onkelTante.id))}${jahreHtml(g.onkelTante)}<small>${geschwister} von ${eltern} · ${g.kinder.length} ${g.kinder.length === 1 ? "Kind" : "Kinder"}</small></h4><ul class="tree-cousins__list">${zeilen}</ul>`;
+    return `${kopfZeilen}${doppelHinweis}<ul class="tree-cousins__list">${zeilen}</ul>`;
   };
   result.innerHTML = `${titel}<p class="tree-cousins__summary">${personen.length} insgesamt: ${summe}</p>${gruppen.map(gruppeHtml).join("")}${ohneKinderHinweis}`;
 }
@@ -9789,7 +9830,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=351");
+      treeModul3D = await import("./tree3d.js?v=352");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
