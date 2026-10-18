@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 346
+// Partezettel Archiv – Version 347
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -2764,6 +2764,26 @@ function ladeHinweisEnde() {
   debugLog(`⏱ Laden abgeschlossen nach ${Math.round((performance.now() - ladeHinweis.start) / 100) / 10} s, Vorschaubilder: ${foto.fertig} von ${foto.total}.`);
 }
 
+let personenKeineDaten = false;   // true: Datenbank hat 0 Personen ohne Fehler geliefert
+
+async function ladeHinweisKeineDaten() {
+  personenKeineDaten = true;
+  if (ladeHinweis.timer) { clearInterval(ladeHinweis.timer); ladeHinweis.timer = null; }
+  let konto = "";
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    konto = session?.user?.email || "";
+  } catch (_) { /* nicht kritisch */ }
+  const rolle = zugang && !zugang.kompatibel ? ` (Rolle: ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle})` : "";
+  debugLog(`⚠️ Die Datenbank hat 0 Personen geliefert, ohne Fehlermeldung. Angemeldet als ${konto || "unbekannt"}${rolle}. Vermutlich darf dieses Konto die Daten (noch) nicht lesen – oder die Datenbank ist leer.`);
+  const box = document.getElementById("lade-hinweis");
+  if (!box) return;
+  document.getElementById("lade-hinweis-titel").textContent = "Keine Personen sichtbar";
+  document.getElementById("lade-hinweis-text").textContent = "Die Datenbank hat keine Personen geliefert und keine Fehlermeldung gemeldet. Entweder ist sie leer, oder dieses Konto darf die Daten noch nicht lesen. Bitte den Eigentümer informieren und das technische Protokoll mitschicken.";
+  document.getElementById("lade-hinweis-schritt").textContent = konto ? `Abgefragt als ${konto}${rolle}` : "Konto unbekannt";
+  box.hidden = false;
+}
+
 function ladeHinweisFehler(text) {
   if (ladeHinweis.timer) { clearInterval(ladeHinweis.timer); ladeHinweis.timer = null; }
   const box = document.getElementById("lade-hinweis");
@@ -2868,7 +2888,22 @@ async function loadPersonen(force = false) {
     if (error) throw error;
 
     personenCache = data || [];
-    ladeHinweisSchritt(`${personenCache.length} Personen empfangen, Beziehungen werden abgerufen`);
+    ladeHinweisSchritt(`${personenCache.length} Personen empfangen${personenCache.length ? ", Beziehungen werden abgerufen" : ""}`);
+    if (!personenCache.length) {
+      // Keine Daten sichtbar: nichts als „geladen“ speichern, damit ein späterer Versuch alles neu lädt.
+      personenCacheGeladen = false;
+      personenCacheSyncInitialisiert = false;
+      personenCacheQuelle = "";
+      aktualisierePersonenCacheStatus();
+      await ladeHinweisKeineDaten();
+      await renderPersonenList(personenCache);
+      if (empty) {
+        empty.hidden = false;
+        empty.textContent = "Keine Personen sichtbar. Dieses Konto hat möglicherweise noch keinen Zugriff auf die Daten.";
+      }
+      return;
+    }
+    personenKeineDaten = false;
     try {
       const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
         sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
@@ -3450,7 +3485,9 @@ function wendePersonenSucheAn(suchwert) {
   if (!personenCacheGeladen || !Array.isArray(personenCache) || !personenCache.length) {
     if (empty) {
       empty.hidden = false;
-      empty.textContent = "Personen werden noch geladen …";
+      empty.textContent = personenKeineDaten
+        ? "Keine Personen sichtbar. Dieses Konto hat möglicherweise noch keinen Zugriff auf die Daten."
+        : "Personen werden noch geladen …";
     }
     return false;
   }
@@ -9348,7 +9385,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=346");
+      treeModul3D = await import("./tree3d.js?v=347");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
