@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 347 -->
+    <!-- Version 349 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=347">
+<link rel="stylesheet" href="style.css?v=349">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -21,6 +21,31 @@
 </style>
 </head>
 <body>
+
+<!-- ===================== MEIN KONTO ===================== -->
+<div id="konto-overlay" class="zugang-overlay" hidden>
+  <div class="zugang-karte" role="dialog" aria-modal="true" aria-labelledby="konto-titel">
+    <h2 id="konto-titel">Mein Konto</h2>
+    <div class="zugang-inhalt">
+      <dl class="konto-daten">
+        <dt>Name</dt><dd id="konto-name">–</dd>
+        <dt>E-Mail</dt><dd id="konto-email">–</dd>
+        <dt>Rolle</dt><dd id="konto-rolle">–</dd>
+      </dl>
+      <h3>Passwort ändern</h3>
+      <label class="field"><span>Neues Passwort (mindestens 10 Zeichen)</span><input type="password" id="konto-passwort" autocomplete="new-password" minlength="10"></label>
+      <label class="field"><span>Neues Passwort wiederholen</span><input type="password" id="konto-passwort2" autocomplete="new-password" minlength="10"></label>
+      <button type="button" id="konto-passwort-speichern" class="btn btn--primary">Passwort ändern</button>
+      <p id="konto-meldung" class="form-message"></p>
+      <h3>Weiteres</h3>
+      <button type="button" id="konto-hinweise" class="btn btn--secondary">Vertraulichkeit und Hinweise ansehen</button>
+    </div>
+    <div class="zugang-aktionen">
+      <button type="button" id="konto-schliessen" class="btn btn--secondary">Schließen</button>
+      <button type="button" id="konto-abmelden" class="btn btn--ghost">Abmelden</button>
+    </div>
+  </div>
+</div>
 
 <!-- ===================== ZUGANG / HINWEISE ===================== -->
 <div id="zugang-overlay" class="zugang-overlay" hidden>
@@ -59,7 +84,7 @@
     <p class="familienspuren-tagline">Menschen. Generationen. Geschichten.</p>
     <p class="login-subtitle">Anmelden</p>
     <form id="login-form" autocomplete="on">
-      <label class="field"><span>E-Mail</span><input type="email" id="login-email" autocomplete="username" value="gan.stammbaum@gmail.com" required></label>
+      <label class="field"><span>E-Mail</span><input type="email" id="login-email" autocomplete="username" placeholder="E-Mail-Adresse" inputmode="email" autocapitalize="none" autocorrect="off" spellcheck="false" required></label>
       <label class="field"><span>Passwort</span><input type="password" id="login-password" autocomplete="current-password" required></label>
       <button type="submit" class="btn btn--primary btn--full">Anmelden</button>
       <p id="login-message" class="form-message"></p>
@@ -86,7 +111,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-user" class="app-header__user" hidden></p><p id="app-version" class="app-header__version">Version 347</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 349</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -95,6 +120,7 @@
   <button class="tab-btn" data-tab="erfassen" role="tab" aria-selected="false" data-rolle="bearbeiter">Ersteingabe</button>
   <button class="tab-btn" data-tab="fotos" role="tab" aria-selected="false">Gruppenfoto</button>
   <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export / Sicherung</button>
+  <button class="tab-btn" data-tab="verlauf" role="tab" aria-selected="false" data-rolle="eigentuemer">Verlauf</button>
   <button class="tab-btn" data-tab="hilfe" role="tab" aria-selected="false">Hilfe / Kurzanleitung</button>
 </nav>
 
@@ -452,14 +478,7 @@
       <h2 style="margin-top:0;">Hilfe zum Partezettel Archiv</h2>
       <p>Hier findest du eine einfache Erklärung der Bereiche und eine Kurzanleitung für die wichtigsten Arbeitsschritte.</p>
       <p><button type="button" id="hinweise-oeffnen" class="btn btn--secondary">Vertraulichkeit und Hinweise ansehen</button></p>
-      <details class="konto-box" id="konto-box">
-        <summary>Mein Konto und Passwort</summary>
-        <p id="konto-info" class="capture-status"></p>
-        <label class="field"><span>Neues Passwort (mindestens 10 Zeichen)</span><input type="password" id="konto-passwort" autocomplete="new-password" minlength="10"></label>
-        <label class="field"><span>Neues Passwort wiederholen</span><input type="password" id="konto-passwort2" autocomplete="new-password" minlength="10"></label>
-        <button type="button" id="konto-passwort-speichern" class="btn btn--primary">Passwort ändern</button>
-        <p id="konto-meldung" class="form-message"></p>
-      </details>
+      <p><button type="button" id="konto-oeffnen" class="btn btn--secondary">Mein Konto und Passwort</button></p>
       <h3>Kurzanleitung</h3>
       <ol style="padding-left:1.4rem;line-height:1.65;">
         <li><strong>Person neu erfassen:</strong> Öffne <em>Ersteingabe</em>, trage mindestens Vorname und Nachname ein und ergänze bekannte Daten.</li>
@@ -542,6 +561,18 @@
     </fieldset>
   </section>
 
+  <!-- ===================== TAB: VERLAUF (nur Eigentümer) ===================== -->
+  <section id="tab-verlauf" class="tab-panel">
+    <fieldset class="field-group">
+      <legend>🕘 Änderungsprotokoll</legend>
+      <p class="capture-status">Zeigt, wer wann was angelegt, geändert oder gelöscht hat. Neueste zuerst.</p>
+      <label class="field"><span>Benutzer</span><select id="verlauf-benutzer"><option value="">Alle</option></select></label>
+      <ol id="verlauf-liste" class="verlauf-liste"></ol>
+      <p id="verlauf-meldung" class="form-message"></p>
+      <button type="button" id="verlauf-mehr" class="btn btn--secondary btn--full" hidden>Weitere Einträge laden</button>
+    </fieldset>
+  </section>
+
 </main>
 
 <!-- ===================== PERSONENANSICHT / BESTAND ===================== -->
@@ -584,6 +615,14 @@
       </section>
       <section class="person-view-section" id="pv-notes-section" hidden>
         <h3>Notizen</h3><p id="pv-notes"></p>
+      </section>
+      <section class="person-view-section" id="pv-verlauf-section" data-rolle="bearbeiter">
+        <details id="pv-verlauf">
+          <summary>Verlauf: wer hat was geändert</summary>
+          <ol id="pv-verlauf-liste" class="verlauf-liste"></ol>
+          <p id="pv-verlauf-meldung" class="form-message"></p>
+          <button type="button" id="pv-verlauf-mehr" class="btn btn--ghost" hidden>Weitere Einträge laden</button>
+        </details>
       </section>
       <p class="person-view-hint">Leere Angaben werden ausgeblendet. Über „Bearbeiten“ öffnet sich die vollständige Eingabemaske.</p>
       <div class="person-view-actions person-view-action-row"><button type="button" id="pv-tree" class="btn btn--secondary btn--full">🌳 Im Stammbaum anzeigen</button><button type="button" id="pv-edit" data-rolle="bearbeiter" class="btn btn--primary btn--full">✏️ Bearbeiten</button></div>
@@ -823,7 +862,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=347"></script>
-<script src="app.js?v=347"></script>
+<script src="hinweise.js?v=349"></script>
+<script src="app.js?v=349"></script>
 </body>
 </html>

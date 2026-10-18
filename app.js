@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 347
+// Partezettel Archiv – Version 349
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -640,8 +640,8 @@ function setzeRollenAnzeige() {
   for (const r of Object.keys(ROLLEN_NAMEN)) document.body.classList.toggle(`rolle-${r}`, zugang.rolle === r);
   const zeile = document.getElementById("app-user");
   if (zeile) {
-    zeile.textContent = zugang.kompatibel || !zugang.name ? "" : `${zugang.name} · ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle}`;
-    zeile.hidden = !zeile.textContent;
+    zeile.textContent = zugang.kompatibel || !zugang.name ? "⚙ Konto" : `⚙ ${zugang.name} · ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle}`;
+    zeile.hidden = false;
   }
 }
 
@@ -796,17 +796,37 @@ async function pruefeZugangUndHinweise(session) {
 
 document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("hinweise-oeffnen")?.addEventListener("click", () => { void zugangOverlayZeigen("lesen"); });
+});
 
-  // Mein Konto: Angaben anzeigen und eigenes Passwort ändern
-  const kontoBox = document.getElementById("konto-box");
-  kontoBox?.addEventListener("toggle", async () => {
-    if (!kontoBox.open) return;
-    const info = document.getElementById("konto-info");
-    try {
-      const { data: { session } } = await sb.auth.getSession();
-      const rolle = zugang.kompatibel ? "" : ` · Rolle: ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle}`;
-      info.textContent = `Angemeldet als ${session?.user?.email || "–"}${zugang.name ? ` (${zugang.name})` : ""}${rolle}`;
-    } catch (err) { info.textContent = ""; }
+// ---------- v349: Mein Konto (Menü am Namen) ----------
+async function kontoOeffnen() {
+  const overlay = document.getElementById("konto-overlay");
+  if (!overlay) return;
+  document.getElementById("konto-meldung").textContent = "";
+  document.getElementById("konto-passwort").value = "";
+  document.getElementById("konto-passwort2").value = "";
+  let email = "–";
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    email = session?.user?.email || "–";
+  } catch (_) { /* nicht kritisch */ }
+  document.getElementById("konto-name").textContent = zugang.name || "–";
+  document.getElementById("konto-email").textContent = email;
+  document.getElementById("konto-rolle").textContent = zugang.kompatibel ? "–" : (ROLLEN_NAMEN[zugang.rolle] || zugang.rolle);
+  overlay.hidden = false;
+}
+function kontoSchliessen() { const o = document.getElementById("konto-overlay"); if (o) o.hidden = true; }
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("app-user")?.addEventListener("click", () => { void kontoOeffnen(); });
+  document.getElementById("konto-oeffnen")?.addEventListener("click", () => { void kontoOeffnen(); });
+  document.getElementById("konto-schliessen")?.addEventListener("click", kontoSchliessen);
+  document.getElementById("konto-overlay")?.addEventListener("click", (e) => { if (e.target.id === "konto-overlay") kontoSchliessen(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") kontoSchliessen(); });
+  document.getElementById("konto-hinweise")?.addEventListener("click", () => { kontoSchliessen(); void zugangOverlayZeigen("lesen"); });
+  document.getElementById("konto-abmelden")?.addEventListener("click", async () => {
+    kontoSchliessen();
+    try { await sb.auth.signOut(); } catch (err) { debugLog(`⚠️ Abmelden: ${err.message || err}`); }
   });
   document.getElementById("konto-passwort-speichern")?.addEventListener("click", async () => {
     const meldung = document.getElementById("konto-meldung");
@@ -824,6 +844,171 @@ document.addEventListener("DOMContentLoaded", () => {
       meldung.textContent = `Passwort konnte nicht geändert werden: ${err.message || err}`;
     }
   });
+});
+
+// ---------- v349: Änderungsprotokoll (Verlauf) ----------
+// Die Datenbank schreibt das Protokoll selbst (Paket 2). Hier wird es nur gelesen und verständlich angezeigt.
+const VERLAUF_TABELLEN = {
+  personen: ["Person angelegt", "Person geändert", "Person gelöscht"],
+  familien: ["Partnerschaft/Familie angelegt", "Partnerschaft/Familie geändert", "Partnerschaft/Familie entfernt"],
+  familien_kinder: ["Kind zugeordnet", "Kind-Zuordnung geändert", "Kind-Zuordnung entfernt"],
+  beziehung: ["Beziehung angelegt", "Beziehung geändert", "Beziehung entfernt"],
+  fotos: ["Foto hinzugefügt", "Foto geändert", "Foto gelöscht"],
+  foto_personen: ["Person auf Foto markiert", "Foto-Markierung geändert", "Foto-Markierung entfernt"],
+  sprachnotizen: ["Sprachnotiz hinzugefügt", "Sprachnotiz geändert", "Sprachnotiz gelöscht"],
+  familien_trauungsbuch_quellen: ["Trauungsbuch-Quelle angelegt", "Trauungsbuch-Quelle geändert", "Trauungsbuch-Quelle entfernt"],
+  benutzerprofil: ["Konto freigeschaltet", "Konto/Rolle geändert", "Konto-Freigabe entfernt"]
+};
+const VERLAUF_AKTION = { einfuegen: 0, aendern: 1, loeschen: 2 };
+const VERLAUF_FELDER = {
+  vorname: "Vorname", nachname: "Nachname", Ledigenname: "Ledigenname", ledigenname: "Ledigenname", geschlecht: "Geschlecht",
+  geburtsdatum: "Geburtsdatum", geburtsjahr: "Geburtsjahr", sterbedatum: "Sterbedatum", sterbejahr: "Sterbejahr", Notiz: "Notiz",
+  familientyp: "Art", beginn: "Beginn", ende: "Ende", beziehungstyp: "Art", ist_schluesselfoto: "Schlüsselfoto", gruppenfoto: "Gruppenfoto",
+  titel: "Titel", nummer: "Nummer", zeile: "Zeile", dateipfad: "Datei", rolle: "Rolle", aktiv: "Aktiv", anzeigename: "Name"
+};
+const VERLAUF_IGNORIERT = new Set(["id", "created_at", "erstellt_am", "updated_at", "geaendert_am", "user_id"]);
+
+function verlaufWert(v) {
+  if (v === null || v === undefined || v === "") return "leer";
+  if (typeof v === "boolean") return v ? "ja" : "nein";
+  const text = typeof v === "object" ? JSON.stringify(v) : String(v);
+  return text.length > 60 ? `${text.slice(0, 57)}…` : text;
+}
+
+function verlaufPersonenNamen(ids) {
+  return (ids || []).map((id) => {
+    const p = (personenCache || []).find((x) => x.id === id);
+    return p ? PersonSuche.name(p) : "";
+  }).filter(Boolean);
+}
+
+function verlaufEintragElement(e, ohnePersonen = false) {
+  const li = document.createElement("li");
+  li.className = "verlauf-eintrag";
+  const kopf = document.createElement("div");
+  kopf.className = "verlauf-kopf";
+  const zeit = document.createElement("span");
+  zeit.className = "verlauf-zeit";
+  zeit.textContent = new Date(e.zeitpunkt).toLocaleString("de-AT", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  const wer = document.createElement("strong");
+  wer.textContent = e.benutzer || "unbekannt";
+  kopf.append(zeit, " ", wer);
+  const titel = document.createElement("div");
+  titel.className = "verlauf-titel";
+  const namen = VERLAUF_TABELLEN[e.tabelle];
+  titel.textContent = namen ? namen[VERLAUF_AKTION[e.aktion] ?? 1] : `${e.tabelle}: ${e.aktion}`;
+  li.append(kopf, titel);
+  const zeilen = [];
+  const daten = e.aenderungen || {};
+  if (e.aktion === "aendern") {
+    for (const [feld, wert] of Object.entries(daten)) {
+      if (VERLAUF_IGNORIERT.has(feld)) continue;
+      zeilen.push(`${VERLAUF_FELDER[feld] || feld}: ${verlaufWert(wert?.alt)} → ${verlaufWert(wert?.neu)}`);
+    }
+  } else if (e.tabelle === "personen") {
+    const name = [daten.vorname, daten.nachname].filter(Boolean).join(" ").trim();
+    if (name) zeilen.push(name);
+  } else if (e.tabelle === "fotos" && daten.dateipfad) {
+    zeilen.push(verlaufWert(String(daten.dateipfad).split("/").pop()));
+  }
+  if (!ohnePersonen && e.tabelle !== "personen") {
+    const betrifft = verlaufPersonenNamen(e.personen_ids);
+    if (betrifft.length) zeilen.push(`Betrifft: ${betrifft.join(", ")}`);
+  }
+  for (const z of zeilen.slice(0, 8)) {
+    const d = document.createElement("div");
+    d.className = "verlauf-detail";
+    d.textContent = z;
+    li.appendChild(d);
+  }
+  return li;
+}
+
+// Holt eine Seite aus dem Protokoll. Rückgabe: { fehlt, eintraege, fehler }
+async function holeVerlauf({ personId = "", vorId = null, benutzer = "", limit = 30 } = {}) {
+  let abfrage = sb.from("aenderungsprotokoll")
+    .select("id, zeitpunkt, benutzer, tabelle, datensatz_id, personen_ids, aktion, aenderungen")
+    .order("id", { ascending: false }).limit(limit);
+  if (personId) abfrage = abfrage.contains("personen_ids", [personId]);
+  if (vorId) abfrage = abfrage.lt("id", vorId);
+  if (benutzer) abfrage = abfrage.eq("benutzer", benutzer);
+  const { data, error } = await abfrage;
+  if (error) {
+    if (tabelleFehlt(error)) return { fehlt: true, eintraege: [] };
+    return { fehler: error.message || String(error), eintraege: [] };
+  }
+  return { eintraege: data || [] };
+}
+
+// --- Verlauf in der Personenansicht ---
+let verlaufPersonId = "";
+let verlaufPersonLetzteId = null;
+
+async function ladeVerlaufPerson(weitere = false) {
+  const liste = document.getElementById("pv-verlauf-liste");
+  const meldung = document.getElementById("pv-verlauf-meldung");
+  const mehr = document.getElementById("pv-verlauf-mehr");
+  if (!liste || !verlaufPersonId) return;
+  meldung.textContent = "Lade …";
+  const erg = await holeVerlauf({ personId: verlaufPersonId, vorId: weitere ? verlaufPersonLetzteId : null });
+  if (erg.fehlt) { meldung.textContent = "Das Änderungsprotokoll ist in der Datenbank noch nicht eingerichtet."; mehr.hidden = true; return; }
+  if (erg.fehler) { meldung.textContent = `Verlauf konnte nicht geladen werden: ${erg.fehler}`; return; }
+  if (!weitere) liste.replaceChildren();
+  for (const e of erg.eintraege) liste.appendChild(verlaufEintragElement(e, false));
+  if (erg.eintraege.length) verlaufPersonLetzteId = erg.eintraege[erg.eintraege.length - 1].id;
+  meldung.textContent = liste.children.length ? "" : "Noch keine Änderungen aufgezeichnet (das Protokoll gilt ab der Einrichtung).";
+  mehr.hidden = erg.eintraege.length < 30;
+}
+
+function setzeVerlaufFuerPerson(personId) {
+  verlaufPersonId = personId;
+  verlaufPersonLetzteId = null;
+  const details = document.getElementById("pv-verlauf");
+  if (details) details.open = false;
+  document.getElementById("pv-verlauf-liste")?.replaceChildren();
+  const meldung = document.getElementById("pv-verlauf-meldung");
+  if (meldung) meldung.textContent = "";
+  const mehr = document.getElementById("pv-verlauf-mehr");
+  if (mehr) mehr.hidden = true;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("pv-verlauf")?.addEventListener("toggle", () => {
+    if (document.getElementById("pv-verlauf").open && !document.getElementById("pv-verlauf-liste").children.length) void ladeVerlaufPerson(false);
+  });
+  document.getElementById("pv-verlauf-mehr")?.addEventListener("click", () => { void ladeVerlaufPerson(true); });
+});
+
+// --- Verlauf-Übersicht (nur Eigentümer) ---
+let verlaufTabLetzteId = null;
+
+async function ladeVerlaufTab(weitere = false) {
+  const liste = document.getElementById("verlauf-liste");
+  const meldung = document.getElementById("verlauf-meldung");
+  const mehr = document.getElementById("verlauf-mehr");
+  const filter = document.getElementById("verlauf-benutzer");
+  if (!liste) return;
+  meldung.textContent = "Lade …";
+  const erg = await holeVerlauf({ vorId: weitere ? verlaufTabLetzteId : null, benutzer: filter?.value || "", limit: 50 });
+  if (erg.fehlt) { meldung.textContent = "Das Änderungsprotokoll ist in der Datenbank noch nicht eingerichtet (Supabase Paket 2)."; mehr.hidden = true; return; }
+  if (erg.fehler) { meldung.textContent = `Verlauf konnte nicht geladen werden: ${erg.fehler}`; return; }
+  if (!weitere) liste.replaceChildren();
+  for (const e of erg.eintraege) liste.appendChild(verlaufEintragElement(e, false));
+  if (erg.eintraege.length) verlaufTabLetzteId = erg.eintraege[erg.eintraege.length - 1].id;
+  // Benutzerliste für den Filter aus den bisher gesehenen Einträgen ergänzen
+  if (filter) {
+    const bekannt = new Set([...filter.options].map((o) => o.value));
+    for (const e of erg.eintraege) {
+      if (e.benutzer && !bekannt.has(e.benutzer)) { filter.appendChild(new Option(e.benutzer, e.benutzer)); bekannt.add(e.benutzer); }
+    }
+  }
+  meldung.textContent = liste.children.length ? "" : "Noch keine Einträge.";
+  mehr.hidden = erg.eintraege.length < 50;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("verlauf-mehr")?.addEventListener("click", () => { void ladeVerlaufTab(true); });
+  document.getElementById("verlauf-benutzer")?.addEventListener("change", () => { void ladeVerlaufTab(false); });
 });
 
 // ---------- Anmeldung ----------
@@ -958,6 +1143,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     // Scrollposition der vorherigen Ansicht.
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (btn.dataset.tab === "liste") await loadPersonen();
+    if (btn.dataset.tab === "verlauf") await ladeVerlaufTab(false);
     if (btn.dataset.tab === "fotos") {
       // Beim direkten Wechsel auf „Fotos“ zuerst die Personen laden,
       // damit die Auswahl nicht leer bleibt, wenn der Cache noch nicht gefüllt ist.
@@ -3696,6 +3882,7 @@ async function openPersonDetail(personId, options = {}) {
     const name = [person.vorname, person.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
     document.getElementById("pv-name").textContent = name;
     const kopfLedig = String(person.Ledigenname || person.ledigenname || person.geburtsname || "").trim();
+    setzeVerlaufFuerPerson(person.id);
     const kopfLedigElement = document.getElementById("pv-maiden");
     if (kopfLedigElement) { kopfLedigElement.textContent = kopfLedig ? `geb. ${kopfLedig}` : ""; kopfLedigElement.hidden = !kopfLedig; }
     const personAudioPanel = document.getElementById("pv-audio-panel");
@@ -9385,7 +9572,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=347");
+      treeModul3D = await import("./tree3d.js?v=349");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
