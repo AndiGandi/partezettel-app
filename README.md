@@ -8,11 +8,12 @@ Live: https://andigandi.github.io/partezettel-app/
 
 - **Bestand:** Personenliste mit Suche (Name, Ledigenname, Jahr, Datum) und Sortierung nach Name, Alter, Geburtsjahr, Sterbejahr, zuletzt erfasst oder Familie. Die Personenansicht zeigt Lebensdaten, Eltern, Ehepartner, Kinder, Kirchenbücher, Fotos, Sprachnotizen und Notizen.
 - **Ersteingabe:** Person mit Foto (Partezettel), Sprachnotiz, Lebensdaten und Verwandtschaft direkt erfassen. Pflichtfelder sind nur Vorname und Geschlecht. Ohne Netz werden Einträge in einer Warteschlange zwischengespeichert.
-- **Stammbaum** in vier Ansichten:
+- **Stammbaum** in fünf Ansichten:
   - **Familie:** eine Person mit Eltern, Geschwistern, Partnern und Kindern (Standard)
   - **Generationen:** Übersicht nach Generationenzeilen
   - **Ahnentafel:** Vorfahren, nummeriert nach Kekulé, 3 bis 6 Generationen
   - **Nachkommen:** einklappbare Liste mit Anzahl der Nachkommen
+  - **3D-Baum (Prototyp):** Vorfahren als drehbarer Baum; ein Finger dreht, zwei Finger zoomen, drehen und verschieben, Antippen wählt eine Person, mit Vollbild
 - **Vordefinierte Stammlinien** als Filter für alle Ansichten.
 - **Auswertungen:** Verwandtschaft zwischen zwei Personen ermitteln, Cousins und Cousinen nach Onkel und Tante geordnet.
 - **Gruppenfotos:** Personen auf dem Foto mit Nummern markieren, Alter zum Aufnahmedatum, Zuordnung unbekannter Personen.
@@ -25,21 +26,23 @@ Live: https://andigandi.github.io/partezettel-app/
 - Backend: Supabase (PostgreSQL, Anmeldung, Dateispeicher)
 - Hosting: GitHub Pages
 - Service Worker für die Installation als App; Personen-Cache mit Änderungsabgleich (Tabelle `sync_aenderungen`) spart Datenverkehr
-- Bibliotheken über CDN: `supabase-js`, `jsPDF`
+- Bibliotheken über CDN: `supabase-js`, `jsPDF`; `three.js` (feste Version 0.160.0) nur für den 3D-Baum, wird erst beim ersten Öffnen geladen und im Service Worker gespeichert
 
 ## Dateien
 
 | Datei | Zweck |
 |---|---|
 | `index.html` | Aufbau der Seite |
-| `app.js` | gesamte App-Logik |
+| `app.js` | App-Logik |
+| `tree3d.js` | 3D-Baum (wird bei Bedarf nachgeladen) |
+| `hinweise.js` | Text der Seite „Vertraulichkeit und Hinweise“ (Version ändern = alle bestätigen neu) |
 | `style.css` | Gestaltung |
 | `sw.js` | Service Worker (App-Cache) |
 | `manifest.json` | App-Beschreibung für den Home-Bildschirm |
 | `config.js` | Supabase-Adresse und öffentlicher Schlüssel |
 | `icon-192.png`, `icon-512.png` | App-Symbole |
 
-Der Service Worker legt `index.html`, `style.css`, `app.js`, `config.js` und `manifest.json` im Cache ab. Diese Dateien dürfen nicht fehlen.
+Der Service Worker legt `index.html`, `style.css`, `app.js`, `tree3d.js`, `hinweise.js`, `config.js` und `manifest.json` im Cache ab. Diese Dateien dürfen nicht fehlen.
 
 ## Einrichtung
 
@@ -49,6 +52,15 @@ Der Service Worker legt `index.html`, `style.css`, `app.js`, `config.js` und `ma
 4. **Zugriffsregeln (Row Level Security):** auf allen Tabellen und Buckets aktivieren und so einschränken, dass nur das eigene Konto lesen und schreiben darf.
 5. **`config.js`:** `SUPABASE_URL` und `SUPABASE_ANON_KEY` eintragen (Supabase, Project Settings, API).
 6. **GitHub Pages:** Repository, Settings, Pages, Branch `main`, Ordner `/ (root)`.
+
+## Zugang und Rollen
+
+- Jede Person hat ein **eigenes Konto**. Die Rolle steht in der Tabelle `benutzerprofil`: **Eigentümer** (alles), **Bearbeiter** (anlegen und ändern, Verknüpfungen entfernen, aber keine Personen, Fotos oder Aufnahmen löschen), **Leser** (nur lesen).
+- Die Regeln werden in der Datenbank durchgesetzt (Row Level Security), die App blendet nur passend aus.
+- Beim ersten Anmelden muss die Seite „Vertraulichkeit und Hinweise“ bestätigt werden. Die Bestätigung wird mit Zeitpunkt und Textversion in `zustimmungen` gespeichert.
+- Die SQL-Skripte für die Einrichtung liegen **nicht** im Repository, sondern privat beim Eigentümer.
+- Ein **Änderungsprotokoll** (Tabelle `aenderungsprotokoll`, Paket 2) hält fest, wer wann was angelegt, geändert oder gelöscht hat. Eigentümer und Bearbeiter sehen den Verlauf je Person, der Eigentümer zusätzlich die Übersicht im Bereich „Verlauf“.
+- **Mein Konto** (Knopf mit Namen in der Kopfzeile): Angaben ansehen, eigenes Passwort ändern, Hinweise lesen, abmelden.
 
 ## Sicherheit
 
