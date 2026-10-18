@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 344 -->
+    <!-- Version 346 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=344">
+<link rel="stylesheet" href="style.css?v=346">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -86,7 +86,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-user" class="app-header__user" hidden></p><p id="app-version" class="app-header__version">Version 344</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-user" class="app-header__user" hidden></p><p id="app-version" class="app-header__version">Version 346</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -262,6 +262,7 @@
       <summary>Technisches Protokoll (bei Problemen hier nachschauen)</summary>
       <pre id="debug-log"></pre>
       <button type="button" id="debug-clear" class="btn btn--ghost">Protokoll leeren</button>
+      <button type="button" id="debug-copy" class="btn btn--secondary">Protokoll kopieren</button>
       <div class="queue-diagnostic">
         <strong>Lokale Warteschlange</strong>
         <button type="button" id="queue-diagnostic-btn" class="btn btn--ghost">Wartende Einträge anzeigen</button>
@@ -277,6 +278,12 @@
       <input type="search" id="search-input" placeholder="Person suchen …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" oninput="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)" onkeyup="window.partezettelPersonenSuche && window.partezettelPersonenSuche(this.value)">
       <span id="personen-suchtreffer" class="personen-suchtreffer" aria-live="polite"></span>
       <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
+    </div>
+    <div id="lade-hinweis" class="lade-hinweis" role="status" aria-live="polite" hidden>
+      <strong id="lade-hinweis-titel"></strong>
+      <p id="lade-hinweis-text"></p>
+      <p id="lade-hinweis-schritt" class="lade-hinweis__schritt"></p>
+      <button type="button" id="lade-hinweis-log" class="btn btn--ghost">Technisches Protokoll anzeigen</button>
     </div>
     <div id="pending-banner" class="pending-banner" hidden></div>
 
@@ -514,7 +521,7 @@
 
   <!-- ===================== TAB: EXPORT ===================== -->
   <section id="tab-export" class="tab-panel">
-    <fieldset class="field-group">
+    <fieldset class="field-group" data-rolle="eigentuemer">
       <legend>☁️ iCloud-Backup</legend>
       <p class="capture-status">Sichert Datenbank, Fotos und Sprachnotizen als vollständige Backup-Datei. Nach dem Erstellen kannst du die ZIP-Datei auf dem iPad über „In Dateien sichern“ in iCloud Drive ablegen.</p>
       <button type="button" id="backup-icloud-btn" class="btn btn--primary btn--full" style="margin-top:0.75rem;">☁️ Backup für iCloud erstellen</button>
@@ -526,9 +533,10 @@
 
     <fieldset class="field-group">
       <legend>Daten exportieren</legend>
-      <p class="capture-status">Exportiert die Datenbankdaten als JSON. Das vollständige Backup oben enthält zusätzlich Fotos und Sprachnotizen.</p>
-      <button type="button" id="export-json-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als JSON exportieren</button>
-      <button type="button" id="export-gedcom-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als GEDCOM exportieren</button>
+      <p class="capture-status" data-rolle="eigentuemer">Exportiert die Datenbankdaten als JSON. Das vollständige Backup oben enthält zusätzlich Fotos und Sprachnotizen.</p>
+      <p class="capture-status" data-nicht-rolle="eigentuemer">Du kannst eine Familienübersicht als PDF erstellen. Das PDF ist vertraulich und wird nur nach Absprache mit dem Eigentümer weitergegeben. Backups und weitere Exporte sind dem Eigentümer vorbehalten.</p>
+      <button type="button" id="export-json-btn" data-rolle="eigentuemer" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als JSON exportieren</button>
+      <button type="button" id="export-gedcom-btn" data-rolle="eigentuemer" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als GEDCOM exportieren</button>
       <button type="button" id="export-pdf-btn" class="btn btn--secondary btn--full" style="margin-top:0.75rem;">Als PDF exportieren</button>
       <p id="export-message" class="form-message"></p>
     </fieldset>
@@ -815,7 +823,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=344"></script>
-<script src="app.js?v=344"></script>
+<script src="hinweise.js?v=346"></script>
+<script src="app.js?v=346"></script>
 </body>
 </html>

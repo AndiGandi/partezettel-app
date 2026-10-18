@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 344
+// Partezettel Archiv – Version 346
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -756,6 +756,7 @@ async function pruefeZugangUndHinweise(session) {
   if (zugangGeprueftFuer === uid) return true;
   if (zugangPruefLaeuft) return false;
   zugangPruefLaeuft = true;
+  const pruefStart = performance.now();
   try {
     const { data, error } = await sb.from("benutzerprofil").select("anzeigename, rolle, aktiv").eq("user_id", uid).maybeSingle();
     if (error) {
@@ -786,6 +787,7 @@ async function pruefeZugangUndHinweise(session) {
       }
     }
     zugangGeprueftFuer = uid;
+    debugLog(`⏱ Zugang und Hinweise geprüft in ${Math.round(performance.now() - pruefStart)} ms.`);
     return true;
   } finally {
     zugangPruefLaeuft = false;
@@ -2690,6 +2692,112 @@ async function synchronisierePersonenDelta() {
 }
 
 // ---------- Personenliste laden ----------
+// ---------- v346: Ladehinweis beim Start ----------
+// Zeigt in „Bestand“, was gerade passiert (Schritt, Dauer, Foto-Fortschritt) und erklärt, warum das erste Laden
+// auf einem neuen Gerät länger dauert. Alle Schritte werden mit Zeit im technischen Protokoll festgehalten.
+const ladeHinweis = { start: 0, timer: null, erstes: false, schritt: "", listeFertig: false, fotoBasis: null, ruhig: 0 };
+
+function ladeHinweisFotoStand() {
+  const basis = ladeHinweis.fotoBasis || { versuche: 0, fertig: 0 };
+  const total = Math.max(0, (egressMessung.fotoNetzwerkVersuche || 0) - basis.versuche);
+  const fertig = Math.max(0, (egressMessung.fotoNetzwerkErfolge || 0) + (egressMessung.fotoNetzwerkFehler || 0) - basis.fertig);
+  return { total, fertig: Math.min(fertig, total) };
+}
+
+function ladeHinweisZeichnen() {
+  const box = document.getElementById("lade-hinweis");
+  if (!box) return;
+  const sek = Math.round((performance.now() - ladeHinweis.start) / 1000);
+  const foto = ladeHinweisFotoStand();
+  const fotosLaufen = ladeHinweis.listeFertig && foto.total > foto.fertig;
+  document.getElementById("lade-hinweis-titel").textContent = ladeHinweis.erstes
+    ? "Erstes Laden auf diesem Gerät"
+    : "Personenliste wird aktualisiert";
+  document.getElementById("lade-hinweis-text").textContent = ladeHinweis.erstes
+    ? "Die Personenliste und die Vorschaubilder werden einmalig aus der Datenbank geladen und danach auf diesem Gerät gespeichert. Das dauert beim ersten Mal je nach Verbindung etwas länger. Beim nächsten Start geht es deutlich schneller."
+    : "Es wird nach Änderungen gesucht und die Liste aktualisiert.";
+  const schritt = fotosLaufen ? `Vorschaubilder werden geladen: ${foto.fertig} von ${foto.total}` : ladeHinweis.schritt;
+  document.getElementById("lade-hinweis-schritt").textContent = `${schritt} · ${sek} s`;
+  box.hidden = false;
+}
+
+function ladeHinweisStart(erstes) {
+  ladeHinweis.start = performance.now();
+  ladeHinweis.erstes = !!erstes;
+  ladeHinweis.schritt = "Verbindung zur Datenbank …";
+  ladeHinweis.listeFertig = false;
+  ladeHinweis.ruhig = 0;
+  ladeHinweis.fotoBasis = {
+    versuche: egressMessung.fotoNetzwerkVersuche || 0,
+    fertig: (egressMessung.fotoNetzwerkErfolge || 0) + (egressMessung.fotoNetzwerkFehler || 0)
+  };
+  if (ladeHinweis.timer) clearInterval(ladeHinweis.timer);
+  ladeHinweis.timer = setInterval(() => {
+    ladeHinweisZeichnen();
+    if (!ladeHinweis.listeFertig) return;
+    const foto = ladeHinweisFotoStand();
+    ladeHinweis.ruhig = foto.total > foto.fertig ? 0 : ladeHinweis.ruhig + 1;
+    if (ladeHinweis.ruhig >= 3) ladeHinweisEnde();   // seit 3 Sekunden nichts mehr offen
+  }, 1000);
+  ladeHinweisZeichnen();
+  debugLog(`⏱ Laden gestartet (${erstes ? "erstes Laden auf diesem Gerät" : "Aktualisierung"}), ${Math.round(performance.now() / 100) / 10} s nach Seitenstart.`);
+}
+
+function ladeHinweisSchritt(text) {
+  ladeHinweis.schritt = text;
+  debugLog(`⏱ ${text} (${Math.round((performance.now() - ladeHinweis.start) / 100) / 10} s)`);
+  ladeHinweisZeichnen();
+}
+
+function ladeHinweisListeFertig() {
+  ladeHinweis.listeFertig = true;
+  ladeHinweis.schritt = "Liste fertig";
+  debugLog(`⏱ Liste fertig nach ${Math.round((performance.now() - ladeHinweis.start) / 100) / 10} s (${Math.round(performance.now() / 100) / 10} s nach Seitenstart).`);
+  ladeHinweisZeichnen();
+}
+
+function ladeHinweisEnde() {
+  if (ladeHinweis.timer) { clearInterval(ladeHinweis.timer); ladeHinweis.timer = null; }
+  const box = document.getElementById("lade-hinweis");
+  if (box) box.hidden = true;
+  const foto = ladeHinweisFotoStand();
+  debugLog(`⏱ Laden abgeschlossen nach ${Math.round((performance.now() - ladeHinweis.start) / 100) / 10} s, Vorschaubilder: ${foto.fertig} von ${foto.total}.`);
+}
+
+function ladeHinweisFehler(text) {
+  if (ladeHinweis.timer) { clearInterval(ladeHinweis.timer); ladeHinweis.timer = null; }
+  const box = document.getElementById("lade-hinweis");
+  if (!box) return;
+  document.getElementById("lade-hinweis-titel").textContent = "Laden hat nicht geklappt";
+  document.getElementById("lade-hinweis-text").textContent = "Bitte die Verbindung prüfen und mit „Aktualisieren“ erneut versuchen. Das technische Protokoll zeigt, wo es hängt.";
+  document.getElementById("lade-hinweis-schritt").textContent = text;
+  box.hidden = false;
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  // Protokoll direkt aus dem Ladehinweis öffnen
+  document.getElementById("lade-hinweis-log")?.addEventListener("click", () => {
+    document.querySelector('.tab-btn[data-tab="erfassen"]')?.click();
+    const panel = document.querySelector("details.debug-panel");
+    if (panel) { panel.open = true; panel.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  });
+  // Protokoll in die Zwischenablage kopieren (zum Weitergeben bei Problemen)
+  document.getElementById("debug-copy")?.addEventListener("click", async () => {
+    const text = document.getElementById("debug-log")?.textContent || "";
+    const knopf = document.getElementById("debug-copy");
+    try {
+      await navigator.clipboard.writeText(text);
+      knopf.textContent = "Kopiert ✓";
+    } catch (err) {
+      const bereich = document.createElement("textarea");
+      bereich.value = text; document.body.appendChild(bereich); bereich.select();
+      try { document.execCommand("copy"); knopf.textContent = "Kopiert ✓"; } catch (_) { knopf.textContent = "Kopieren nicht möglich"; }
+      bereich.remove();
+    }
+    setTimeout(() => { knopf.textContent = "Protokoll kopieren"; }, 2500);
+  });
+});
+
 async function loadPersonen(force = false) {
   if (force) {
     syncPruefungSeitCacheLaden = false;
@@ -2725,8 +2833,10 @@ async function loadPersonen(force = false) {
   // Nach einem Safari-Neustart zuerst den dauerhaften Cache laden.
   // Ein älterer Cache ohne syncSeq wird einmalig vollständig aktualisiert,
   // damit der erste Synchronisationsstand sicher gesetzt wird.
+  let ersteLadung = true;
   if (!force) {
     const lokalGeladen = await ladePersonenAusPersistentemCache();
+    ersteLadung = !lokalGeladen;
     if (lokalGeladen && personenCacheSyncInitialisiert) {
       try {
         await synchronisierePersonenDelta();
@@ -2748,6 +2858,8 @@ async function loadPersonen(force = false) {
     egressMessung.personenSupabaseAbrufe++;
     speichereEgressMessung();
     aktualisiereEgressMessung();
+    ladeHinweisStart(ersteLadung && !force);
+    ladeHinweisSchritt("Personen werden abgerufen");
     const { data, error } = await sb
       .from("personen")
       .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
@@ -2756,6 +2868,7 @@ async function loadPersonen(force = false) {
     if (error) throw error;
 
     personenCache = data || [];
+    ladeHinweisSchritt(`${personenCache.length} Personen empfangen, Beziehungen werden abgerufen`);
     try {
       const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
         sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
@@ -2816,6 +2929,7 @@ async function loadPersonen(force = false) {
       // Den vollständigen, funktional nötigen Personen-/Auswahlcache dauerhaft sichern.
       familienKinderAuswahlCache = familienKinder || [];
       beziehungenAuswahlCache = beziehungen || [];
+      ladeHinweisSchritt("Änderungsstand wird gelesen und auf diesem Gerät gespeichert");
       let syncSeqNachLaden = 0;
       try { syncSeqNachLaden = await holeSyncMaxSeq(); } catch (syncErr) { debugLog(`⚠️ Sync-Stand konnte nicht gelesen werden: ${syncErr.message || syncErr}`); }
       personenCacheSyncSeq = syncSeqNachLaden;
@@ -2838,8 +2952,10 @@ async function loadPersonen(force = false) {
     aktualisierePersonenCacheStatus();
     debugLog(`✅ Personen-Cache geladen: ${personenCache.length} Personen.`);
     if (banner) banner.hidden = true;
+    ladeHinweisSchritt("Liste wird aufgebaut");
     await renderPersonenList(personenCache);
     if (empty) empty.hidden = personenCache.length > 0;
+    ladeHinweisListeFertig();
     // Falls der Nutzer schon während des Ladevorgangs in das Suchfeld
     // geschrieben hat, die aktuelle Eingabe nach dem Cache-Aufbau sofort
     // anwenden. Dadurch geht kein erster Buchstabe verloren.
@@ -2855,6 +2971,7 @@ async function loadPersonen(force = false) {
     console.error(err);
     if (banner) { banner.hidden = false; banner.textContent = `Fehler beim Laden: ${err.message || err}`; }
     debugLog(`❌ Personen laden: ${err.message || err}`);
+    ladeHinweisFehler(String(err.message || err));
   } finally {
     personenLadePromise = null;
   }
@@ -7018,6 +7135,7 @@ async function teileOderLadeDateiHerunter(file) {
 }
 
 async function erstelleICloudBackup() {
+  if (!darfLoeschen("ein vollständiges Backup erstellen")) return;
   const msg = document.getElementById("backup-message");
   msg.textContent = "Backup wird vorbereitet …";
   try {
@@ -7173,6 +7291,7 @@ if (backupInput) backupInput.addEventListener("change", async (event) => {
 });
 
 document.getElementById("export-json-btn").addEventListener("click", async () => {
+  if (!darfLoeschen("Daten als JSON exportieren")) return;
   const msg = document.getElementById("export-message");
   msg.textContent = "Erstelle JSON …";
   const data = await fetchAllExportData();
@@ -7181,6 +7300,7 @@ document.getElementById("export-json-btn").addEventListener("click", async () =>
 });
 
 document.getElementById("export-gedcom-btn").addEventListener("click", async () => {
+  if (!darfLoeschen("Daten als GEDCOM exportieren")) return;
   const msg = document.getElementById("export-message");
   msg.textContent = "Erstelle GEDCOM …";
   const { personen, familien, familien_kinder } = await fetchAllExportData();
@@ -9228,7 +9348,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=344");
+      treeModul3D = await import("./tree3d.js?v=346");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

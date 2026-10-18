@@ -1757,3 +1757,12 @@ body:not(.rolle-eigentuemer) [data-rolle="eigentuemer"]{display:none !important}
 .zugang-overlay .btn--ghost{background:#f8faf7;border:1px solid #cbd8cf;color:#174f3b}
 .konto-box{margin:.4rem 0 1rem;padding:.2rem .9rem .9rem;border:1px solid #d8e0d8;border-radius:14px;background:#fff}
 .konto-box>summary{padding:.65rem 0;font-weight:600;color:#24583f;cursor:pointer}
+body.rolle-eigentuemer [data-nicht-rolle="eigentuemer"]{display:none !important}
+
+/* Familienspuren v346 – Ladehinweis */
+.lade-hinweis{margin:.6rem 0 .8rem;padding:.8rem .95rem;border:1px solid #cbdacb;border-radius:14px;background:#edf3eb;color:#263d30}
+.lade-hinweis[hidden]{display:none}
+.lade-hinweis strong{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1rem;color:#174f3b}
+.lade-hinweis p{margin:.35rem 0 0;font-size:.88rem;line-height:1.45}
+.lade-hinweis .lade-hinweis__schritt{font-weight:600;color:#24583f}
+.lade-hinweis .btn{margin-top:.55rem;min-height:40px;padding:.3rem .8rem;font-size:.84rem}
