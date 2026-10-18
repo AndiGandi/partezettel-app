@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 350
+// Partezettel Archiv – Version 351
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -640,7 +640,13 @@ function setzeRollenAnzeige() {
   for (const r of Object.keys(ROLLEN_NAMEN)) document.body.classList.toggle(`rolle-${r}`, zugang.rolle === r);
   const zeile = document.getElementById("app-user");
   if (zeile) {
-    zeile.textContent = zugang.kompatibel || !zugang.name ? "⚙ Konto" : `⚙ ${zugang.name} · ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle}`;
+    zeile.replaceChildren(document.createTextNode(zugang.kompatibel || !zugang.name ? "⚙ Konto" : `⚙ ${zugang.name}`));
+    if (!zugang.kompatibel && zugang.name) {
+      const rolle = document.createElement("span");
+      rolle.className = "app-user__rolle";      // auf dem Handy ausgeblendet, damit der Knopf nicht umbricht
+      rolle.textContent = ` · ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle}`;
+      zeile.appendChild(rolle);
+    }
     zeile.hidden = false;
   }
 }
@@ -1011,6 +1017,33 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("verlauf-benutzer")?.addEventListener("change", () => { void ladeVerlaufTab(false); });
 });
 
+// ---------- v351: Wiedereinstieg im Bestand ----------
+// Nach Abmelden und neuem Anmelden sowie nach längerer Pause (App im Hintergrund) startet die App im Bestand.
+const PAUSE_BIS_BESTAND_MS = 30 * 60 * 1000;
+let hintergrundSeit = 0;
+
+function geheZuBestand({ ruhig = false } = {}) {
+  // ruhig: eine offene Bearbeitung (nicht gespeicherte Eingaben) bleibt unangetastet
+  if (ruhig && !document.getElementById("detail-overlay")?.hidden) return;
+  for (const id of ["person-view-overlay", "detail-overlay", "konto-overlay"]) {
+    const el = document.getElementById(id);
+    if (el && !el.hidden) el.hidden = true;
+  }
+  document.body.classList.remove("person-view-open");
+  const aktiv = document.querySelector(".tab-btn.is-active")?.dataset.tab;
+  if (aktiv !== "liste") document.querySelector('.tab-btn[data-tab="liste"]')?.click();
+  else window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { hintergrundSeit = Date.now(); return; }
+  const warPause = hintergrundSeit && Date.now() - hintergrundSeit > PAUSE_BIS_BESTAND_MS;
+  hintergrundSeit = 0;
+  if (warPause && !document.getElementById("app-shell")?.hidden && document.getElementById("zugang-overlay")?.hidden) {
+    geheZuBestand({ ruhig: true });
+  }
+});
+
 // ---------- Anmeldung ----------
 async function ensureSession() {
   if (!sb) throw new Error("Supabase ist nicht verfügbar. Bitte config.js prüfen.");
@@ -1036,6 +1069,7 @@ async function zeigeAppWennAngemeldet() {
     const { data: { session }, error } = await sb.auth.getSession();
     if (error) throw error;
     if (session) {
+      const warSchonAngemeldet = zugangGeprueftFuer === session.user.id;
       const frei = await pruefeZugangUndHinweise(session);
       if (!frei) {
         // Hinweisseite oder „Kein Zugriff“ ist offen – oder man hat sich gerade abgemeldet.
@@ -1047,6 +1081,7 @@ async function zeigeAppWennAngemeldet() {
       loginScreen.hidden = true;
       appShell.hidden = false;
       debugLog("Angemeldet.");
+      if (!warSchonAngemeldet) geheZuBestand();   // v351: nach dem Anmelden immer im Bestand starten
       // v191: Gruppenfotos gleich beim App-Start laden, damit auch die Übersicht
       // und Personendetails nicht mit leeren Platzhaltern erscheinen.
       void ladeGruppenfotoListe().catch(err => debugLog(`⚠️ Gruppenfotos beim Start: ${err.message || err}`));
@@ -7663,19 +7698,19 @@ function pdfDatum(wert) {
   return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
 }
 
+// Geboren und gestorben stehen im PDF in zwei festen Spalten (lebende Personen: nur die erste Spalte).
 function pdfLebensdaten(p) {
   const geboren = pdfDatum(p.geburtsdatum) || (p.geburtsjahr ? String(p.geburtsjahr) : "");
   const gestorben = pdfDatum(p.sterbedatum) || (p.sterbejahr ? String(p.sterbejahr) : "");
-  const teile = [];
-  if (geboren) teile.push(`* ${geboren}`);
-  if (gestorben) teile.push(`\u2020 ${gestorben}`);
-  return teile.join("    ");
+  return { geboren: geboren ? `* ${geboren}` : "", gestorben: gestorben ? `\u2020 ${gestorben}` : "" };
 }
 
 function baueFamilienPdf(jsPDF, daten, logo) {
   const F = PDF_FARBEN;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const B = 210, H = 297, R = 16, INNEN = B - 2 * R, UNTEN = H - 20;
+  const X_GEB = B - R - 60;    // linke Datumsspalte: geboren
+  const X_TOT = B - R - 30;    // rechte Datumsspalte: gestorben
   const personen = [...daten.personen].sort(PersonSuche.sort);
   const byId = new Map(daten.personen.map((p) => [p.id, p]));
   const familien = daten.familien || [];
@@ -7726,7 +7761,10 @@ function baueFamilienPdf(jsPDF, daten, logo) {
     setzeFuell(F.wald); doc.roundedRect(R, y, 8.5, 8.5, 1.6, 1.6, "F");
     doc.setFont("helvetica", "bold"); doc.setFontSize(13); setzeText([255, 255, 255]);
     doc.text(b, R + 4.25, y + 6.3, { align: "center" });
-    setzeLinie(F.linie, 0.4); doc.line(R + 11.5, y + 4.25, B - R, y + 4.25);
+    setzeLinie(F.linie, 0.4); doc.line(R + 11.5, y + 4.25, X_GEB - 3, y + 4.25);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); setzeText(F.hell);
+    doc.text("geboren", X_GEB, y + 5.6);
+    doc.text("gestorben", X_TOT, y + 5.6);
     y += 12.5;
   }
 
@@ -7744,17 +7782,16 @@ function baueFamilienPdf(jsPDF, daten, logo) {
     platz(hoehe);
     // Name (bei Platzmangel gekürzt), Mädchenname in Grau
     doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); setzeText(F.text);
-    const maxName = INNEN - 6 - (lebens ? 56 : 0);
+    const maxName = INNEN - 6 - 62;
     if (doc.getTextWidth(haupt) > maxName) haupt = doc.splitTextToSize(haupt, maxName)[0].replace(/\s*\S?$/, "") + " …";
     doc.text(haupt, R + 3, y + 4.6);
     if (ledig) {
       doc.setFont("helvetica", "normal"); setzeText(F.grau);
       doc.text(`${haupt ? "   " : ""}geb. ${ledig}`, R + 3 + (haupt ? doc.getTextWidth(haupt) : 0), y + 4.6);
     }
-    if (lebens) {
-      doc.setFont("helvetica", "normal"); doc.setFontSize(9); setzeText(F.gold);
-      doc.text(lebens, B - R, y + 4.6, { align: "right" });
-    }
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); setzeText(F.gold);
+    if (lebens.geboren) doc.text(lebens.geboren, X_GEB, y + 4.6);
+    if (lebens.gestorben) doc.text(lebens.gestorben, X_TOT, y + 4.6);
     if (notizZeilen.length) {
       doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); setzeText(F.grau);
       doc.text(notizZeilen, R + 3, y + 9.2);
@@ -9752,7 +9789,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=350");
+      treeModul3D = await import("./tree3d.js?v=351");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

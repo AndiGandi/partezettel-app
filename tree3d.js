@@ -53,8 +53,8 @@ function erzeugeAnsicht(container) {
   hinweis.className = "tree3d__hint";
   const grob = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
   hinweis.textContent = grob
-    ? "Ziehen: drehen · Zwei Finger: zoomen, drehen, schieben · Antippen: Person wählen"
-    : "Ziehen: drehen · Mausrad: zoomen · Umschalt + Ziehen: schieben · Klicken: Person wählen";
+    ? "Ziehen: drehen · Zwei Finger: zoomen, drehen, schieben · Antippen: Person wählen · Doppeltippen: Personendaten öffnen"
+    : "Ziehen: drehen · Mausrad: zoomen · Umschalt + Ziehen: schieben · Klicken: Person wählen · Doppelklick: Personendaten öffnen";
   const werkzeuge = document.createElement("div");
   werkzeuge.className = "tree3d__tools";
   const knopfAuto = document.createElement("button");
@@ -70,13 +70,25 @@ function erzeugeAnsicht(container) {
   knopfVollbild.className = "tree3d__tool";
   knopfVollbild.textContent = "⤢ Vollbild";
   knopfVollbild.title = "Vollbild ein/aus";
-  werkzeuge.append(knopfAuto, knopfReset, knopfVollbild);
+  const knopfHilfe = document.createElement("button");
+  knopfHilfe.type = "button";
+  knopfHilfe.className = "tree3d__tool";
+  knopfHilfe.textContent = "?";
+  knopfHilfe.title = "Bedienung anzeigen";
+  knopfHilfe.setAttribute("aria-label", "Bedienung anzeigen");
+  werkzeuge.append(knopfAuto, knopfReset, knopfVollbild, knopfHilfe);
   hud.append(hinweis, werkzeuge);
   const leiste = document.createElement("div");
   leiste.className = "tree3d__bar";
   leiste.hidden = true;
   container.append(hud, leiste);
   let hinweisTimer = setTimeout(() => hinweis.classList.add("is-weg"), 9000);
+  // „?“ zeigt die Bedienhinweise jederzeit wieder an
+  knopfHilfe.addEventListener("click", () => {
+    hinweis.classList.remove("is-weg");
+    clearTimeout(hinweisTimer);
+    hinweisTimer = setTimeout(() => hinweis.classList.add("is-weg"), 14000);
+  });
 
   // ---------- Zustand ----------
   const z = { ziel: new THREE.Vector3(0, 5, 0), radius: 18, phi: 1.2, theta: 0.6 };
@@ -292,19 +304,36 @@ function erzeugeAnsicht(container) {
     if (knopf.dataset.aktion === "mitte" && aktuelleRueckrufe.alsMitte) aktuelleRueckrufe.alsMitte(id);
     if (knopf.dataset.aktion === "oeffnen" && aktuelleRueckrufe.oeffnen) aktuelleRueckrufe.oeffnen(id);
   });
+  // Kugeln und sichtbare Namensschilder sind anklickbar
+  const trefferZiele = () => [...baum.kugeln, ...baum.labels.filter((l) => l.sprite.visible).map((l) => l.sprite)];
+  let letzteOeffnung = 0;
+  function oeffnePerson(id) {
+    letzteOeffnung = performance.now();
+    if (aktuelleRueckrufe.oeffnen) aktuelleRueckrufe.oeffnen(id);
+  }
+  // Doppelklick mit der Maus (Geschwindigkeit nach Systemeinstellung): Personendaten öffnen
+  canvas.addEventListener("dblclick", (e) => {
+    if (!baum || performance.now() - letzteOeffnung < 700) return;
+    const r = canvas.getBoundingClientRect();
+    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(ndc, kamera);
+    const treffer = raycaster.intersectObjects(trefferZiele(), false);
+    const daten = treffer.length ? treffer[0].object.userData : null;
+    if (daten && daten.id) oeffnePerson(daten.id);
+  });
   function tippen(x, y) {
     if (!baum) return;
     const r = canvas.getBoundingClientRect();
     ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(ndc, kamera);
-    const treffer = raycaster.intersectObjects(baum.kugeln, false);
+    const treffer = raycaster.intersectObjects(trefferZiele(), false);
     if (!treffer.length) { waehle(null); return; }
     const daten = treffer[0].object.userData;
     if (!daten.id) { waehle(null); return; }
     const jetzt = performance.now();
     if (letzterTipp.id === daten.id && jetzt - letzterTipp.zeit < 450) {
       letzterTipp = { id: null, zeit: 0 };
-      if (aktuelleRueckrufe.oeffnen) aktuelleRueckrufe.oeffnen(daten.id);
+      oeffnePerson(daten.id);
       return;
     }
     letzterTipp = { id: daten.id, zeit: jetzt };
@@ -465,6 +494,7 @@ function erzeugeAnsicht(container) {
       const faktor = wurzel ? 1.15 : Math.max(0.62, 1 - k.gen * 0.075);
       sprite.scale.multiplyScalar(faktor);
       sprite.position.set(k.pos.x, k.pos.y + r + sprite.scale.y * 0.55 + 0.08, k.pos.z);
+      sprite.userData = kugel.userData;   // Klick auf den Namen wählt die Person wie ein Klick auf die Kugel
       gruppe.add(sprite);
       labels.push({ sprite, gen: k.gen, id: k.id });
     }
@@ -507,8 +537,16 @@ function erzeugeAnsicht(container) {
         positionen[kugel.userData.id] = { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height, vorne: p.z < 1 };
       }
     }
+    const labelPositionen = {};
+    if (baum) {
+      for (const l of baum.labels) {
+        const p = l.sprite.position.clone().project(kamera);
+        labelPositionen[l.id] = { x: r.left + ((p.x + 1) / 2) * r.width, y: r.top + ((1 - p.y) / 2) * r.height, sichtbar: l.sprite.visible };
+      }
+    }
     return {
       positionen,
+      labelPositionen,
       kugeln: baum ? baum.kugeln.length : 0,
       beschriftungen: baum ? baum.labels.length : 0,
       sichtbareBeschriftungen: baum ? baum.labels.filter((l) => l.sprite.visible).length : 0,

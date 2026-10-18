@@ -1781,3 +1781,13 @@ button.app-header__user:hover{background:#e2ede2}
 .verlauf-titel{margin-top:.1rem;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-weight:600;color:#263d30}
 .verlauf-detail{margin-top:.15rem;font-size:.84rem;color:#55645a;overflow-wrap:anywhere}
 #pv-verlauf>summary{padding:.5rem 0;font-weight:600;color:#24583f;cursor:pointer}
+
+/* Familienspuren v351 – Home-Bildschirm-App: Abstand zur Statusleiste (Uhr, Akku) */
+:root{--sat:env(safe-area-inset-top,0px)}
+body::before{content:"";position:fixed;top:0;left:0;right:0;height:var(--sat);background:#174f3b;z-index:5000;pointer-events:none}
+body{padding-top:var(--sat);padding-left:env(safe-area-inset-left,0px);padding-right:env(safe-area-inset-right,0px);padding-bottom:calc(3rem + env(safe-area-inset-bottom,0px))}
+.tabs{top:var(--sat)}
+.person-view-overlay,.detail-overlay,.foto-personen-modal,.is-vollbild{top:var(--sat)}
+.login-screen{min-height:calc(100dvh - var(--sat))}
+button.app-header__user{white-space:nowrap;max-width:11rem;overflow:hidden;text-overflow:ellipsis;border-radius:14px}
+@media (max-width:520px){.app-user__rolle{display:none}button.app-header__user{max-width:7.5rem}}
