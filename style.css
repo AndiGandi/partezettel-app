@@ -1797,3 +1797,7 @@ h4.tree-cousins__group.tree-cousins__group--paar{margin-bottom:.1rem !important;
 h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .tree-cousins__doppel{margin:.2rem 0 .45rem;padding:.4rem .65rem;border-radius:10px;background:#f6f1e6;color:#6b5636;font-size:.8rem;line-height:1.4}
 .tree-cousins__tag--doppel{color:#6b5636;border-color:#dccaa3;background:#f8f1e1}
+
+/* Familienspuren v353 – Cousins nach Vater- und Mutterseite */
+.tree-cousins__seiten{margin:.15rem 0 .5rem;color:#263d30}
+.tree-cousins__hint-klein{color:#80897f;font-size:.78rem}

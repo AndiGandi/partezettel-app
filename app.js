@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 352
+// Partezettel Archiv – Version 353
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7947,6 +7947,38 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
   </button>`;
 }
 
+// v353: Platzhalter für unbekannte Personen („Anonymous“, „Anonyma“ ohne Nachnamen) erscheinen nicht im Stammbaum,
+// in der Stammbaum-Suche und bei den Cousins. Im Bestand bleiben sie unverändert erhalten.
+const TREE_PLATZHALTER_VORNAMEN = new Set(["anonymous", "anonyma", "anonymus"]);
+function treeIstPlatzhalter(p) {
+  if (!p) return false;
+  const vor = String(p.vorname || "").trim().toLowerCase();
+  return TREE_PLATZHALTER_VORNAMEN.has(vor) && !String(p.nachname || "").trim() && !String(p.Ledigenname || p.ledigenname || "").trim();
+}
+
+// Entfernt Platzhalter samt ihrer Verknüpfungen: Eine Familie behält ihre echten Partner und Kinder;
+// Familien ohne Kinder und mit weniger als zwei echten Partnern entfallen.
+function treeOhnePlatzhalter(personen, familien, kinder) {
+  const weg = new Set((personen || []).filter(treeIstPlatzhalter).map((p) => p.id));
+  if (!weg.size) return { personen: personen || [], familien: familien || [], kinder: kinder || [] };
+  const kinderOk = (kinder || []).filter((k) => !weg.has(k.kind_id));
+  const mitKindern = new Set(kinderOk.map((k) => k.familie_id));
+  const familienOk = [];
+  for (const f of familien || []) {
+    const a = weg.has(f.partner_a_id) ? null : f.partner_a_id;
+    const b = weg.has(f.partner_b_id) ? null : f.partner_b_id;
+    const echte = [a, b].filter(Boolean).length;
+    if (echte < 2 && !mitKindern.has(f.id)) continue;
+    familienOk.push({ ...f, partner_a_id: a, partner_b_id: b });
+  }
+  const familienIds = new Set(familienOk.map((f) => f.id));
+  return {
+    personen: personen.filter((p) => !weg.has(p.id)),
+    familien: familienOk,
+    kinder: kinderOk.filter((k) => familienIds.has(k.familie_id))
+  };
+}
+
 function treePerson(id) {
   return treeData.personen.find((p) => p.id === id) || null;
 }
@@ -7989,9 +8021,10 @@ async function loadStammbaumData(optionen = {}) {
   if (familienError) throw familienError;
   if (kinderError) throw kinderError;
 
-  treeData.personen = personen || [];
-  treeData.familien = familien || [];
-  treeData.kinder = kinder || [];
+  const bereinigt = treeOhnePlatzhalter(personen || [], familien || [], kinder || []);
+  treeData.personen = bereinigt.personen;
+  treeData.familien = bereinigt.familien;
+  treeData.kinder = bereinigt.kinder;
   treeData.photos = new Map();
   treeDataGeladenAm = Date.now();
   // Suchvorschläge stehen ab hier bereit – noch bevor die Schlüsselfotos geladen sind.
@@ -9124,7 +9157,19 @@ function treeCousinsOf(personId) {
   }
   zusammen.sort((x, y) => sortierer(x.mitglieder[0].onkelTante, y.mitglieder[0].onkelTante));
   ohneKinder.sort(sortierer);
-  return { parents: parentIds.size, gruppen: zusammen, ohneKinder, personen: [...einzigartig.values()], doppelIds };
+  // Seiten: Kinder der Geschwister des Vaters = väterlicherseits, der Mutter = mütterlicherseits.
+  // Doppelcousins zählen auf beiden Seiten.
+  const seiten = { vater: new Map(), mutter: new Map(), unbekannt: new Map() };
+  for (const z of zusammen) {
+    for (const mg of z.mitglieder) {
+      for (const pid of mg.eltern) {
+        const pg = treePersonGender(treePerson(pid));
+        const seite = pg === "m" ? seiten.vater : pg === "w" ? seiten.mutter : seiten.unbekannt;
+        mg.kinder.forEach((k) => seite.set(k.id, k));
+      }
+    }
+  }
+  return { parents: parentIds.size, gruppen: zusammen, ohneKinder, personen: [...einzigartig.values()], doppelIds, seiten };
 }
 
 function treeCousinsRender(personId) {
@@ -9134,7 +9179,7 @@ function treeCousinsRender(personId) {
     result.innerHTML = "Bitte zuerst eine Ausgangsperson auswählen.";
     return;
   }
-  const { parents, gruppen, ohneKinder, personen, doppelIds } = treeCousinsOf(personId);
+  const { parents, gruppen, ohneKinder, personen, doppelIds, seiten } = treeCousinsOf(personId);
   const titel = `<strong>Cousins und Cousinen von ${escTree(treePersonLabel(personId))}</strong>`;
   if (!parents) {
     result.innerHTML = `${titel}<p class="tree-cousins__hint">Für diese Person sind keine Eltern erfasst, daher können keine Cousins oder Cousinen ermittelt werden.</p>`;
@@ -9178,7 +9223,18 @@ function treeCousinsRender(personId) {
     }).join("");
     return `${kopfZeilen}${doppelHinweis}<ul class="tree-cousins__list">${zeilen}</ul>`;
   };
-  result.innerHTML = `${titel}<p class="tree-cousins__summary">${personen.length} insgesamt: ${summe}</p>${gruppen.map(gruppeHtml).join("")}${ohneKinderHinweis}`;
+  const seiteText = (name, karte) => {
+    if (!karte.size) return "";
+    const liste = [...karte.values()];
+    const sm = liste.filter((p) => treePersonGender(p) === "m").length;
+    const sw = liste.filter((p) => treePersonGender(p) === "w").length;
+    const su = liste.length - sm - sw;
+    const teile = [sm ? `${sm} ${sm === 1 ? "Cousin" : "Cousins"}` : "", sw ? `${sw} ${sw === 1 ? "Cousine" : "Cousinen"}` : "", su ? `${su} ohne Geschlechtsangabe` : ""].filter(Boolean).join(", ");
+    return `<strong>${name}:</strong> ${liste.length} (${teile})`;
+  };
+  const seitenZeile = [seiteText("Väterlicherseits", seiten.vater), seiteText("Mütterlicherseits", seiten.mutter), seiteText("Seite unbekannt", seiten.unbekannt)].filter(Boolean).join(" &nbsp;·&nbsp; ")
+    + (doppelIds.size ? ` <span class="tree-cousins__hint-klein">(Doppelcousins zählen auf beiden Seiten)</span>` : "");
+  result.innerHTML = `${titel}<p class="tree-cousins__summary">${personen.length} insgesamt: ${summe}</p><p class="tree-cousins__summary tree-cousins__seiten">${seitenZeile}</p>${gruppen.map(gruppeHtml).join("")}${ohneKinderHinweis}`;
 }
 
 function treeCousinsRefreshIfOpen(rootId) {
@@ -9635,9 +9691,20 @@ function resolveTreePersonSearch(rawValue) {
 let treePersonSearchIndexSource = null;
 let treePersonSearchIndex = [];
 
+let treeSuchFallbackQuelle = null;
+let treeSuchFallbackLaenge = -1;
+let treeSuchFallback = [];
 function treeSuchPersonen() {
   if (treeData.personen && treeData.personen.length) return treeData.personen;
-  return (typeof personenCacheGeladen !== "undefined" && personenCacheGeladen && Array.isArray(personenCache)) ? personenCache : [];
+  if (typeof personenCacheGeladen !== "undefined" && personenCacheGeladen && Array.isArray(personenCache)) {
+    if (treeSuchFallbackQuelle !== personenCache || treeSuchFallbackLaenge !== personenCache.length) {
+      treeSuchFallbackQuelle = personenCache;
+      treeSuchFallbackLaenge = personenCache.length;
+      treeSuchFallback = personenCache.filter((p) => !treeIstPlatzhalter(p));
+    }
+    return treeSuchFallback;
+  }
+  return [];
 }
 
 function getTreePersonSearchIndex() {
@@ -9830,7 +9897,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=352");
+      treeModul3D = await import("./tree3d.js?v=353");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
