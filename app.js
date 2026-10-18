@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 349
+// Partezettel Archiv – Version 350
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7617,57 +7617,237 @@ document.getElementById("export-gedcom-btn").addEventListener("click", async () 
   msg.textContent = "GEDCOM-Datei heruntergeladen ✓";
 });
 
+// ---------- v350: PDF-Export im Familienspuren-Design ----------
+// Aufbau: Kopf mit Logo und „Familienspuren“ wie auf der Startseite, Personen nach Buchstaben,
+// danach Familien mit Kindern, Fußzeile mit Vertraulichkeitshinweis und Seitenzahl.
+const PDF_FARBEN = {
+  wald: [23, 79, 59], waldTief: [16, 61, 46], gold: [139, 112, 71], creme: [248, 246, 239],
+  salbei: [237, 241, 233], linie: [216, 223, 212], text: [43, 42, 40], grau: [92, 87, 78], hell: [140, 136, 126]
+};
+
+async function holePdfDaten() {
+  const [personen, familien, familien_kinder] = await Promise.all([
+    fetchAllTableRows("personen", "nachname"),
+    fetchAllTableRows("familien", "id"),
+    fetchAllTableRows("familien_kinder", "id")
+  ]);
+  return { personen, familien, familien_kinder };
+}
+
+// Das Logo der Startseite als PNG (aus dem SVG der Kopfzeile), damit es im PDF identisch aussieht.
+async function pdfLogoPng() {
+  try {
+    const quelle = document.querySelector(".app-header__logo svg");
+    if (!quelle) return null;
+    let svg = new XMLSerializer().serializeToString(quelle).replace(/currentColor/g, "#174f3b");
+    if (!/xmlns=/.test(svg)) svg = svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
+    svg = svg.replace("<svg", '<svg width="640" height="520"');
+    const bild = new Image();
+    await new Promise((ok, fehler) => {
+      bild.onload = ok;
+      bild.onerror = () => fehler(new Error("Logo konnte nicht gezeichnet werden"));
+      bild.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    });
+    const leinwand = document.createElement("canvas");
+    leinwand.width = 640; leinwand.height = 520;
+    leinwand.getContext("2d").drawImage(bild, 0, 0, 640, 520);
+    return leinwand.toDataURL("image/png");
+  } catch (err) {
+    debugLog(`⚠️ PDF-Logo: ${err.message || err} (PDF wird ohne Logo erstellt)`);
+    return null;
+  }
+}
+
+function pdfDatum(wert) {
+  const m = String(wert || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+}
+
+function pdfLebensdaten(p) {
+  const geboren = pdfDatum(p.geburtsdatum) || (p.geburtsjahr ? String(p.geburtsjahr) : "");
+  const gestorben = pdfDatum(p.sterbedatum) || (p.sterbejahr ? String(p.sterbejahr) : "");
+  const teile = [];
+  if (geboren) teile.push(`* ${geboren}`);
+  if (gestorben) teile.push(`\u2020 ${gestorben}`);
+  return teile.join("    ");
+}
+
+function baueFamilienPdf(jsPDF, daten, logo) {
+  const F = PDF_FARBEN;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const B = 210, H = 297, R = 16, INNEN = B - 2 * R, UNTEN = H - 20;
+  const personen = [...daten.personen].sort(PersonSuche.sort);
+  const byId = new Map(daten.personen.map((p) => [p.id, p]));
+  const familien = daten.familien || [];
+  const kinder = daten.familien_kinder || [];
+  let y = 0;
+
+  const setzeText = (c) => doc.setTextColor(c[0], c[1], c[2]);
+  const setzeFuell = (c) => doc.setFillColor(c[0], c[1], c[2]);
+  const setzeLinie = (c, w) => { doc.setDrawColor(c[0], c[1], c[2]); doc.setLineWidth(w); };
+
+  function kopfGross() {
+    setzeFuell(F.creme); doc.rect(0, 0, B, 44, "F");
+    setzeFuell(F.wald); doc.rect(0, 0, B, 2.2, "F");
+    setzeLinie(F.linie, 0.3); doc.line(0, 44, B, 44);
+    if (logo) doc.addImage(logo, "PNG", R, 11, 25, 20.3);
+    const tx = logo ? R + 31 : R;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(27); setzeText(F.wald);
+    doc.text("Familienspuren", tx, 25);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10.5); setzeText(F.gold);
+    doc.text("Menschen. Generationen. Geschichten.", tx, 32);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(17); setzeText(F.waldTief);
+    doc.text("Familienübersicht", R, 59);
+    const datum = new Date().toLocaleDateString("de-AT", { day: "numeric", month: "long", year: "numeric" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9.5); setzeText(F.grau);
+    doc.text(`Stand: ${datum}   ·   ${personen.length} Personen   ·   ${familien.length} Familien`, R, 66);
+    setzeLinie(F.gold, 0.8); doc.line(R, 70, R + 22, 70);
+    y = 80;
+  }
+
+  function kopfKlein() {
+    setzeFuell(F.creme); doc.rect(0, 0, B, 15, "F");
+    setzeFuell(F.wald); doc.rect(0, 0, B, 1.4, "F");
+    setzeLinie(F.linie, 0.3); doc.line(0, 15, B, 15);
+    if (logo) doc.addImage(logo, "PNG", R, 3.6, 9.4, 7.6);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11); setzeText(F.wald);
+    doc.text("Familienspuren", logo ? R + 12.5 : R, 10);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); setzeText(F.gold);
+    doc.text("Familienübersicht", B - R, 10, { align: "right" });
+    y = 24;
+  }
+
+  function neueSeite() { doc.addPage(); kopfKlein(); }
+  function platz(hoehe) { if (y + hoehe > UNTEN) neueSeite(); }
+
+  function buchstabe(b) {
+    platz(29);
+    if (y > 30) y += 3;
+    setzeFuell(F.wald); doc.roundedRect(R, y, 8.5, 8.5, 1.6, 1.6, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(13); setzeText([255, 255, 255]);
+    doc.text(b, R + 4.25, y + 6.3, { align: "center" });
+    setzeLinie(F.linie, 0.4); doc.line(R + 11.5, y + 4.25, B - R, y + 4.25);
+    y += 12.5;
+  }
+
+  function person(p) {
+    const vorname = String(p.vorname || "").trim();
+    const nachname = String(p.nachname || "").trim();
+    const ledig = String(p.Ledigenname || p.ledigenname || p.geburtsname || "").trim();
+    let haupt = [vorname, nachname].filter(Boolean).join(" ") || (ledig ? "" : "Unbekannte Person");
+    const lebens = pdfLebensdaten(p);
+    const notiz = String(p.Notiz || "").replace(/\s+/g, " ").trim();
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+    let notizZeilen = notiz ? doc.splitTextToSize(notiz, INNEN - 6) : [];
+    if (notizZeilen.length > 3) { notizZeilen = notizZeilen.slice(0, 3); notizZeilen[2] = notizZeilen[2].replace(/\s*\S{0,3}$/, "") + " …"; }
+    const hoehe = 7.2 + notizZeilen.length * 3.9 + 2;
+    platz(hoehe);
+    // Name (bei Platzmangel gekürzt), Mädchenname in Grau
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); setzeText(F.text);
+    const maxName = INNEN - 6 - (lebens ? 56 : 0);
+    if (doc.getTextWidth(haupt) > maxName) haupt = doc.splitTextToSize(haupt, maxName)[0].replace(/\s*\S?$/, "") + " …";
+    doc.text(haupt, R + 3, y + 4.6);
+    if (ledig) {
+      doc.setFont("helvetica", "normal"); setzeText(F.grau);
+      doc.text(`${haupt ? "   " : ""}geb. ${ledig}`, R + 3 + (haupt ? doc.getTextWidth(haupt) : 0), y + 4.6);
+    }
+    if (lebens) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); setzeText(F.gold);
+      doc.text(lebens, B - R, y + 4.6, { align: "right" });
+    }
+    if (notizZeilen.length) {
+      doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); setzeText(F.grau);
+      doc.text(notizZeilen, R + 3, y + 9.2);
+    }
+    y += hoehe;
+    setzeLinie([232, 228, 218], 0.15); doc.line(R, y - 1.1, B - R, y - 1.1);
+  }
+
+  function abschnitt(titel) {
+    platz(34);
+    setzeFuell(F.salbei); doc.roundedRect(R, y, INNEN, 10.5, 2, 2, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12.5); setzeText(F.waldTief);
+    doc.text(titel, R + 4, y + 7.1);
+    y += 16;
+  }
+
+  function name(id) {
+    const p = byId.get(id);
+    return p ? PersonSuche.name(p) : "(unbekannte Person)";
+  }
+
+  function familie(f) {
+    const partner = [f.partner_a_id, f.partner_b_id].filter(Boolean).map(name).join("  +  ") || "Familie";
+    const typ = String(f.familientyp || "Partnerschaft");
+    const kids = kinder.filter((k) => k.familie_id === f.id).map((k) =>
+      `${name(k.kind_id)}${k.beziehungstyp && k.beziehungstyp !== "biologisch" ? ` (${k.beziehungstyp})` : ""}`);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    const partnerZeilen = doc.splitTextToSize(partner, INNEN - 34);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    const kinderZeilen = kids.length ? doc.splitTextToSize(kids.join("  ·  "), INNEN - 22) : [];
+    const hoehe = 6 + (partnerZeilen.length - 1) * 4.6 + (kinderZeilen.length ? 1.2 + kinderZeilen.length * 4.2 : 0) + 3.4;
+    platz(hoehe);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10); setzeText(F.text);
+    doc.text(partnerZeilen, R + 3, y + 4.4);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); setzeText(F.gold);
+    doc.text(typ, B - R, y + 4.4, { align: "right" });
+    let zy = y + 4.4 + (partnerZeilen.length - 1) * 4.6;
+    if (kinderZeilen.length) {
+      zy += 5;
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); setzeText(F.grau);
+      doc.text("Kinder", R + 3, zy);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); setzeText(F.text);
+      doc.text(kinderZeilen, R + 19, zy);
+    }
+    y += hoehe;
+    setzeLinie([232, 228, 218], 0.15); doc.line(R, y - 1.1, B - R, y - 1.1);
+  }
+
+  kopfGross();
+  let aktuell = null;
+  for (const p of personen) {
+    const schluessel = String(PersonSuche.sortSchluessel(p) || "").trim();
+    // Ä, Ö, Ü gehören zu A, O, U (wie in der Sortierung)
+    let b = schluessel ? schluessel.charAt(0).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("de") : "…";
+    if (!/\p{L}/u.test(b) && b !== "…") b = "#";
+    if (b !== aktuell) { buchstabe(b); aktuell = b; }
+    person(p);
+  }
+  if (familien.length) {
+    y += 6;
+    abschnitt("Familien und Kinder");
+    const schluesselFam = (f) => PersonSuche.sortSchluessel(byId.get(f.partner_a_id) || byId.get(f.partner_b_id)) || "~";
+    for (const f of [...familien].sort((x, y2) => String(schluesselFam(x)).localeCompare(String(schluesselFam(y2)), "de"))) familie(f);
+  }
+
+  // Fußzeile auf jeder Seite
+  const seiten = doc.getNumberOfPages();
+  for (let i = 1; i <= seiten; i++) {
+    doc.setPage(i);
+    setzeLinie(F.linie, 0.3); doc.line(R, H - 14, B - R, H - 14);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8); setzeText(F.hell);
+    doc.text("Familienspuren  ·  Vertraulich, nur für den Familienkreis", R, H - 9);
+    doc.text(`Seite ${i} von ${seiten}`, B - R, H - 9, { align: "right" });
+  }
+  doc.setProperties({ title: "Familienspuren – Familienübersicht", subject: "Personen und Familien", author: "Familienspuren", creator: "Familienspuren" });
+  return doc;
+}
+
 document.getElementById("export-pdf-btn").addEventListener("click", async () => {
   const msg = document.getElementById("export-message");
   msg.textContent = "Erstelle PDF …";
-  const { personen, familien, familien_kinder } = await fetchAllExportData();
-
-  if (!window.jspdf) {
-    msg.textContent = "PDF-Bibliothek konnte nicht geladen werden.";
-    return;
+  try {
+    if (!window.jspdf) { msg.textContent = "PDF-Bibliothek konnte nicht geladen werden."; return; }
+    const daten = await holePdfDaten();
+    const logo = await pdfLogoPng();
+    const doc = baueFamilienPdf(window.jspdf.jsPDF, daten, logo);
+    const heute = new Date().toISOString().slice(0, 10);
+    doc.save(`Familienspuren_Familienuebersicht_${heute}.pdf`);
+    msg.textContent = `PDF heruntergeladen ✓ (${daten.personen.length} Personen, ${doc.getNumberOfPages()} Seiten)`;
+  } catch (err) {
+    msg.textContent = `PDF konnte nicht erstellt werden: ${err.message || err}`;
+    debugLog(`❌ PDF-Export: ${err.message || err}`);
   }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  let y = 15;
-  const personById = new Map(personen.map((p) => [p.id, p]));
-  const name = (id) => {
-    const p = personById.get(id);
-    return p ? `${p.vorname} ${p.nachname}` : "(unbekannte Person)";
-  };
-  const addLine = (text, size = 10, bold = false) => {
-    if (y > 275) { doc.addPage(); y = 15; }
-    doc.setFontSize(size);
-    doc.setFont(undefined, bold ? "bold" : "normal");
-    const wrapped = doc.splitTextToSize(String(text), 180);
-    doc.text(wrapped, 14, y);
-    y += wrapped.length * 5 + 1;
-  };
-
-  addLine("Partezettel Archiv — Familienübersicht", 16, true);
-  y += 3;
-  for (const p of personen) {
-    addLine(`${p.vorname} ${p.nachname}${p.Ledigenname ? ` geb. ${p.Ledigenname}` : ""}`, 11, true);
-    const sterbeJahrAnzeige = p.sterbedatum
-      ? p.sterbedatum.split("-")[0]
-      : (p.sterbejahr ? String(p.sterbejahr) : "");
-    const jahre = [p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""), sterbeJahrAnzeige]
-      .filter(Boolean)
-      .join(" – ");
-    if (jahre) addLine(jahre);
-    if (p.Notiz) addLine(p.Notiz);
-    y += 2;
-  }
-  if (familien.length) {
-    addLine("Familien", 13, true);
-    for (const f of familien) {
-      const partner = [f.partner_a_id, f.partner_b_id].filter(Boolean).map(name).join(" + ");
-      addLine(`${partner} — ${f.familientyp || "Partnerschaft"}`, 10, true);
-      const kids = familien_kinder.filter((k) => k.familie_id === f.id);
-      for (const k of kids) addLine(`  Kind: ${name(k.kind_id)}${k.beziehungstyp && k.beziehungstyp !== "biologisch" ? ` — ${k.beziehungstyp}` : ""}`);
-    }
-  }
-  doc.save("partezettel-export.pdf");
-  msg.textContent = "PDF heruntergeladen ✓";
 });
 
 // ===================== Stammbaum v31 =====================
@@ -9572,7 +9752,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=349");
+      treeModul3D = await import("./tree3d.js?v=350");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

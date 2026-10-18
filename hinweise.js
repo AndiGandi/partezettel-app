@@ -3,7 +3,7 @@
 // und Version gespeichert. Ändert sich der Text inhaltlich, bitte die Version unten ändern:
 // dann muss jeder Benutzer den neuen Text noch einmal bestätigen.
 window.HINWEIS = {
-  version: "2026-10-18.4",
+  version: "2026-10-18.5",
   titel: "Vertraulichkeit und Hinweise",
   einleitung: "Familienspuren ist ein privates Archiv für die Familiengeschichte: Partezettel, Fotos, Aufnahmen und Erinnerungen. Der Zugang ist auf einen kleinen, persönlich eingeladenen Kreis beschränkt. Bitte nimm dir kurz Zeit für diese Hinweise.",
   abschnitte: [
@@ -35,7 +35,7 @@ window.HINWEIS = {
       titel: "Dein Konto",
       punkte: [
         "Das Konto ist persönlich. Zugangsdaten nicht weitergeben.",
-        "Änderungen werden mit deinem Konto und dem Zeitpunkt protokolliert. Der Eigentümer und die Bearbeiter können sehen, wer etwas angelegt, geändert oder gelöscht hat.",
+        "Änderungen werden mit deinem Konto und dem Zeitpunkt protokolliert. Einsehen kann den Verlauf nur der Eigentümer.",
         "Gehen Gerät oder Passwort verloren, bitte sofort den Eigentümer informieren."
       ]
     },
