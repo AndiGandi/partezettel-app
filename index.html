@@ -5,13 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#2B2A28">
 <title>Familienspuren</title>
-    <!-- Version 343 -->
+    <!-- Version 344 -->
 <link rel="manifest" href="manifest.json">
 
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=343">
+<link rel="stylesheet" href="style.css?v=344">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -21,6 +21,24 @@
 </style>
 </head>
 <body>
+
+<!-- ===================== ZUGANG / HINWEISE ===================== -->
+<div id="zugang-overlay" class="zugang-overlay" hidden>
+  <div class="zugang-karte" role="dialog" aria-modal="true" aria-labelledby="zugang-titel">
+    <h2 id="zugang-titel">Hinweise</h2>
+    <div id="zugang-inhalt" class="zugang-inhalt"></div>
+    <label id="zugang-haken-zeile" class="zugang-haken" hidden>
+      <input type="checkbox" id="zugang-haken">
+      <span id="zugang-haken-text"></span>
+    </label>
+    <p id="zugang-meldung" class="form-message"></p>
+    <div class="zugang-aktionen">
+      <button type="button" id="zugang-weiter" class="btn btn--primary" hidden disabled>Bestätigen und weiter</button>
+      <button type="button" id="zugang-schliessen" class="btn btn--secondary" hidden>Schließen</button>
+      <button type="button" id="zugang-abmelden" class="btn btn--ghost" hidden>Abmelden</button>
+    </div>
+  </div>
+</div>
 
 <div id="login-screen" class="login-screen">
   <div class="login-card login-card--familienspuren">
@@ -68,13 +86,13 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><p id="app-version" class="app-header__version">Version 343</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><p id="app-user" class="app-header__user" hidden></p><p id="app-version" class="app-header__version">Version 344</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
   <button class="tab-btn is-active" data-tab="liste" role="tab" aria-selected="true">Bestand</button>
   <button class="tab-btn" data-tab="stammbaum" role="tab" aria-selected="false">Stammbaum</button>
-  <button class="tab-btn" data-tab="erfassen" role="tab" aria-selected="false">Ersteingabe</button>
+  <button class="tab-btn" data-tab="erfassen" role="tab" aria-selected="false" data-rolle="bearbeiter">Ersteingabe</button>
   <button class="tab-btn" data-tab="fotos" role="tab" aria-selected="false">Gruppenfoto</button>
   <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export / Sicherung</button>
   <button class="tab-btn" data-tab="hilfe" role="tab" aria-selected="false">Hilfe / Kurzanleitung</button>
@@ -426,6 +444,15 @@
     <div class="field-group" style="padding:1rem;border-radius:14px;">
       <h2 style="margin-top:0;">Hilfe zum Partezettel Archiv</h2>
       <p>Hier findest du eine einfache Erklärung der Bereiche und eine Kurzanleitung für die wichtigsten Arbeitsschritte.</p>
+      <p><button type="button" id="hinweise-oeffnen" class="btn btn--secondary">Vertraulichkeit und Hinweise ansehen</button></p>
+      <details class="konto-box" id="konto-box">
+        <summary>Mein Konto und Passwort</summary>
+        <p id="konto-info" class="capture-status"></p>
+        <label class="field"><span>Neues Passwort (mindestens 10 Zeichen)</span><input type="password" id="konto-passwort" autocomplete="new-password" minlength="10"></label>
+        <label class="field"><span>Neues Passwort wiederholen</span><input type="password" id="konto-passwort2" autocomplete="new-password" minlength="10"></label>
+        <button type="button" id="konto-passwort-speichern" class="btn btn--primary">Passwort ändern</button>
+        <p id="konto-meldung" class="form-message"></p>
+      </details>
       <h3>Kurzanleitung</h3>
       <ol style="padding-left:1.4rem;line-height:1.65;">
         <li><strong>Person neu erfassen:</strong> Öffne <em>Ersteingabe</em>, trage mindestens Vorname und Nachname ein und ergänze bekannte Daten.</li>
@@ -491,7 +518,7 @@
       <legend>☁️ iCloud-Backup</legend>
       <p class="capture-status">Sichert Datenbank, Fotos und Sprachnotizen als vollständige Backup-Datei. Nach dem Erstellen kannst du die ZIP-Datei auf dem iPad über „In Dateien sichern“ in iCloud Drive ablegen.</p>
       <button type="button" id="backup-icloud-btn" class="btn btn--primary btn--full" style="margin-top:0.75rem;">☁️ Backup für iCloud erstellen</button>
-      <label class="btn btn--secondary btn--full" style="margin-top:0.75rem;">↩️ Backup wiederherstellen
+      <label class="btn btn--secondary btn--full" data-rolle="eigentuemer" style="margin-top:0.75rem;">↩️ Backup wiederherstellen
         <input type="file" id="backup-restore-input" accept="application/zip,.zip,application/json,.json" hidden>
       </label>
       <p id="backup-message" class="form-message"></p>
@@ -551,7 +578,7 @@
         <h3>Notizen</h3><p id="pv-notes"></p>
       </section>
       <p class="person-view-hint">Leere Angaben werden ausgeblendet. Über „Bearbeiten“ öffnet sich die vollständige Eingabemaske.</p>
-      <div class="person-view-actions person-view-action-row"><button type="button" id="pv-tree" class="btn btn--secondary btn--full">🌳 Im Stammbaum anzeigen</button><button type="button" id="pv-edit" class="btn btn--primary btn--full">✏️ Bearbeiten</button></div>
+      <div class="person-view-actions person-view-action-row"><button type="button" id="pv-tree" class="btn btn--secondary btn--full">🌳 Im Stammbaum anzeigen</button><button type="button" id="pv-edit" data-rolle="bearbeiter" class="btn btn--primary btn--full">✏️ Bearbeiten</button></div>
     </div>
   </div>
 </div>
@@ -698,7 +725,7 @@
       <div class="detail-actions">
         <p id="d-person-message" class="form-message"></p>
         <button type="button" id="d-save-person-btn" class="btn btn--primary btn--full">Änderungen speichern</button>
-        <button type="button" id="d-delete-person-btn" class="btn btn--full detail-delete-btn">Person vollständig löschen</button>
+        <button type="button" id="d-delete-person-btn" data-rolle="eigentuemer" class="btn btn--full detail-delete-btn">Person vollständig löschen</button>
         <p id="d-delete-message" class="form-message"></p>
       </div>
     </div>
@@ -788,6 +815,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="app.js?v=343"></script>
+<script src="hinweise.js?v=344"></script>
+<script src="app.js?v=344"></script>
 </body>
 </html>

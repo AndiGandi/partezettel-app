@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 343
+// Partezettel Archiv – Version 344
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -616,6 +616,214 @@ let syncLadePromise = null;
 // innerhalb derselben Sitzung dürfen die Prüfung nicht mehrfach auslösen.
 let syncPruefungSeitCacheLaden = false;
 
+// ---------- v344: Zugang, Rollen und Hinweisseite ----------
+// Rollen: eigentuemer (alles), bearbeiter (anlegen/ändern, keine Personen/Fotos/Aufnahmen löschen), leser (nur lesen).
+// Durchgesetzt wird das in der Datenbank (Supabase-Regeln); die App blendet nur passend aus und warnt freundlich.
+// Fehlen die Paket-1-Tabellen noch (SQL nicht eingespielt), läuft die App wie bisher (Kompatibilitätsmodus).
+let zugang = { rolle: "eigentuemer", name: "", kompatibel: true };
+let zugangGeprueftFuer = null;
+let zugangPruefLaeuft = false;
+const ROLLEN_NAMEN = { eigentuemer: "Eigentümer", bearbeiter: "Bearbeiter", leser: "Leser" };
+
+function tabelleFehlt(error) {
+  return /42P01|PGRST205|schema cache|does not exist/i.test(`${error?.code || ""} ${error?.message || ""}`);
+}
+function rolleIstEigentuemer() { return zugang.rolle === "eigentuemer"; }
+function rolleDarfSchreiben() { return zugang.rolle === "eigentuemer" || zugang.rolle === "bearbeiter"; }
+function darfLoeschen(was) {
+  if (rolleIstEigentuemer()) return true;
+  alert(`Nur der Eigentümer darf ${was}.\nBitte wende dich an ihn.`);
+  return false;
+}
+
+function setzeRollenAnzeige() {
+  for (const r of Object.keys(ROLLEN_NAMEN)) document.body.classList.toggle(`rolle-${r}`, zugang.rolle === r);
+  const zeile = document.getElementById("app-user");
+  if (zeile) {
+    zeile.textContent = zugang.kompatibel || !zugang.name ? "" : `${zugang.name} · ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle}`;
+    zeile.hidden = !zeile.textContent;
+  }
+}
+
+function zugangZuruecksetzen() {
+  zugangGeprueftFuer = null;
+  zugangPruefLaeuft = false;
+  zugang = { rolle: "eigentuemer", name: "", kompatibel: true };
+  for (const r of Object.keys(ROLLEN_NAMEN)) document.body.classList.remove(`rolle-${r}`);
+  const overlay = document.getElementById("zugang-overlay");
+  if (overlay) overlay.hidden = true;
+  const zeile = document.getElementById("app-user");
+  if (zeile) { zeile.textContent = ""; zeile.hidden = true; }
+}
+
+function zeigeHinweisInhalt(inhalt) {
+  const h = window.HINWEIS || {};
+  inhalt.replaceChildren();
+  if (h.einleitung) {
+    const p = document.createElement("p");
+    p.textContent = h.einleitung;
+    inhalt.appendChild(p);
+  }
+  for (const abschnitt of h.abschnitte || []) {
+    const titel = document.createElement("h3");
+    titel.textContent = abschnitt.titel;
+    const liste = document.createElement("ul");
+    for (const punkt of abschnitt.punkte || []) {
+      const li = document.createElement("li");
+      li.textContent = punkt;
+      liste.appendChild(li);
+    }
+    inhalt.append(titel, liste);
+  }
+  const stand = document.createElement("p");
+  stand.className = "zugang-stand";
+  stand.textContent = `Stand: ${h.version || "–"}`;
+  inhalt.appendChild(stand);
+}
+
+async function speichereZustimmung() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error("Nicht angemeldet.");
+  const { error } = await sb.from("zustimmungen").insert({
+    user_id: session.user.id,
+    version: window.HINWEIS.version,
+    geraet: String(navigator.userAgent || "").slice(0, 200)
+  });
+  if (error && !tabelleFehlt(error)) throw error;
+  return true;
+}
+
+// Modi: "kein-zugriff" (nur Abmelden), "pflicht" (bestätigen), "lesen" (nur ansehen, schließen)
+function zugangOverlayZeigen(modus) {
+  const el = (id) => document.getElementById(id);
+  const overlay = el("zugang-overlay");
+  const inhalt = el("zugang-inhalt");
+  const hakenZeile = el("zugang-haken-zeile");
+  const haken = el("zugang-haken");
+  const weiter = el("zugang-weiter");
+  const schliessen = el("zugang-schliessen");
+  const abmelden = el("zugang-abmelden");
+  const meldung = el("zugang-meldung");
+  meldung.textContent = "";
+  haken.checked = false;
+  weiter.disabled = true;
+  hakenZeile.hidden = modus !== "pflicht";
+  weiter.hidden = modus !== "pflicht";
+  schliessen.hidden = modus !== "lesen";
+  abmelden.hidden = modus === "lesen";
+  if (modus === "kein-zugriff") {
+    el("zugang-titel").textContent = "Kein Zugriff";
+    const p = document.createElement("p");
+    p.textContent = "Dein Konto ist angemeldet, aber noch nicht für Familienspuren freigeschaltet oder wurde deaktiviert. Bitte wende dich an den Eigentümer der Datenbank.";
+    inhalt.replaceChildren(p);
+  } else {
+    el("zugang-titel").textContent = (window.HINWEIS && window.HINWEIS.titel) || "Hinweise";
+    el("zugang-haken-text").textContent = (window.HINWEIS && window.HINWEIS.bestaetigung) || "Gelesen und verstanden.";
+    zeigeHinweisInhalt(inhalt);
+  }
+  overlay.hidden = false;
+  inhalt.scrollTop = 0;
+  return new Promise((resolve) => {
+    const schliesse = (ergebnis) => {
+      overlay.hidden = true;
+      haken.onchange = null; weiter.onclick = null; schliessen.onclick = null; abmelden.onclick = null;
+      resolve(ergebnis);
+    };
+    haken.onchange = () => { weiter.disabled = !haken.checked; };
+    weiter.onclick = async () => {
+      weiter.disabled = true;
+      meldung.textContent = "Speichere …";
+      try {
+        await speichereZustimmung();
+        schliesse(true);
+      } catch (err) {
+        meldung.textContent = `Konnte nicht gespeichert werden: ${err.message || err}`;
+        weiter.disabled = !haken.checked;
+      }
+    };
+    schliessen.onclick = () => schliesse(true);
+    abmelden.onclick = async () => {
+      schliesse(false);
+      try { await sb.auth.signOut(); } catch (err) { debugLog(`⚠️ Abmelden: ${err.message || err}`); }
+    };
+  });
+}
+
+// Prüft Konto, Rolle und Bestätigung der Hinweise. true = App darf angezeigt werden.
+async function pruefeZugangUndHinweise(session) {
+  const uid = session?.user?.id;
+  if (!uid) return false;
+  if (zugangGeprueftFuer === uid) return true;
+  if (zugangPruefLaeuft) return false;
+  zugangPruefLaeuft = true;
+  try {
+    const { data, error } = await sb.from("benutzerprofil").select("anzeigename, rolle, aktiv").eq("user_id", uid).maybeSingle();
+    if (error) {
+      if (tabelleFehlt(error)) {
+        debugLog("ℹ️ Paket 1 (Rollen) ist in Supabase noch nicht eingespielt – App läuft im Kompatibilitätsmodus.");
+        zugang = { rolle: "eigentuemer", name: "", kompatibel: true };
+        setzeRollenAnzeige();
+        zugangGeprueftFuer = uid;
+        return true;
+      }
+      throw error;
+    }
+    if (!data || data.aktiv === false) {
+      zugang = { rolle: "leser", name: "", kompatibel: false };
+      setzeRollenAnzeige();
+      await zugangOverlayZeigen("kein-zugriff");
+      return false;
+    }
+    zugang = { rolle: data.rolle, name: data.anzeigename || "", kompatibel: false };
+    setzeRollenAnzeige();
+    if (window.HINWEIS && window.HINWEIS.version) {
+      const { data: bestaetigt, error: zErr } = await sb.from("zustimmungen").select("id")
+        .eq("user_id", uid).eq("version", window.HINWEIS.version).limit(1);
+      if (zErr && !tabelleFehlt(zErr)) throw zErr;
+      if (!zErr && !(bestaetigt || []).length) {
+        const weiter = await zugangOverlayZeigen("pflicht");
+        if (!weiter) return false;
+      }
+    }
+    zugangGeprueftFuer = uid;
+    return true;
+  } finally {
+    zugangPruefLaeuft = false;
+  }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("hinweise-oeffnen")?.addEventListener("click", () => { void zugangOverlayZeigen("lesen"); });
+
+  // Mein Konto: Angaben anzeigen und eigenes Passwort ändern
+  const kontoBox = document.getElementById("konto-box");
+  kontoBox?.addEventListener("toggle", async () => {
+    if (!kontoBox.open) return;
+    const info = document.getElementById("konto-info");
+    try {
+      const { data: { session } } = await sb.auth.getSession();
+      const rolle = zugang.kompatibel ? "" : ` · Rolle: ${ROLLEN_NAMEN[zugang.rolle] || zugang.rolle}`;
+      info.textContent = `Angemeldet als ${session?.user?.email || "–"}${zugang.name ? ` (${zugang.name})` : ""}${rolle}`;
+    } catch (err) { info.textContent = ""; }
+  });
+  document.getElementById("konto-passwort-speichern")?.addEventListener("click", async () => {
+    const meldung = document.getElementById("konto-meldung");
+    const eins = document.getElementById("konto-passwort");
+    const zwei = document.getElementById("konto-passwort2");
+    if (eins.value.length < 10) { meldung.textContent = "Das Passwort braucht mindestens 10 Zeichen."; eins.focus(); return; }
+    if (eins.value !== zwei.value) { meldung.textContent = "Die beiden Eingaben stimmen nicht überein."; zwei.focus(); return; }
+    meldung.textContent = "Speichere …";
+    try {
+      const { error } = await sb.auth.updateUser({ password: eins.value });
+      if (error) throw error;
+      eins.value = ""; zwei.value = "";
+      meldung.textContent = "Passwort geändert ✓";
+    } catch (err) {
+      meldung.textContent = `Passwort konnte nicht geändert werden: ${err.message || err}`;
+    }
+  });
+});
+
 // ---------- Anmeldung ----------
 async function ensureSession() {
   if (!sb) throw new Error("Supabase ist nicht verfügbar. Bitte config.js prüfen.");
@@ -641,6 +849,14 @@ async function zeigeAppWennAngemeldet() {
     const { data: { session }, error } = await sb.auth.getSession();
     if (error) throw error;
     if (session) {
+      const frei = await pruefeZugangUndHinweise(session);
+      if (!frei) {
+        // Hinweisseite oder „Kein Zugriff“ ist offen – oder man hat sich gerade abgemeldet.
+        const { data: { session: aktuelle } } = await sb.auth.getSession();
+        loginScreen.hidden = !!aktuelle ? true : false;
+        appShell.hidden = true;
+        return;
+      }
       loginScreen.hidden = true;
       appShell.hidden = false;
       debugLog("Angemeldet.");
@@ -648,6 +864,7 @@ async function zeigeAppWennAngemeldet() {
       // und Personendetails nicht mit leeren Platzhaltern erscheinen.
       void ladeGruppenfotoListe().catch(err => debugLog(`⚠️ Gruppenfotos beim Start: ${err.message || err}`));
     } else {
+      zugangZuruecksetzen();
       loginScreen.hidden = false;
       appShell.hidden = true;
     }
@@ -693,9 +910,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       const loginScreen = document.getElementById("login-screen");
       const appShell = document.getElementById("app-shell");
       if (session) {
-        loginScreen.hidden = true;
-        appShell.hidden = false;
+        // Zugang und Hinweise werden in zeigeAppWennAngemeldet() geprüft (einmal je Anmeldung).
+        if (zugangGeprueftFuer !== session.user.id && !zugangPruefLaeuft) void zeigeAppWennAngemeldet();
       } else {
+        zugangZuruecksetzen();
         loginScreen.hidden = false;
         appShell.hidden = true;
       }
@@ -2948,8 +3166,10 @@ async function ladeBestandsSprachnotizen(personId, panel) {
         status.textContent = `Abspielen fehlgeschlagen: ${err.message || err}`;
       }
     });
+    del.dataset.rolle = "eigentuemer";
     del.addEventListener("click", async (event) => {
       event.stopPropagation();
+      if (!darfLoeschen("Sprachnotizen löschen")) return;
       if (!confirm("Diese Sprachnotiz unwiderruflich löschen?")) return;
       const { error: storageError } = await sb.storage.from(BUCKET_AUDIO).remove([item.dateipfad]);
       if (storageError) { status.textContent = `Fehler beim Löschen: ${storageError.message}`; return; }
@@ -4397,10 +4617,15 @@ async function loadDetailFotos(personId) {
         const verbleibend = (links || []).filter(x => x.personen_id !== personId);
         const istEigentuemer = foto.personen_id === personId;
         if (!verbleibend.length && istEigentuemer) {
-          await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
-          await sb.from("fotos").delete().eq("id", foto.id);
+          if (rolleIstEigentuemer()) {
+            await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
+            await sb.from("fotos").delete().eq("id", foto.id);
+          } else {
+            alert("Die Verknüpfung wurde entfernt. Das Foto selbst bleibt im Archiv, Dateien löscht nur der Eigentümer.");
+          }
         }
       } else {
+        if (!darfLoeschen("Fotos löschen")) return;
         await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
         await sb.from("fotos").delete().eq("id", foto.id);
       }
@@ -5418,7 +5643,7 @@ async function loadDetailAudio(personId) {
   for (const note of data || []) {
     const div = document.createElement("div");
     div.className = "detail-media-item";
-    div.innerHTML = `<audio controls preload="none"></audio><button class="del-btn" title="Löschen">🗑️</button>`;
+    div.innerHTML = `<audio controls preload="none"></audio><button class="del-btn" data-rolle="eigentuemer" title="Löschen">🗑️</button>`;
 
     const audio = div.querySelector("audio");
     let audioUrl = null;
@@ -5453,6 +5678,7 @@ async function loadDetailAudio(personId) {
     });
 
     div.querySelector(".del-btn").addEventListener("click", async () => {
+      if (!darfLoeschen("Sprachnotizen löschen")) return;
       const { error: storageError } = await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
       if (storageError) {
         debugLog(`⚠️ Sprachnotiz-Datei konnte nicht gelöscht werden: ${storageError.message}`);
@@ -6476,6 +6702,7 @@ document.getElementById("d-add-kind-btn").addEventListener("click", async () => 
 // ---- Person vollständig löschen ----
 document.getElementById("d-delete-person-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-delete-message");
+  if (!darfLoeschen("Personen löschen")) return;
   if (!confirm("Diese Person inkl. aller Fotos, Sprachnotizen und Beziehungen unwiderruflich löschen?")) return;
   msg.textContent = "Lösche …";
 
@@ -6939,6 +7166,7 @@ const backupBtn = document.getElementById("backup-icloud-btn");
 if (backupBtn) backupBtn.addEventListener("click", erstelleICloudBackup);
 const backupInput = document.getElementById("backup-restore-input");
 if (backupInput) backupInput.addEventListener("change", async (event) => {
+  if (!darfLoeschen("ein Backup wiederherstellen")) { event.target.value = ""; return; }
   const file = event.target.files?.[0];
   await stelleBackupWiederHer(file);
   event.target.value = "";
@@ -9000,7 +9228,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=343");
+      treeModul3D = await import("./tree3d.js?v=344");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

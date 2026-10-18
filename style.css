@@ -1730,3 +1730,30 @@ details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
 .tree-3d-stage.is-vollbild .tree3d__hud{top:calc(.6rem + env(safe-area-inset-top,0px));left:calc(.6rem + env(safe-area-inset-left,0px));right:calc(.6rem + env(safe-area-inset-right,0px))}
 .tree-3d-stage.is-vollbild .tree3d__bar{bottom:calc(.6rem + env(safe-area-inset-bottom,0px))}
 body.tree3d-vollbild{overflow:hidden}
+
+/* Familienspuren v344 – Rollen, Hinweisseite */
+body.rolle-leser [data-rolle="bearbeiter"]{display:none !important}
+body:not(.rolle-eigentuemer) [data-rolle="eigentuemer"]{display:none !important}
+.app-header__user{margin:0 0 .15rem;font-size:.76rem;color:#55745e;text-align:right}
+.zugang-overlay{position:fixed;inset:0;z-index:9500;display:flex;align-items:center;justify-content:center;padding:calc(1rem + env(safe-area-inset-top,0px)) 1rem calc(1rem + env(safe-area-inset-bottom,0px));background:rgba(12,34,25,.72)}
+.zugang-overlay[hidden]{display:none}
+.zugang-karte{display:flex;flex-direction:column;width:min(640px,100%);max-height:100%;padding:1.2rem 1.25rem;border:1px solid #d9e2d8;border-radius:18px;background:#f8f6ef;box-shadow:0 20px 50px rgba(0,0,0,.4);color:#263d30}
+.zugang-karte h2{margin:0 0 .6rem;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.35rem;color:#174f3b}
+.zugang-inhalt{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-right:.3rem;font-size:.95rem;line-height:1.5}
+.zugang-inhalt h3{margin:1rem 0 .3rem;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;font-size:1.02rem;color:#24583f}
+.zugang-inhalt ul{margin:0;padding-left:1.15rem}
+.zugang-inhalt li{margin:.25rem 0}
+.zugang-stand{margin:1rem 0 .2rem;font-size:.76rem;color:#6c746d}
+.zugang-haken{display:flex;align-items:flex-start;gap:.6rem;margin:.9rem 0 .2rem;padding:.7rem .8rem;border:1px solid #cbdacb;border-radius:12px;background:#edf3eb;font-size:.95rem;cursor:pointer}
+.zugang-haken[hidden]{display:none}
+.zugang-haken input{flex:0 0 auto;width:1.35rem;height:1.35rem;margin-top:.1rem;accent-color:#174f3b}
+.zugang-aktionen{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.6rem}
+.zugang-aktionen .btn{flex:1 1 auto;min-height:46px}
+.zugang-aktionen .btn[hidden]{display:none}
+.zugang-aktionen .btn--primary:disabled{opacity:.45;cursor:not-allowed}
+.zugang-overlay .btn{border-radius:11px}
+.zugang-overlay .btn--primary{background:#174f3b;border:1px solid #174f3b;color:#fff}
+.zugang-overlay .btn--secondary{background:#edf3eb;border:1px solid #cbdacb;color:#24583f}
+.zugang-overlay .btn--ghost{background:#f8faf7;border:1px solid #cbd8cf;color:#174f3b}
+.konto-box{margin:.4rem 0 1rem;padding:.2rem .9rem .9rem;border:1px solid #d8e0d8;border-radius:14px;background:#fff}
+.konto-box>summary{padding:.65rem 0;font-weight:600;color:#24583f;cursor:pointer}
