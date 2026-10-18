@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 355
+// Partezettel Archiv – Version 356
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -7957,6 +7957,31 @@ function treeLineColorClass(lineSurname) {
   return `tree-line-color-${Math.abs(hash) % 6}`;
 }
 
+// ---------- v356: Kompakte Frauen-Namen in den Stammbaum-Ansichten ----------
+// Trägt eine Frau den Nachnamen ihres Partners und hat einen anderen Geburtsnamen, steht in den Stammbaum-Karten nur
+// „Luise (geb. Mangeng)“ statt „Luise Ganahl (geb. Mangeng)“. Listen, Suche, Überschriften und PDF zeigen den vollen Namen.
+function treeNamensgleichMitPartner(p, nachname) {
+  const ziel = treeNormalizeName(nachname);
+  for (const f of treeFamiliesForPerson(p.id)) {
+    const andere = f.partner_a_id === p.id ? f.partner_b_id : f.partner_a_id;
+    const q = andere ? treePerson(andere) : null;
+    if (q && treeNormalizeName(q.nachname) === ziel) return true;
+  }
+  return false;
+}
+function treeAnzeigeName(p) {
+  const vorname = String(p.vorname || "").trim();
+  const nachname = String(p.nachname || "").trim();
+  const ledig = String(p.Ledigenname || p.ledigenname || p.geburtsname || "").trim();
+  let name = [vorname, nachname].filter(Boolean).join(" ").trim();
+  if (vorname && nachname && ledig && treeNormalizeName(nachname) !== treeNormalizeName(ledig) && treeNamensgleichMitPartner(p, nachname)) name = vorname;
+  return { name: name || "(ohne Namen)", ledig };
+}
+function treeKompaktLabel(p) {
+  const an = treeAnzeigeName(p);
+  return an.ledig ? `${an.name} (geb. ${an.ledig})` : an.name;
+}
+
 function treePersonCard(person, rootId = null, extraClass = "", lineSurname = "") {
   if (!person) return "";
   const jahre = [(person.geburtsdatum ? person.geburtsdatum.split("-")[0] : (person.geburtsjahr ? String(person.geburtsjahr) : "")), (person.sterbedatum ? person.sterbedatum.split("-")[0] : (person.sterbejahr ? String(person.sterbejahr) : ""))].filter(Boolean).join(" – ");
@@ -7974,7 +7999,7 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
     ? ` <span class="tree-node__maiden-name">geb. ${escTree(ledigenname)}</span>` : "";
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
-    <span class="tree-node__name">${escTree(person.vorname)} ${escTree(person.nachname)}${maidenLabel}</span>
+    <span class="tree-node__name">${escTree(treeAnzeigeName(person).name)}${maidenLabel}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
   </button>`;
 }
@@ -8199,7 +8224,7 @@ function treePedigreeNodeHtml(k, m, y, rootId) {
   }
   const p = k.person;
   const g = treePersonGender(p);
-  const name = [p.vorname, p.nachname].filter(Boolean).join(" ").trim() || "(ohne Namen)";
+  const name = treeAnzeigeName(p).name;
   const ledig = String(p.Ledigenname || p.ledigenname || "").trim();
   const jahre = treeYearsText(p);
   const foto = treeData.photos.get(p.id);
@@ -8328,7 +8353,7 @@ function treeDescendants(personId, pfad = new Set()) {
 }
 
 function treeDescNameHtml(p) {
-  const name = [p.vorname, p.nachname].filter(Boolean).join(" ").trim() || "(ohne Namen)";
+  const name = treeAnzeigeName(p).name;
   const ledig = String(p.Ledigenname || p.ledigenname || "").trim();
   return `${escTree(name)}${ledig ? ` <span class="tree-desc__maiden">(geb. ${escTree(ledig)})</span>` : ""}`;
 }
@@ -10071,7 +10096,7 @@ async function renderBaum3D(rootId) {
   const gens = tree3dGens;
   const knoten = treePedigreeCollect(rootId, gens).map((k) => ({
     gen: k.gen, idx: k.idx, id: k.person ? k.person.id : null,
-    name: k.person ? PersonSuche.name(k.person) : "", jahre: k.person ? PersonSuche.jahre(k.person) : "",
+    name: k.person ? treeKompaktLabel(k.person) : "", jahre: k.person ? PersonSuche.jahre(k.person) : "",
     geschlecht: k.person ? treePersonGender(k.person) : "u", rolle: k.rolle
   }));
   const bekannt = knoten.filter((k) => k.id && k.gen > 0).length;
@@ -10081,7 +10106,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=355");
+      treeModul3D = await import("./tree3d.js?v=356");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
