@@ -1820,3 +1820,37 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .tree-luecken__hinweis .tree-luecken__person{color:#80652f}
 .tree-luecken__details{margin:.6rem 0 0;padding:.4rem .8rem;border:1px solid #d8e0d8;border-radius:12px;background:#fff}
 .tree-luecken__details>summary{padding:.35rem 0;font-weight:600;color:#24583f;cursor:pointer}
+
+/* Familienspuren v357 – Bearbeiten: ＋-Muster, Speichern-Leiste */
+.sofort-hinweis{margin-left:.45rem;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:.7rem;font-weight:500;color:#65756b;letter-spacing:0}
+.btn--plus{min-height:48px;border:1.5px dashed #9db9a8;background:#f6f9f5;color:#174f3b;font-weight:600}
+.btn--plus:hover,.btn--plus:active{background:#edf3eb}
+.btn--plus[hidden]{display:none}
+.neu-formular{margin:.5rem 0;padding:.8rem .9rem;border:1px solid #cbdacb;border-radius:14px;background:#f8fbf7}
+.neu-formular[hidden]{display:none}
+.neu-aktionen{display:flex;gap:.6rem;margin-top:.7rem}
+.neu-aktionen .btn{flex:1 1 auto;min-height:46px}
+.mehr-angaben{margin:.5rem 0;border:1px solid #dbe5da;border-radius:12px;background:#fff;padding:.1rem .8rem .5rem}
+.mehr-angaben>summary{padding:.55rem 0;font-size:.9rem;font-weight:600;color:#24583f;cursor:pointer}
+.familie-kopf{display:flex;align-items:center;justify-content:space-between;gap:.6rem;margin:.2rem 0 .3rem}
+.familie-kurz{font-size:.85rem;color:#55645a}
+.familie-toggle{min-height:40px;padding:.3rem .8rem;font-size:.84rem}
+.detail-savebar{position:sticky;bottom:0;z-index:20;display:flex;align-items:center;gap:.6rem;margin:.8rem -1px 0;padding:.7rem .9rem calc(.7rem + env(safe-area-inset-bottom,0px));border-top:1px solid #cbdacb;background:rgba(248,246,239,.97);box-shadow:0 -6px 18px rgba(0,0,0,.08)}
+.detail-savebar[hidden]{display:none}
+.detail-savebar span{flex:1 1 auto;font-size:.88rem;font-weight:600;color:#6b5636}
+.detail-savebar.is-ok span{color:#174f3b}
+.detail-savebar .btn{flex:0 0 auto;min-height:44px}
+#d-save-person-btn{display:none}
+.detail-toast{position:fixed;left:50%;bottom:calc(5.2rem + env(safe-area-inset-bottom,0px));z-index:9600;max-width:90vw;padding:.6rem 1rem;border-radius:999px;background:#174f3b;color:#fff;font-size:.88rem;font-weight:600;box-shadow:0 8px 24px rgba(0,0,0,.25);opacity:0;pointer-events:none;transform:translate(-50%,8px);transition:opacity .25s ease,transform .25s ease}
+.detail-toast.is-sichtbar{opacity:1;transform:translate(-50%,0)}
+
+/* v357: eingeklappte Felder wirklich verstecken; Datumszeilen auf dem Handy umbrechen statt überlaufen */
+.familie-edit-fields[hidden]{display:none !important}
+@media (max-width:560px){
+  #detail-overlay .date-source-row{display:grid !important;grid-template-columns:minmax(0,1fr) !important;gap:.5rem}
+  #detail-overlay .date-parts--with-year{display:grid !important;grid-template-columns:minmax(3.4rem,1fr) minmax(4.6rem,1.5fr) minmax(4.2rem,1.2fr) !important;gap:.4rem;width:100%}
+  #detail-overlay .date-parts--with-year .date-year-only-field{grid-column:1 / -1}
+  #detail-overlay .date-source-inline .source-button-line{display:flex !important;flex-wrap:wrap;gap:.4rem;align-items:center}
+  #detail-overlay .familie-edit-fields .date-parts{width:100%;grid-template-columns:minmax(3.4rem,1fr) minmax(4.6rem,1.5fr) minmax(4.2rem,1.2fr)}
+  #detail-overlay .familie-edit-fields .familie-typ-edit{width:100%;max-width:none}
+}

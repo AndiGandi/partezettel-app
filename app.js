@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 356
+// Partezettel Archiv – Version 357
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -4612,6 +4612,8 @@ async function openPersonEdit(personId, options = {}) {
 }
 
 document.getElementById("detail-close-btn").addEventListener("click", async () => {
+  if (detailGeaendert && !window.confirm("Es gibt nicht gespeicherte Änderungen. Trotzdem schließen?")) return;
+  setzeDetailSauber();
   const fromTree = detailOpenedFromTree;
   const returnTreePersonId = detailReturnTreePersonId;
   detailOverlay.hidden = true;
@@ -6153,6 +6155,179 @@ function familiePartnerIds(familie, personId) {
   return [familie.partner_a_id, familie.partner_b_id].filter((id) => id && id !== personId);
 }
 
+// ---------- v357: Bearbeiten – ＋-Muster, Speichern-Leiste und Rückmeldungen ----------
+// Regel: Beziehungen (Eltern, Partner, Kinder) speichern sofort mit ihrem eigenen „Hinzufügen“.
+// Die Angaben zur Person (Name, Datum, Notiz, Quellen) speichert die Leiste unten, sobald etwas geändert wurde.
+let detailGeaendert = false;
+let toastTimer = null;
+let barTimer = null;
+let neuHinzufuegen = null;   // merkt, welches „Hinzufügen“ gerade ausgelöst wurde
+
+function zeigeToast(text) {
+  if (!text) return;
+  let el = document.getElementById("detail-toast");
+  if (!el) {
+    el = document.createElement("div");
+    el.id = "detail-toast";
+    el.className = "detail-toast";
+    el.setAttribute("role", "status");
+    document.body.appendChild(el);
+  }
+  el.textContent = text;
+  el.classList.add("is-sichtbar");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("is-sichtbar"), 2800);
+}
+
+function setzeDetailGeaendert(wert, text) {
+  detailGeaendert = !!wert;
+  const bar = document.getElementById("detail-savebar");
+  const txt = document.getElementById("detail-savebar-text");
+  if (!bar) return;
+  clearTimeout(barTimer);
+  bar.classList.remove("is-ok");
+  if (wert) { bar.hidden = false; if (txt) txt.textContent = text || "Nicht gespeicherte Änderungen"; }
+  else bar.hidden = true;
+}
+
+function setzeDetailSauber() { setzeDetailGeaendert(false); }
+
+function setzeNeuFormular(name, offen) {
+  const neu = document.getElementById(`d-${name}-neu`);
+  const plus = document.getElementById(`d-${name}-plus`);
+  if (!neu || !plus) return;
+  neu.hidden = !offen;
+  plus.hidden = !!offen;
+  if (offen) {
+    const feld = document.getElementById(name === "partner" ? "d-partner-person" : "d-kind-person");
+    const sucheingabe = feld?.parentElement?.querySelector("input[type=search], input[type=text]");
+    (sucheingabe || feld)?.focus?.();
+  } else if (name === "partner") {
+    const sel = document.getElementById("d-partner-person"); if (sel) sel.value = "";
+    const typ = document.getElementById("d-partner-typ"); if (typ) typ.value = "";
+    const felder = document.getElementById("d-partner-felder"); if (felder) felder.hidden = true;
+    ["d-partner-person"].forEach((id) => document.getElementById(id)?.dispatchEvent(new Event("change")));
+  }
+}
+
+// Nach jedem Neuladen der Familienangaben: Formulare einklappen, vorhandene Partnerschaften verdichten
+function aktualisiereNeuFormulare() {
+  const hatPartner = document.querySelectorAll("#d-partner-list .familie-item").length > 0;
+  const partnerPlus = document.getElementById("d-partner-plus");
+  if (partnerPlus) partnerPlus.textContent = hatPartner ? "＋ Weitere Partnerschaft hinzufügen" : "＋ Partner/in hinzufügen";
+  const hatKinder = document.querySelectorAll("#d-kinder-list > *").length > 0;
+  const kindPlus = document.getElementById("d-kind-plus");
+  if (kindPlus) kindPlus.textContent = hatKinder ? "＋ Weiteres Kind hinzufügen" : "＋ Kind hinzufügen";
+  // Ein erfolgreich ausgelöstes „Hinzufügen“ leert die Auswahl: dann das Formular wieder einklappen
+  if (neuHinzufuegen === "partner" && !document.getElementById("d-partner-person")?.value) setzeNeuFormular("partner", false);
+  if (neuHinzufuegen === "kind" && !document.getElementById("d-kind-person")?.value) setzeNeuFormular("kind", false);
+  neuHinzufuegen = null;
+  // Mehrere Partnerschaften: die Auswahl „Zu welcher Partnerschaft?“ gleich zeigen
+  const familienAuswahl = document.getElementById("d-kind-partner-family");
+  const mehr = document.getElementById("d-kind-mehr");
+  if (familienAuswahl && mehr) mehr.open = familienAuswahl.options.length > 2;
+  // Eltern speichern erst anbieten, wenn man etwas ändern will
+  const elternSpeichern = document.getElementById("d-save-eltern-btn");
+  if (elternSpeichern) elternSpeichern.hidden = true;
+  verdichtePartnerBloecke();
+}
+
+function verdichtePartnerBloecke() {
+  for (const item of document.querySelectorAll("#d-partner-list .familie-item")) {
+    if (item.dataset.verdichtet === "1") continue;
+    const felder = item.querySelector(".familie-edit-fields");
+    const block = item.querySelector(".familie-edit-block");
+    if (!felder || !block) continue;
+    item.dataset.verdichtet = "1";
+    const typ = item.querySelector(".familie-typ-edit")?.value || "Partnerschaft";
+    const von = item.querySelector(".familie-beginn-jahr")?.value || "";
+    const bis = item.querySelector(".familie-ende-jahr")?.value || "";
+    const zeitraum = von && bis ? `${von} – ${bis}` : von ? `seit ${von}` : bis ? `bis ${bis}` : "";
+    const kurz = [typ, zeitraum].filter(Boolean).join(" · ");
+    const kopf = document.createElement("div");
+    kopf.className = "familie-kopf";
+    const text = document.createElement("span");
+    text.className = "familie-kurz";
+    text.textContent = kurz;
+    const knopf = document.createElement("button");
+    knopf.type = "button";
+    knopf.className = "btn btn--ghost familie-toggle";
+    knopf.setAttribute("aria-expanded", "false");
+    knopf.textContent = "✎ Bearbeiten";
+    knopf.addEventListener("click", () => {
+      const offen = felder.hidden;
+      felder.hidden = !offen;
+      knopf.setAttribute("aria-expanded", String(offen));
+      knopf.textContent = offen ? "Zuklappen" : "✎ Bearbeiten";
+    });
+    kopf.append(text, knopf);
+    felder.hidden = true;
+    felder.before(kopf);
+  }
+}
+
+// loadDetailFamilie um die Nachbearbeitung ergänzen (Aufrufer bleiben unverändert)
+const loadDetailFamilieOriginal = loadDetailFamilie;
+loadDetailFamilie = async function (personId) {
+  await loadDetailFamilieOriginal(personId);
+  try { aktualisiereNeuFormulare(); } catch (err) { debugLog(`⚠️ Formulare einklappen: ${err.message || err}`); }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+  const el = (id) => document.getElementById(id);
+  // ＋-Knöpfe, Abbrechen
+  el("d-partner-plus")?.addEventListener("click", () => setzeNeuFormular("partner", true));
+  el("d-kind-plus")?.addEventListener("click", () => setzeNeuFormular("kind", true));
+  el("d-partner-abbrechen")?.addEventListener("click", () => setzeNeuFormular("partner", false));
+  el("d-kind-abbrechen")?.addEventListener("click", () => { setzeNeuFormular("kind", false); const k = el("d-kind-person"); if (k) k.value = ""; });
+  // Merker vor dem eigentlichen Hinzufügen setzen (Aufnahmephase), damit er nie zu spät kommt
+  el("d-add-partner-btn")?.addEventListener("click", () => { neuHinzufuegen = "partner"; }, true);
+  el("d-add-kind-btn")?.addEventListener("click", () => { neuHinzufuegen = "kind"; }, true);
+  // Art, Beginn und Ende erst nach Auswahl der Person; Ehe ist vorgewählt
+  el("d-partner-person")?.addEventListener("change", () => {
+    const gewaehlt = !!el("d-partner-person").value;
+    const felder = el("d-partner-felder");
+    if (felder) felder.hidden = !gewaehlt;
+    if (gewaehlt && el("d-partner-typ") && !el("d-partner-typ").value) {
+      el("d-partner-typ").value = "Ehe";
+      el("d-partner-typ").dispatchEvent(new Event("change"));
+    }
+  });
+  // Eltern: Speichern-Knopf erst nach Tippen auf ✎ oder Auswahl
+  document.querySelectorAll("[data-parent-edit]").forEach((b) => b.addEventListener("click", () => { const s = el("d-save-eltern-btn"); if (s) s.hidden = false; }));
+  ["d-vater", "d-mutter"].forEach((id) => el(id)?.addEventListener("change", (e) => { if (e.isTrusted) { const s = el("d-save-eltern-btn"); if (s) s.hidden = false; } }));
+  // Änderungen an der Person erkennen (nur echte Eingaben, keine programmatischen Befüllungen)
+  const personFeld = document.querySelector("#detail-overlay .person-edit-fields");
+  const alsGeaendert = (e) => { if (e.isTrusted) setzeDetailGeaendert(true); };
+  personFeld?.addEventListener("input", alsGeaendert);
+  personFeld?.addEventListener("change", alsGeaendert);
+  personFeld?.addEventListener("click", (e) => {
+    if (e.isTrusted && (e.target.closest(".weiterfuehrende-link-remove") || e.target.closest("#d-weiterfuehrende-links-add"))) setzeDetailGeaendert(true);
+  });
+  // Speichern-Leiste
+  el("detail-savebar-speichern")?.addEventListener("click", () => el("d-save-person-btn")?.click());
+  el("detail-savebar-verwerfen")?.addEventListener("click", async () => {
+    if (!window.confirm("Die Änderungen an dieser Person verwerfen?")) return;
+    setzeDetailSauber();
+    try { await openPersonEdit(currentDetailPersonId, { fromTree: detailOpenedFromTree }); } catch (err) { debugLog(`⚠️ Verwerfen: ${err.message || err}`); }
+  });
+  // Rückmeldung des bisherigen Speicherns in die Leiste und als Hinweis spiegeln
+  const personMsg = el("d-person-message");
+  if (personMsg) new MutationObserver(() => {
+    const t = personMsg.textContent.trim();
+    const bar = el("detail-savebar"), txt = el("detail-savebar-text");
+    if (!t || !bar || !txt) return;
+    if (t.startsWith("Speichere")) { bar.hidden = false; txt.textContent = "Speichere …"; }
+    else if (t.startsWith("Gespeichert")) {
+      detailGeaendert = false; bar.hidden = false; bar.classList.add("is-ok"); txt.textContent = "Gespeichert ✓";
+      clearTimeout(barTimer); barTimer = setTimeout(() => { bar.hidden = true; bar.classList.remove("is-ok"); }, 1800);
+    } else if (detailGeaendert) { bar.hidden = false; bar.classList.remove("is-ok"); txt.textContent = t; }
+  }).observe(personMsg, { childList: true, characterData: true, subtree: true });
+  const famMsg = el("d-familie-message");
+  if (famMsg) new MutationObserver(() => { const t = famMsg.textContent.trim(); if (t && !t.startsWith("Speichere")) zeigeToast(t); })
+    .observe(famMsg, { childList: true, characterData: true, subtree: true });
+});
+
 async function loadDetailFamilie(personId) {
   const parentSelectVater = document.getElementById("d-vater");
   const parentSelectMutter = document.getElementById("d-mutter");
@@ -6661,7 +6836,7 @@ async function loadDetailFamilie(personId) {
     // Der Button muss auch ohne bisherige Partnerschaft sichtbar sein,
     // sonst kann die erste Partnerschaft nicht angelegt werden.
     partnerAddBtn.hidden = false;
-    partnerAddBtn.textContent = hatPartnerschaft ? "Weitere Partnerschaft hinzufügen" : "Partnerschaft hinzufügen";
+    partnerAddBtn.textContent = "Hinzufügen";   // v357: kurzer Text, die Überschrift „＋ …“ sagt schon, worum es geht
   }
   await fillFamilienPersonSelect("d-kind-person", personId);
   const familySelect = document.getElementById("d-kind-partner-family");
@@ -6978,7 +7153,7 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
   const partnerId = document.getElementById("d-partner-person").value;
   if (!partnerId) { msg.textContent = "Bitte Partner/in auswählen."; return; }
 
-  msg.textContent = "INSERT Partnerschaft: wird gespeichert …";
+  msg.textContent = "Speichere Partnerschaft …";
   try {
     await ensureSession();
     const { data: sessionData } = await sb.auth.getSession();
@@ -7054,7 +7229,7 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
             debugLog(`⚠️ Trauungsbuch-Synchronisierung bei Ehe: ${syncErr.message || syncErr}`);
           }
         }
-        msg.textContent = `✅ INSERT erfolgreich – Beziehung + Familie gespeichert`;
+        msg.textContent = "Partnerschaft hinzugefügt ✓";
       }
     } catch (familyErr) {
       const detail = familyErr?.message || String(familyErr);
@@ -10106,7 +10281,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=356");
+      treeModul3D = await import("./tree3d.js?v=357");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
