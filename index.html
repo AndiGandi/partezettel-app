@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 357 -->
+    <!-- Version 359 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=357">
+<link rel="stylesheet" href="style.css?v=359">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 357</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 359</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -484,67 +484,122 @@
 
   <!-- ===================== TAB: HILFE ===================== -->
   <section id="tab-hilfe" class="tab-panel">
-    <div class="field-group" style="padding:1rem;border-radius:14px;">
-      <h2 style="margin-top:0;">Hilfe zum Partezettel Archiv</h2>
-      <p>Hier findest du eine einfache Erklärung der Bereiche und eine Kurzanleitung für die wichtigsten Arbeitsschritte.</p>
-      <p><button type="button" id="hinweise-oeffnen" class="btn btn--secondary">Vertraulichkeit und Hinweise ansehen</button></p>
-      <p><button type="button" id="konto-oeffnen" class="btn btn--secondary">Mein Konto und Passwort</button></p>
-      <h3>Kurzanleitung</h3>
-      <ol style="padding-left:1.4rem;line-height:1.65;">
-        <li><strong>Person neu erfassen:</strong> Öffne <em>Ersteingabe</em>, trage mindestens Vorname und Nachname ein und ergänze bekannte Daten.</li>
-        <li><strong>Foto hinzufügen:</strong> Nimm ein Foto des Partezettels auf oder wähle eines aus deiner Fotomediathek. Wähle bei Bedarf das Schlüsselfoto für den Stammbaum.</li>
-        <li><strong>Speichern:</strong> Speichere die Person. Wenn du eine Verwandtschaft oder einen bereits erfassten Partner zuordnen möchtest, nutze die entsprechenden Felder.</li>
-        <li><strong>Person finden:</strong> Öffne <em>Bestand</em> und suche nach einem Namen. Tippe eine Person an, um die große Bestandsansicht zu öffnen.</li>
-        <li><strong>Person ergänzen:</strong> In der Personenansicht kannst du die Angaben prüfen und über <em>Bearbeiten</em> ändern. Speichere deine Änderungen.</li>
-        <li><strong>Stammbaum ansehen:</strong> Öffne <em>Stammbaum</em>, suche eine Ausgangsperson und wähle die gewünschte Darstellung. Mit „+“ und „−“ passt du die Vergrößerung an.</li>
-        <li><strong>Daten sichern:</strong> Öffne regelmäßig <em>Export / Sicherung</em> und erstelle ein vollständiges iCloud-Backup. Bewahre die Datei sicher auf.</li>
+    <div class="field-group hilfe-karte">
+      <h2>Hilfe zu Familienspuren</h2>
+      <p>Das Wichtigste in Kürze: schnell erfassen, Personen bearbeiten, wie gespeichert wird, Stammbaum und Sicherheit.</p>
+      <p class="hilfe-knoepfe">
+        <a class="btn btn--secondary" href="Kurzanleitung_Schnell_erfassen.pdf" target="_blank" rel="noopener">📄 Kurzanleitung als PDF (zum Weitergeben)</a>
+        <button type="button" id="konto-oeffnen" class="btn btn--secondary">Mein Konto und Passwort</button>
+        <button type="button" id="hinweise-oeffnen" class="btn btn--secondary">Vertraulichkeit und Hinweise</button>
+      </p>
+    </div>
+
+    <div class="field-group hilfe-karte hilfe-karte--hell" data-rolle="bearbeiter">
+      <h3>⚡ Schnell erfassen in 6 Schritten</h3>
+      <ol class="hilfe-schritte">
+        <li><strong>Ersteingabe öffnen.</strong> Arbeite die Partezettel nacheinander ab.</li>
+        <li><strong>Foto:</strong> Mit „📷 Foto aufnehmen“ den Partezettel fotografieren oder mit „🖼️ Aus Fotos wählen“ ein vorhandenes Bild nehmen.</li>
+        <li><strong>Name:</strong> <em>Vorname</em> und <em>Geschlecht</em> sind Pflicht. Der Nachname ist keine Pflicht, bei manchen Frauen kennt man nur den Ledigenname. Bei verheirateten Frauen den <em>Ledigenname</em> eintragen, wenn er vom Familiennamen abweicht.</li>
+        <li><strong>Daten:</strong> Datum eintragen, soweit bekannt. Kennst du nur das Jahr, nimm „nur Geburtsjahr bekannt“ oder „nur Todesjahr bekannt“. <strong>Nichts schätzen:</strong> Unsicheres gehört in die <em>Notiz</em>.</li>
+        <li><strong>Speichern.</strong></li>
+        <li><strong>Verwandte ergänzen:</strong> Im <em>Bestand</em> die Person öffnen, <em>Bearbeiten</em> tippen und mit <strong>＋</strong> Eltern, Partner und Kinder hinzufügen. Dort trägst du auch die Kirchenbuch-Links ein.</li>
       </ol>
-      <p style="padding:.75rem;border-radius:10px;background:var(--surface-secondary,#f3f3f3);"><strong>Wichtiger Hinweis:</strong> Ein Export ist nicht dasselbe wie ein Backup. Für eine Sicherung mit Fotos und Sprachnotizen verwende „Backup für iCloud erstellen“.</p>
+      <div class="hilfe-tipp">
+        <strong>Tipps für schnelles Eingeben</strong>
+        <ul>
+          <li>Zuerst alle Personen eines Partezettels erfassen (Verstorbene, Ehepartner, Kinder), danach die Verwandtschaften verbinden.</li>
+          <li>Bei Namen genügen die ersten Buchstaben: In den Suchfeldern wählst du den passenden Treffer aus der Liste.</li>
+          <li><strong>Kirchenbuch-Link:</strong> Eintrag in Matricula öffnen, die Adresse kopieren, beim Bearbeiten neben dem Datum auf ✎ tippen, einfügen und bei „Zeile“ die Zeilennummer eintragen. Die Trauung steht bei der Ehe.</li>
+          <li>Doppelt vorhandene Personen vermeiden: vor dem Anlegen im Bestand kurz nach dem Namen suchen.</li>
+        </ul>
+      </div>
     </div>
 
-    <div class="field-group" style="padding:1rem;border-radius:14px;">
-      <h3 style="margin-top:0;">Die Bereiche im Überblick</h3>
-      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
-        <summary><strong>Bestand</strong></summary>
-        <p>Hier findest und durchsuchst du bereits gespeicherte Personen. Nutze das Suchfeld, um Namen zu finden. Tippe auf einen Eintrag, um die große Bestandsansicht mit Lebensdaten, Familienbeziehungen, Kirchenbuchangaben, Fotos und vorhandenen Sprachnotizen zu öffnen. Über die Bearbeitungsfunktion kannst du Personendaten ergänzen.</p>
-      </details>
-      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
-        <summary><strong>Stammbaum</strong></summary>
-        <p>Wähle eine Ausgangsperson über das Suchfeld. Der Stammbaum zeigt die gespeicherten Familienbeziehungen. Du kannst zwischen Kartenansicht und klassischem Stammbaum wechseln, hinein- und herauszoomen und die Ansicht zurücksetzen. Über „Verwandtschaft“ kannst du zwei Personen auswählen und ihren Verwandtschaftsweg ermitteln.</p>
-      </details>
-      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
-        <summary><strong>Ersteingabe</strong></summary>
-        <p>Hier legst du eine neue Person an. Trage Namen und bekannte Geburts- oder Sterbedaten ein. Der Ledigenname kann ergänzt werden, wenn er vom späteren Familiennamen abweicht. Notizen, Kirchenbuch-Links, Fotos und – falls benötigt – erste Familienbeziehungen können ebenfalls erfasst werden. Nicht bekannte Daten lässt du leer.</p>
-      </details>
-      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
-        <summary><strong>Gruppenfoto</strong></summary>
-        <p>Hier verwaltest du Gruppenfotos, zum Beispiel Familienfeiern. Du kannst eine Bezeichnung und ein Aufnahmedatum ergänzen und Personen auf dem Foto zuordnen. Die Markierungen helfen dabei, einzelne Personen auf dem Bild wiederzufinden. Normale Einzelfotos werden hier nicht als Gruppenfotos verwaltet.</p>
-      </details>
-      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
-        <summary><strong>Export / Sicherung</strong></summary>
-        <p>Erstelle ein vollständiges Backup für iCloud, das Datenbankdaten, Fotos und Sprachnotizen enthält. Lege die erzeugte Datei anschließend in der Dateien-App an einem sicheren Ort ab. Zusätzlich kannst du Daten als JSON, GEDCOM oder PDF exportieren. Ein Export ersetzt kein vollständiges Backup.</p>
-      </details>
-      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
-        <summary><strong>Große Bestandsansicht einer Person</strong></summary>
-        <p>Die Ansicht zeigt die wichtigsten Angaben zu einer Person, darunter Eltern, Ehepartner, Kinder bzw. Familienbeziehungen, Kirchenbuchquellen und Fotos, sofern entsprechende Daten vorhanden sind. Hier lassen sich auch zugeordnete Sprachnotizen anhören und – sofern die Aufnahmefunktion an dieser Stelle verfügbar ist – neue Notizen aufnehmen. Bereiche ohne Daten werden teilweise ausgeblendet.</p>
-      </details>
-      <details style="padding:.65rem 0;border-bottom:1px solid var(--border-color,#ddd);">
-        <summary><strong>Weiterführende Links und Quellen</strong></summary>
-        <p>Kirchenbuch-Links können mit der Person verknüpft werden. Weiterführende Quellen wie Verlustlisten oder Kriegsgefangenschaftsverzeichnisse können – sofern die Funktion in der installierten Version verfügbar und eingerichtet ist – mit Titel und Webadresse hinterlegt werden. Externe Links öffnen die jeweilige Internetseite.</p>
-      </details>
-    </div>
-
-    <div class="field-group" style="padding:1rem;border-radius:14px;">
-      <h3 style="margin-top:0;">Tipps und Sicherheit</h3>
-      <ul style="padding-left:1.25rem;line-height:1.65;">
-        <li>Speichere nur Angaben, die du belegen kannst. Bei unvollständigen historischen Daten lieber Felder leer lassen und Unsicherheiten in der Notiz erläutern.</li>
-        <li>Kontrolliere bei Ehepartnern den Ledigenname und die bekannten Ehe- bzw. Lebensdaten.</li>
-        <li>Prüfe nach größeren Ergänzungen, ob Fotos und Familienbeziehungen richtig zugeordnet sind.</li>
-        <li>Erstelle regelmäßig ein vollständiges Backup und bewahre es getrennt vom Gerät auf.</li>
-        <li>Lösche Personen nur, wenn du sicher bist. Eine Löschung kann auch zugehörige Fotos, Sprachnotizen und Beziehungen betreffen.</li>
-        <li>Wenn auf iPhone oder iPad eine Änderung scheinbar fehlt, lade die Ansicht neu und kontrolliere die Verbindung, bevor du Daten erneut eingibst.</li>
+    <div class="field-group hilfe-karte" data-rolle="bearbeiter">
+      <h3>Person bearbeiten und speichern</h3>
+      <p>So erkennst du, was gespeichert ist:</p>
+      <ul class="hilfe-liste">
+        <li><strong>Eltern, Partner und Kinder speichern sofort.</strong> Tippe auf <strong>＋</strong>, wähle zuerst die Person und tippe dann auf „Hinzufügen“. Eine kurze Einblendung bestätigt es, zum Beispiel „Kind hinzugefügt ✓“. Ein zusätzlicher Speichern-Knopf ist nicht nötig.</li>
+        <li><strong>Partner:</strong> Erst die Person wählen, dann erscheint die Art (Ehe ist vorgewählt). Beginn und Ende sind optional. Bestehende Partnerschaften erscheinen als eine Zeile, mit „✎ Bearbeiten“ änderst du Art, Beginn und Ende und tippst dort auf „Partnerschaft speichern“.</li>
+        <li><strong>Eltern:</strong> Auf ✎ tippen, Vater oder Mutter wählen und „Eltern speichern“ tippen.</li>
+        <li><strong>Angaben zur Person</strong> (Name, Daten, Notiz, Links) speichert die Leiste unten. Sie erscheint erst, wenn du etwas geändert hast: „Nicht gespeicherte Änderungen“ mit <em>Verwerfen</em> und <em>Speichern</em>. Danach steht kurz „Gespeichert ✓“. Schließt du das Fenster vorher, fragt die App nach.</li>
+        <li><strong>Löschen:</strong> Verknüpfungen (Partner, Kind, Eltern) kannst du mit dem Papierkorb entfernen. Personen, Fotos und Sprachnotizen löscht nur der Eigentümer.</li>
       </ul>
-      <p class="capture-status">Die verfügbaren Funktionen können sich je nach installierter App-Version unterscheiden.</p>
+    </div>
+
+    <div class="field-group hilfe-karte">
+      <h3>Die Bereiche im Überblick</h3>
+      <details>
+        <summary><strong>Bestand</strong></summary>
+        <p>Hier findest du alle gespeicherten Personen. Tippe auf den Namen, um die Personenansicht mit Lebensdaten, Familie, Kirchenbuchquellen, Fotos und Sprachnotizen zu öffnen. Das ✕ schließt sie wieder. Beim Start und nach dem Anmelden beginnt die App immer hier.</p>
+      </details>
+      <details>
+        <summary><strong>Stammbaum</strong></summary>
+        <p>Wähle eine Ausgangsperson. Fünf Ansichten stehen zur Wahl:</p>
+        <ul class="hilfe-liste">
+          <li><strong>Familie:</strong> die Person mit Eltern, Geschwistern, Partnern und Kindern (Standard).</li>
+          <li><strong>Generationen:</strong> Karten nach Generationszeilen.</li>
+          <li><strong>Ahnentafel:</strong> die Vorfahren mit Nummern, 3 bis 6 Generationen.</li>
+          <li><strong>Nachkommen:</strong> einklappbare Liste, mit „Alle öffnen/schließen“.</li>
+          <li><strong>3D-Baum:</strong> Wurzelbaum zum Drehen und Zoomen. Tippen wählt eine Person, <em>Doppeltippen</em> (Maus: Doppelklick) öffnet sie. Der Knopf „?“ zeigt die Bedienung.</li>
+        </ul>
+        <p>Mit den Stammlinien (Gawatsch, Reinhard, Fall) blendest du Linien ein. <strong>Verwandtschaft ermitteln</strong> zeigt, wie zwei Personen verwandt sind. <strong>Cousins &amp; Cousinen</strong> listet sie nach Onkel und Tante, mit Anzahl väterlicherseits und mütterlicherseits. Sind Onkel und Tante verheiratet, stehen die Kinder einmal und sind als Doppelcousins gekennzeichnet. Verheiratete Frauen erscheinen neben ihrem Mann kurz als „Luise (geb. Mangeng)“.</p>
+      </details>
+      <details>
+        <summary><strong>Ersteingabe</strong></summary>
+        <p>Neue Person anlegen: Vorname und Geschlecht sind Pflicht. Dazu Daten, optional die Verwandtschaft zu einer vorhandenen Person, eine Notiz, das Foto des Partezettels und eine Sprachnotiz.</p>
+      </details>
+      <details>
+        <summary><strong>Gruppenfoto</strong></summary>
+        <p>Gruppenfotos verwalten und Personen darauf markieren. Tippst du im Gruppenfoto auf einen Namen, öffnet sich die Person. Das ✕ führt wieder ins Gruppenfoto zurück.</p>
+      </details>
+      <details>
+        <summary><strong>Export / Sicherung</strong></summary>
+        <p>Alle können die <strong>Familienübersicht als PDF</strong> erstellen. Sie ist vertraulich und wird nur nach Absprache mit dem Eigentümer weitergegeben. Das vollständige <strong>Backup</strong> (Daten, Fotos, Sprachnotizen), JSON, GEDCOM und das Wiederherstellen sind dem Eigentümer vorbehalten. Ein Export ist nicht dasselbe wie ein Backup.</p>
+      </details>
+      <details data-rolle="eigentuemer">
+        <summary><strong>Verlauf und Lücken &amp; Inseln (nur Eigentümer)</strong></summary>
+        <p><strong>Verlauf:</strong> zeigt, wer wann was angelegt, geändert oder gelöscht hat, je Person und gesamt. <strong>Lücken &amp; Inseln</strong> (im Stammbaum) zeigt Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen.</p>
+      </details>
+    </div>
+
+    <div class="field-group hilfe-karte">
+      <h3>Rollen</h3>
+      <ul class="hilfe-liste">
+        <li><strong>Eigentümer:</strong> darf alles, auch löschen, Backups erstellen und wiederherstellen, den Verlauf sehen.</li>
+        <li><strong>Bearbeiter:</strong> darf Personen anlegen und ändern, Fotos und Aufnahmen hinzufügen und Verknüpfungen entfernen. Nicht erlaubt: Personen, Fotos und Sprachnotizen löschen, Backups.</li>
+        <li><strong>Leser:</strong> darf ansehen.</li>
+      </ul>
+    </div>
+
+    <div class="field-group hilfe-karte">
+      <h3>Handy, iPad und Konto</h3>
+      <ul class="hilfe-liste">
+        <li><strong>Als App auf den Home-Bildschirm:</strong> iPhone/iPad: in <em>Safari</em> auf Teilen, „Zum Home-Bildschirm“. Android: in <em>Chrome</em> Menü, „Zum Startbildschirm“. Öffnest du den Link aus WhatsApp, wähle zuerst „In Safari/Chrome öffnen“.</li>
+        <li><strong>Erstes Laden:</strong> Beim ersten Start auf einem Gerät lädt die App einmalig die Personen und Vorschaubilder. Ein Hinweis zeigt den Fortschritt. Danach geht es schnell.</li>
+        <li><strong>Mein Konto:</strong> Tippe oben auf deinen Namen. Dort änderst du dein Passwort (mindestens 10 Zeichen) und meldest dich ab. Hast du es vergessen, setzt es der Eigentümer neu.</li>
+      </ul>
+    </div>
+
+    <div class="field-group hilfe-karte">
+      <h3>Wenn etwas nicht klappt</h3>
+      <ul class="hilfe-liste">
+        <li>Eine Änderung fehlt scheinbar: In „Bestand“ auf <em>Aktualisieren</em> tippen und die Verbindung prüfen, bevor du etwas erneut eingibst.</li>
+        <li>„Keine Personen sichtbar“: Dein Konto ist vermutlich noch nicht freigeschaltet. Melde dich beim Eigentümer.</li>
+        <li>Bleibt es unklar: Im Bereich <em>Ersteingabe</em> ganz unten das <em>Technische Protokoll</em> öffnen, auf „Protokoll kopieren“ tippen und es dem Eigentümer schicken.</li>
+      </ul>
+    </div>
+
+    <div class="field-group hilfe-karte">
+      <h3>Tipps und Sicherheit</h3>
+      <ul class="hilfe-liste">
+        <li>Speichere nur Angaben, die du belegen kannst. Unsicheres lieber in die Notiz.</li>
+        <li>Prüfe bei Ehepartnern den Ledigenname und die Ehe- bzw. Lebensdaten.</li>
+        <li>Prüfe nach größeren Ergänzungen, ob Fotos und Familienbeziehungen richtig zugeordnet sind.</li>
+        <li>Die Inhalte sind vertraulich: keine Screenshots, Exporte oder Ausdrucke ohne Absprache weitergeben.</li>
+        <li>Das Backup erstellt der Eigentümer regelmäßig und bewahrt es getrennt vom Gerät auf.</li>
+      </ul>
+      <p class="hilfe-klein">Die verfügbaren Funktionen können sich je nach App-Version unterscheiden.</p>
     </div>
   </section>
 
@@ -895,7 +950,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=357"></script>
-<script src="app.js?v=357"></script>
+<script src="hinweise.js?v=359"></script>
+<script src="app.js?v=359"></script>
 </body>
 </html>

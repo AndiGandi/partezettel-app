@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 357
+// Partezettel Archiv – Version 359
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -3896,6 +3896,27 @@ function personViewAlter(person, bisDatum = null) {
   return `${person.geburtsdatum ? "" : "ca. "}${years} ${years === 1 ? "Jahr" : "Jahre"}`;
 }
 
+// v359: Lebenszeile der Personenansicht in verständlichem Wortlaut
+//  gestorben:           „02.04.1920 – 15.01.1990 · wurde 69 Jahre alt“
+//  vermutlich lebend:   „geboren 02.04.1961 · 65 Jahre alt“ (kein Hinweis auf ein fehlendes Sterbedatum)
+//  sehr alt, ohne Tod:  „geboren 1860 · Sterbedatum unbekannt“
+//  nur Tod bekannt:     „gestorben 15.01.1990“
+function personViewLebenszeile(person) {
+  const geb = person?.geburtsdatum || person?.geburtsjahr;
+  const tod = person?.sterbedatum || person?.sterbejahr;
+  const gebText = geb ? personViewDatum(geb) : "";
+  const todText = tod ? personViewDatum(tod) : "";
+  const alter = personViewAlter(person, person?.sterbedatum || (person?.sterbejahr ? `${person.sterbejahr}-12-31` : null));
+  if (geb && tod) return [`${gebText} – ${todText}`, alter ? `wurde ${alter} alt` : ""].filter(Boolean).join(" · ");
+  if (tod) return `gestorben ${todText}`;
+  if (geb) {
+    const gebJahr = Number(String(person.geburtsdatum || person.geburtsjahr).slice(0, 4));
+    if (Number.isFinite(gebJahr) && new Date().getFullYear() - gebJahr > 110) return `geboren ${gebText} · Sterbedatum unbekannt`;
+    return [`geboren ${gebText}`, alter ? `${alter} alt` : ""].filter(Boolean).join(" · ");
+  }
+  return "";
+}
+
 let currentPersonViewId = null;
 // ---------- v355: Rückkehr zum Gruppenfoto ----------
 // Öffnet man aus dem Gruppenfoto eine Person, führt das ✕ der Personenansicht wieder zurück in dasselbe Gruppenfoto
@@ -3948,14 +3969,7 @@ async function openPersonDetail(personId, options = {}) {
         personAudioPanel.textContent = `Sprachnotizen konnten nicht geladen werden: ${err?.message || err}`;
       });
     }
-    const birth = person.geburtsdatum || person.geburtsjahr;
-    const death = person.sterbedatum || person.sterbejahr;
-    const lifeParts = [birth ? personViewDatum(birth) : "", death ? personViewDatum(death) : ""].filter(Boolean);
-    const alter = personViewAlter(person, person.sterbedatum || (person.sterbejahr ? `${person.sterbejahr}-12-31` : null));
-    if (alter) lifeParts.push(death ? `† ${alter}` : `kein Sterbedatum erfasst · ${alter}`);
-    else if (death) lifeParts.push("verstorben");
-    else if (birth) lifeParts.push("kein Sterbedatum erfasst");
-    document.getElementById("pv-lifetime").textContent = lifeParts.join(" · ");
+    document.getElementById("pv-lifetime").textContent = personViewLebenszeile(person);
 
     const keyphoto = document.getElementById("pv-keyphoto");
     keyphoto.hidden = true; keyphoto.removeAttribute("src");
@@ -10281,7 +10295,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=357");
+      treeModul3D = await import("./tree3d.js?v=359");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
