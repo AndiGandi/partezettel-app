@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 359 -->
+    <!-- Version 360 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=359">
+<link rel="stylesheet" href="style.css?v=360">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 359</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 360</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -359,6 +359,7 @@
         <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft ermitteln</button>
         <button type="button" id="tree-cousins-open" class="btn btn--secondary tree-relationship-open">👥 Cousins &amp; Cousinen</button>
         <button type="button" id="tree-luecken-open" class="btn btn--secondary tree-relationship-open" data-rolle="eigentuemer">🧩 Lücken &amp; Inseln</button>
+        <button type="button" id="tree-plaus-open" class="btn btn--secondary tree-relationship-open" data-rolle="eigentuemer">✅ Plausibilität prüfen</button>
         <div class="tree-view-switch" role="tablist" aria-label="Stammbaumansicht">
           <button type="button" id="tree-view-classic" class="btn btn--secondary is-active" role="tab" aria-selected="true" title="Eltern, Geschwister, Partner und Kinder der gewählten Person">Familie</button>
           <button type="button" id="tree-view-cards" class="btn btn--secondary" role="tab" aria-selected="false" title="Übersicht nach Generationen">Generationen</button>
@@ -382,6 +383,13 @@
         <button type="button" id="tree-luecken-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
       </div>
       <div id="tree-luecken-result" class="tree-luecken-result" aria-live="polite"></div>
+    </div>
+    <div id="tree-plaus-panel" class="tree-relationship-panel" data-rolle="eigentuemer" hidden>
+      <div class="tree-relationship-panel__header">
+        <strong>Plausibilitätsprüfung</strong>
+        <button type="button" id="tree-plaus-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
+      </div>
+      <div id="tree-plaus-result" class="tree-luecken-result" aria-live="polite"></div>
     </div>
     <div id="tree-relationship-panel" class="tree-relationship-panel" hidden>
       <div class="tree-relationship-panel__header">
@@ -524,6 +532,7 @@
         <li><strong>Eltern:</strong> Auf ✎ tippen, Vater oder Mutter wählen und „Eltern speichern“ tippen.</li>
         <li><strong>Angaben zur Person</strong> (Name, Daten, Notiz, Links) speichert die Leiste unten. Sie erscheint erst, wenn du etwas geändert hast: „Nicht gespeicherte Änderungen“ mit <em>Verwerfen</em> und <em>Speichern</em>. Danach steht kurz „Gespeichert ✓“. Schließt du das Fenster vorher, fragt die App nach.</li>
         <li><strong>Löschen:</strong> Verknüpfungen (Partner, Kind, Eltern) kannst du mit dem Papierkorb entfernen. Personen, Fotos und Sprachnotizen löscht nur der Eigentümer.</li>
+        <li><strong>Plausibilitätsprüfung:</strong> Beim Speichern prüft die App, ob die Daten zusammenpassen. Eine Geburt nach dem Tod oder ein Datum in der Zukunft wird nicht gespeichert. Bei ungewöhnlichen Angaben (sehr hohes Alter, Mutter bei der Geburt zu jung oder zu alt, Kind nach dem Tod der Mutter) fragt die App nach, ob du trotzdem speichern willst.</li>
       </ul>
     </div>
 
@@ -950,7 +959,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=359"></script>
-<script src="app.js?v=359"></script>
+<script src="hinweise.js?v=360"></script>
+<script src="app.js?v=360"></script>
 </body>
 </html>

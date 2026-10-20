@@ -1,4 +1,4 @@
-// Partezettel Archiv – Version 359
+// Partezettel Archiv – Version 360
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -1867,6 +1867,16 @@ form.addEventListener("submit", async (e) => {
   if (!eintrag.vorname) {
     formMessage.textContent = "Bitte den Vornamen eintragen.";
     return;
+  }
+
+  // v360: Plausibilität der Lebensdaten (Fehler blockieren, Warnungen werden nachgefragt)
+  {
+    const befunde = plausLebensdaten(eintrag);
+    if (!(await plausFragen(befunde))) {
+      formMessage.textContent = `Nicht gespeichert: ${befunde.find((b) => b.stufe === "fehler")?.text || "bitte die Angaben prüfen."}`;
+      fokussiereFehlerFeld(document.getElementById("geburtsdatum-tag") || document.getElementById("vorname"));
+      return;
+    }
   }
 
   if (eintrag.erstverwandtschaftTyp !== "keine") {
@@ -4727,6 +4737,15 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     fokussiereFehlerFeld(document.getElementById("d-geschlecht"));
     return;
   }
+  // v360: Plausibilität der Lebensdaten und im Vergleich mit Eltern, Kindern und Partnern
+  {
+    const neu = plausFormPerson("d-");
+    const befunde = [...plausLebensdaten(neu), ...(await plausVerwandteDerPerson(currentDetailPersonId, neu))];
+    if (!(await plausFragen(befunde))) {
+      msg.textContent = `Nicht gespeichert: ${befunde.find((b) => b.stufe === "fehler")?.text || "bitte die Angaben prüfen."}`;
+      return;
+    }
+  }
   const { error } = await sb.from("personen").update({
     vorname,
     nachname,
@@ -7121,6 +7140,13 @@ document.getElementById("d-save-eltern-btn").addEventListener("click", async () 
   const vater = document.getElementById("d-vater").value || null;
   const mutter = document.getElementById("d-mutter").value || null;
 
+  // v360: Eltern gegen die Lebensdaten des Kindes prüfen
+  try {
+    const kindForm = { id: currentDetailPersonId, vorname: document.getElementById("d-vorname")?.value || "", nachname: document.getElementById("d-nachname")?.value || "", ...plausFormPerson("d-") };
+    const lookup = await plausLadePersonen([vater, mutter]);
+    const befunde = [vater, mutter].filter(Boolean).flatMap((id) => (lookup.has(id) ? plausElternKind(lookup.get(id), kindForm, "biologisch") : []));
+    if (!(await plausFragen(befunde))) { msg.textContent = "Nicht gespeichert."; return; }
+  } catch (err) { debugLog(`⚠️ Plausibilität (Eltern): ${err.message || err}`); }
   msg.textContent = "Speichere Eltern …";
   try {
     await speichereElternZuKind(currentDetailPersonId, vater, mutter);
@@ -7181,6 +7207,13 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
     }
     const beginn = getDatum("d-partner-beginn");
     const ende = getDatum("d-partner-ende");
+    // v360: Beginn und Ende gegen die Lebensdaten beider Partner prüfen
+    try {
+      const selbstForm = { id: currentDetailPersonId, vorname: document.getElementById("d-vorname")?.value || "", nachname: document.getElementById("d-nachname")?.value || "", ...plausFormPerson("d-") };
+      const lookup = await plausLadePersonen([partnerId]);
+      const befunde = lookup.has(partnerId) ? plausPartnerschaft({ beginn, ende, familientyp: typ }, selbstForm, lookup.get(partnerId)) : [];
+      if (!(await plausFragen(befunde))) { msg.textContent = "Nicht gespeichert."; return; }
+    } catch (err) { debugLog(`⚠️ Plausibilität (Partner): ${err.message || err}`); }
 
     const beziehungsDatensatz = {
       personen_a_id: currentDetailPersonId,
@@ -7272,6 +7305,13 @@ document.getElementById("d-add-kind-btn").addEventListener("click", async () => 
   const msg = document.getElementById("d-familie-message");
   const kindId = document.getElementById("d-kind-person").value;
   if (!kindId) { msg.textContent = "Bitte Kind auswählen."; return; }
+  // v360: Elternteil (diese Person) gegen die Lebensdaten des Kindes prüfen
+  try {
+    const elternForm = { id: currentDetailPersonId, vorname: document.getElementById("d-vorname")?.value || "", nachname: document.getElementById("d-nachname")?.value || "", ...plausFormPerson("d-") };
+    const lookup = await plausLadePersonen([kindId]);
+    const befunde = lookup.has(kindId) ? plausElternKind(elternForm, lookup.get(kindId), document.getElementById("d-kind-typ")?.value || "biologisch") : [];
+    if (!(await plausFragen(befunde))) { msg.textContent = "Nicht gespeichert."; return; }
+  } catch (err) { debugLog(`⚠️ Plausibilität (Kind): ${err.message || err}`); }
   try {
     let familie = null;
     const partnerFamilies = await sb.from("familien").select("*").or(`partner_a_id.eq.${currentDetailPersonId},partner_b_id.eq.${currentDetailPersonId}`);
@@ -9653,6 +9693,238 @@ function initTreeLueckenUI() {
 }
 initTreeLueckenUI();
 
+// ---------- v360: Plausibilitätsprüfung ----------
+// Prüft Lebensdaten, Eltern-Kind-Beziehungen und Partnerschaften. Es werden nur Widersprüche als „Fehler“ gemeldet, die
+// bei allen möglichen Datumswerten gelten (bei nur bekanntem Jahr gilt der ganze Zeitraum). Ungewöhnliches ist eine „Warnung“.
+const PLAUS = {
+  alterWarnung: 105, alterFehler: 122, elternMin: 14, mutterMaxWarnung: 50, mutterMaxFehler: 57, vaterMaxWarnung: 75,
+  heiratMin: 14, partnerAbstandWarnung: 35, vaterNachTodTage: 330
+};
+const PLAUS_JAHR = 365.25 * 24 * 3600 * 1000;
+
+function plausZeit(wert, jahr) {
+  const m = String(wert || "").match(/^(\d{4})(?:-(\d{2}))?(?:-(\d{2}))?/);
+  if (m) {
+    const y = Number(m[1]);
+    if (m[3]) { const t = Date.UTC(y, Number(m[2]) - 1, Number(m[3])); return { von: t, bis: t }; }
+    if (m[2]) return { von: Date.UTC(y, Number(m[2]) - 1, 1), bis: Date.UTC(y, Number(m[2]), 0) };
+    return { von: Date.UTC(y, 0, 1), bis: Date.UTC(y, 11, 31) };
+  }
+  const y = Number(jahr);
+  if (Number.isFinite(y) && y > 0) return { von: Date.UTC(y, 0, 1), bis: Date.UTC(y, 11, 31) };
+  return null;
+}
+const plausMitte = (z) => (z.von + z.bis) / 2;
+const plausGeb = (p) => plausZeit(p?.geburtsdatum, p?.geburtsjahr);
+const plausTod = (p) => plausZeit(p?.sterbedatum, p?.sterbejahr);
+const plausJ = (ms) => Math.round(ms / PLAUS_JAHR);
+function plausGeschlecht(p) {
+  const r = String(p?.geschlecht || "").trim().toLocaleLowerCase("de");
+  return r.startsWith("m") ? "m" : (r.startsWith("w") || r === "f") ? "w" : "u";
+}
+function plausDatumText(wert, jahr) { return wert ? personViewDatum(wert) : (jahr ? String(jahr) : ""); }
+function plausName(p) { return (typeof PersonSuche !== "undefined" ? PersonSuche.name(p) : [p?.vorname, p?.nachname].filter(Boolean).join(" ")) || "(ohne Namen)"; }
+const plausF = (stufe, text, personen = []) => ({ stufe, text, personen });
+
+function plausLebensdaten(p, heute = Date.now()) {
+  const f = [];
+  const g = plausGeb(p), t = plausTod(p);
+  if (g && g.von > heute) f.push(plausF("fehler", "Das Geburtsdatum liegt in der Zukunft."));
+  if (t && t.von > heute) f.push(plausF("fehler", "Das Sterbedatum liegt in der Zukunft."));
+  if (g && t && g.von > t.bis) {
+    f.push(plausF("fehler", `Die Geburt (${plausDatumText(p.geburtsdatum, p.geburtsjahr)}) liegt nach dem Tod (${plausDatumText(p.sterbedatum, p.sterbejahr)}).`));
+  } else if (g && t) {
+    const minAlter = (t.von - g.bis) / PLAUS_JAHR, mitte = (plausMitte(t) - plausMitte(g)) / PLAUS_JAHR;
+    if (minAlter > PLAUS.alterFehler) f.push(plausF("fehler", `Mit über ${PLAUS.alterFehler} Jahren gestorben: das ist nicht plausibel.`));
+    else if (minAlter > PLAUS.alterWarnung) f.push(plausF("warnung", `Das Alter beim Tod wäre ca. ${plausJ(mitte * PLAUS_JAHR)} Jahre. Das ist ungewöhnlich hoch, bitte prüfen.`));
+  } else if (g && !t) {
+    const minAlterHeute = (heute - g.bis) / PLAUS_JAHR;
+    if (minAlterHeute > PLAUS.alterFehler) f.push(plausF("hinweis", `Geboren vor über ${PLAUS.alterFehler} Jahren, aber ohne Sterbedatum: vermutlich verstorben.`));
+    else if (minAlterHeute > 110) f.push(plausF("hinweis", "Geboren vor über 110 Jahren, aber ohne Sterbedatum: vermutlich verstorben."));
+  }
+  return f;
+}
+
+// eltern/kind: Personenobjekte; typ: Beziehungsart („biologisch“ prüft zusätzlich das Alter)
+function plausElternKind(eltern, kind, typ = "biologisch") {
+  const f = [], ids = [eltern?.id, kind?.id].filter(Boolean);
+  const eg = plausGeb(eltern), kg = plausGeb(kind), et = plausTod(eltern);
+  const rolle = plausGeschlecht(eltern) === "w" ? "Mutter" : plausGeschlecht(eltern) === "m" ? "Vater" : "Elternteil";
+  const artikel = rolle === "Mutter" ? "Die" : rolle === "Vater" ? "Der" : "Der";
+  const nachTod = !!(et && kg && (rolle === "Mutter" ? kg.von > et.bis : (kg.von - et.bis) / 86400000 > PLAUS.vaterNachTodTage));
+  if (eg && kg) {
+    if (eg.von >= kg.bis) f.push(plausF("fehler", `${plausName(eltern)} (${plausDatumText(eltern.geburtsdatum, eltern.geburtsjahr)}) ist nicht älter als das Kind ${plausName(kind)} (${plausDatumText(kind.geburtsdatum, kind.geburtsjahr)}).`, ids));
+    else if ((!typ || typ === "biologisch") && !nachTod) {
+      const alter = (plausMitte(kg) - plausMitte(eg)) / PLAUS_JAHR;
+      const minAlter = (kg.von - eg.bis) / PLAUS_JAHR, maxAlter = (kg.bis - eg.von) / PLAUS_JAHR;
+      if (maxAlter < PLAUS.elternMin) f.push(plausF("warnung", `${artikel} ${rolle} wäre bei der Geburt von ${plausName(kind)} erst ca. ${plausJ(alter * PLAUS_JAHR)} Jahre alt.`, ids));
+      if (rolle === "Mutter") {
+        if (minAlter > PLAUS.mutterMaxFehler) f.push(plausF("fehler", `Die Mutter wäre bei der Geburt von ${plausName(kind)} über ${PLAUS.mutterMaxFehler} Jahre alt: das ist nicht plausibel.`, ids));
+        else if (minAlter > PLAUS.mutterMaxWarnung) f.push(plausF("warnung", `Die Mutter wäre bei der Geburt von ${plausName(kind)} ca. ${plausJ(alter * PLAUS_JAHR)} Jahre alt. Das ist ungewöhnlich, bitte prüfen.`, ids));
+      } else if (minAlter > PLAUS.vaterMaxWarnung) {
+        f.push(plausF("warnung", `${artikel} ${rolle} wäre bei der Geburt von ${plausName(kind)} ca. ${plausJ(alter * PLAUS_JAHR)} Jahre alt. Das ist ungewöhnlich, bitte prüfen.`, ids));
+      }
+    }
+  }
+  if (et && kg) {
+    if (rolle === "Mutter" && kg.von > et.bis) f.push(plausF("fehler", `${plausName(kind)} wurde nach dem Tod der Mutter geboren.`, ids));
+    else if (rolle !== "Mutter" && (kg.von - et.bis) / 86400000 > PLAUS.vaterNachTodTage) f.push(plausF("fehler", `${plausName(kind)} wurde mehr als 11 Monate nach dem Tod ${rolle === "Vater" ? "des Vaters" : "des Elternteils"} geboren.`, ids));
+  }
+  return f;
+}
+
+// fam: { beginn, ende }; a/b: Personenobjekte
+function plausPartnerschaft(fam, a, b) {
+  const f = [], ids = [a?.id, b?.id].filter(Boolean);
+  const beginn = plausZeit(fam?.beginn), ende = plausZeit(fam?.ende);
+  const art = String(fam?.familientyp || "Partnerschaft") === "Ehe" ? "Die Ehe" : "Die Partnerschaft";
+  if (beginn && ende && beginn.von > ende.bis) f.push(plausF("fehler", `${art} endet (${personViewDatum(fam.ende)}) vor ihrem Beginn (${personViewDatum(fam.beginn)}).`, ids));
+  for (const p of [a, b]) {
+    if (!p) continue;
+    const g = plausGeb(p), t = plausTod(p);
+    if (beginn && g) {
+      if (beginn.bis < g.von) f.push(plausF("fehler", `${art} beginnt (${personViewDatum(fam.beginn)}) vor der Geburt von ${plausName(p)}.`, ids));
+      else if ((plausMitte(beginn) - plausMitte(g)) / PLAUS_JAHR < PLAUS.heiratMin && (beginn.bis - g.von) / PLAUS_JAHR < PLAUS.heiratMin) f.push(plausF("warnung", `${plausName(p)} wäre bei Beginn ${art === "Die Ehe" ? "der Ehe" : "der Partnerschaft"} erst ca. ${plausJ(plausMitte(beginn) - plausMitte(g))} Jahre alt.`, ids));
+    }
+    if (beginn && t && beginn.von > t.bis) f.push(plausF("fehler", `${art} beginnt (${personViewDatum(fam.beginn)}) nach dem Tod von ${plausName(p)}.`, ids));
+  }
+  const ga = plausGeb(a), gb = plausGeb(b);
+  if (ga && gb && Math.abs(plausMitte(ga) - plausMitte(gb)) / PLAUS_JAHR > PLAUS.partnerAbstandWarnung) {
+    f.push(plausF("warnung", `Zwischen ${plausName(a)} und ${plausName(b)} liegen ca. ${plausJ(Math.abs(plausMitte(ga) - plausMitte(gb)))} Jahre. Das ist ungewöhnlich, bitte prüfen.`, ids));
+  }
+  return f;
+}
+
+// Fragt bei Warnungen nach und blockiert bei Fehlern. true = Speichern darf weitergehen.
+async function plausFragen(befunde, titel = "") {
+  const fehler = befunde.filter((b) => b.stufe === "fehler"), warnungen = befunde.filter((b) => b.stufe === "warnung");
+  const liste = (l) => l.map((b) => `• ${b.text}`).join("\n");
+  if (fehler.length) {
+    window.alert(`${titel ? `${titel}\n\n` : ""}Das kann so nicht stimmen:\n\n${liste(fehler)}\n\nBitte zuerst korrigieren.`);
+    return false;
+  }
+  if (warnungen.length) return window.confirm(`${titel ? `${titel}\n\n` : ""}Bitte prüfen:\n\n${liste(warnungen)}\n\nTrotzdem speichern?`);
+  return true;
+}
+
+function plausFormPerson(prefix) {
+  const jahr = (id) => { const v = document.getElementById(id)?.value?.trim(); return v ? Number(v) : null; };
+  const gd = getDatum(`${prefix}geburtsdatum`), sd = getDatum(`${prefix}sterbedatum`);
+  return {
+    geburtsdatum: gd, geburtsjahr: gd ? null : jahr(`${prefix}geburtsjahr`),
+    sterbedatum: sd, sterbejahr: sd ? null : jahr(`${prefix}sterbejahr`),
+    geschlecht: document.getElementById(`${prefix}geschlecht`)?.value || ""
+  };
+}
+
+async function plausLadePersonen(ids) {
+  const eindeutig = [...new Set(ids.filter(Boolean))];
+  if (!eindeutig.length) return new Map();
+  const { data } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", eindeutig);
+  return new Map((data || []).map((p) => [p.id, p]));
+}
+
+// Prüft die neuen Lebensdaten einer vorhandenen Person gegen ihre Eltern, Kinder und Partner (Fehler beim Laden werden ignoriert)
+async function plausVerwandteDerPerson(personId, neu) {
+  const befunde = [];
+  try {
+    const selbst = { id: personId, vorname: document.getElementById("d-vorname")?.value || "", nachname: document.getElementById("d-nachname")?.value || "", ...neu };
+    const [{ data: alsKind }, { data: partnerFamilien }] = await Promise.all([
+      sb.from("familien_kinder").select("familie_id, beziehungstyp").eq("kind_id", personId),
+      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`)
+    ]);
+    const elternFamilienIds = (alsKind || []).map((k) => k.familie_id);
+    const eigeneIds = (partnerFamilien || []).map((f) => f.id);
+    const [elternFamilien, eigeneKinder] = await Promise.all([
+      elternFamilienIds.length ? sb.from("familien").select("id, partner_a_id, partner_b_id").in("id", elternFamilienIds) : { data: [] },
+      eigeneIds.length ? sb.from("familien_kinder").select("familie_id, kind_id, beziehungstyp").in("familie_id", eigeneIds) : { data: [] }
+    ]);
+    const ids = [];
+    for (const f of elternFamilien.data || []) ids.push(f.partner_a_id, f.partner_b_id);
+    for (const f of partnerFamilien || []) ids.push(f.partner_a_id, f.partner_b_id);
+    for (const k of eigeneKinder.data || []) ids.push(k.kind_id);
+    const lookup = await plausLadePersonen(ids);
+    for (const k of alsKind || []) {
+      const fam = (elternFamilien.data || []).find((f) => f.id === k.familie_id);
+      for (const eid of [fam?.partner_a_id, fam?.partner_b_id].filter(Boolean)) if (lookup.has(eid)) befunde.push(...plausElternKind(lookup.get(eid), selbst, k.beziehungstyp));
+    }
+    for (const k of eigeneKinder.data || []) {
+      if (lookup.has(k.kind_id)) befunde.push(...plausElternKind(selbst, lookup.get(k.kind_id), k.beziehungstyp));
+    }
+    for (const f of partnerFamilien || []) {
+      const andere = f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id;
+      if (andere && lookup.has(andere)) befunde.push(...plausPartnerschaft(f, selbst, lookup.get(andere)));
+    }
+  } catch (err) {
+    debugLog(`⚠️ Plausibilität (Verwandte): ${err.message || err}`);
+  }
+  // doppelte Meldungen entfernen
+  const gesehen = new Set();
+  return befunde.filter((b) => { const k = `${b.stufe}|${b.text}`; if (gesehen.has(k)) return false; gesehen.add(k); return true; });
+}
+
+// ---- Bericht über alle Daten (nur Eigentümer) ----
+function plausBerichtAnalyse() {
+  const personen = treeData.personen, byId = new Map(personen.map((p) => [p.id, p]));
+  const befunde = [];
+  for (const p of personen) for (const b of plausLebensdaten(p)) befunde.push({ ...b, personen: [p.id], text: `${plausName(p)}: ${b.text}` });
+  const famPersonen = new Map();
+  for (const f of treeData.familien) {
+    const ps = [f.partner_a_id, f.partner_b_id].filter((id) => byId.has(id));
+    famPersonen.set(f.id, ps.map((id) => byId.get(id)));
+    if (ps.length === 2) befunde.push(...plausPartnerschaft(f, byId.get(ps[0]), byId.get(ps[1])));
+  }
+  for (const k of treeData.kinder) {
+    const kind = byId.get(k.kind_id);
+    if (!kind) continue;
+    for (const e of famPersonen.get(k.familie_id) || []) befunde.push(...plausElternKind(e, kind, k.beziehungstyp));
+  }
+  const gesehen = new Set();
+  const eindeutig = befunde.filter((b) => { const k = `${b.stufe}|${b.text}`; if (gesehen.has(k)) return false; gesehen.add(k); return true; });
+  const rang = { fehler: 0, warnung: 1, hinweis: 2 };
+  eindeutig.sort((x, y) => rang[x.stufe] - rang[y.stufe]);
+  return { befunde: eindeutig, geprueft: personen.length };
+}
+
+function plausBerichtRender(erg) {
+  const ziel = document.getElementById("tree-plaus-result");
+  if (!ziel) return;
+  const zahl = (stufe) => erg.befunde.filter((b) => b.stufe === stufe).length;
+  const kachel = (n, t) => `<div class="tree-luecken__zahl"><b>${n}</b><span>${t}</span></div>`;
+  const stufenText = { fehler: "Fehler", warnung: "Warnung", hinweis: "Hinweis" };
+  const zeilen = erg.befunde.slice(0, 300).map((b) => {
+    const knoepfe = (b.personen || []).map((id) => `<button type="button" class="tree-luecken__person" data-plaus-person="${escTree(id)}">${escTree(treePersonLabel(id))}</button>`).join(" · ");
+    return `<li class="plaus-eintrag plaus-eintrag--${b.stufe}"><span class="plaus-tag plaus-tag--${b.stufe}">${stufenText[b.stufe]}</span> ${escTree(b.text)}${knoepfe ? `<div class="tree-luecken__zeilen">${knoepfe}</div>` : ""}</li>`;
+  }).join("");
+  const mehr = erg.befunde.length > 300 ? `<p class="tree-cousins__hint">Es werden die ersten 300 von ${erg.befunde.length} Meldungen angezeigt.</p>` : "";
+  ziel.innerHTML = `<div class="tree-luecken__zahlen">${kachel(zahl("fehler"), "Fehler")}${kachel(zahl("warnung"), "Warnungen")}${kachel(zahl("hinweis"), "Hinweise")}${kachel(erg.geprueft, "Personen geprüft")}</div>
+    <p class="tree-cousins__hint">Fehler sind Widersprüche (zum Beispiel Geburt nach dem Tod). Warnungen sind ungewöhnlich, können aber stimmen. Bei nur bekanntem Jahr wird der ganze Zeitraum berücksichtigt. Es wird nichts verändert.</p>
+    ${erg.befunde.length ? `<ul class="tree-luecken__liste tree-luecken__liste--karte">${zeilen}</ul>${mehr}` : `<p class="tree-cousins__hint">Keine Auffälligkeiten gefunden. ✓</p>`}`;
+}
+
+async function plausBerichtOeffnen() {
+  if (!rolleIstEigentuemer()) return;
+  const panel = document.getElementById("tree-plaus-panel"), ziel = document.getElementById("tree-plaus-result");
+  if (!panel || !ziel) return;
+  ["tree-cousins-panel", "tree-luecken-panel"].forEach((id) => document.getElementById(id)?.setAttribute("hidden", ""));
+  panel.hidden = false;
+  ziel.textContent = "Wird geprüft …";
+  try {
+    await loadStammbaumData();
+    plausBerichtRender(plausBerichtAnalyse());
+    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  } catch (err) { ziel.textContent = `Prüfung nicht möglich: ${err.message || err}`; }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("tree-plaus-open")?.addEventListener("click", () => { void plausBerichtOeffnen(); });
+  document.getElementById("tree-plaus-close")?.addEventListener("click", () => { document.getElementById("tree-plaus-panel").hidden = true; });
+  document.getElementById("tree-plaus-result")?.addEventListener("click", (e) => {
+    const k = e.target.closest("[data-plaus-person]");
+    if (k) void openPersonDetail(k.getAttribute("data-plaus-person"));
+  });
+});
+
 // ---------- v335: Verwandtschaft – Personenfelder mit Sucheingabe statt langer Auswahlliste ----------
 const treeRelationSides = {};
 function treeRelationGet(key) {
@@ -10295,7 +10567,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=359");
+      treeModul3D = await import("./tree3d.js?v=360");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

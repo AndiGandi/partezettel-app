@@ -1854,3 +1854,28 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
   #detail-overlay .familie-edit-fields .date-parts{width:100%;grid-template-columns:minmax(3.4rem,1fr) minmax(4.6rem,1.5fr) minmax(4.2rem,1.2fr)}
   #detail-overlay .familie-edit-fields .familie-typ-edit{width:100%;max-width:none}
 }
+
+/* Familienspuren v358 – Hilfe */
+.hilfe-karte{padding:1rem 1.05rem;border-radius:14px;margin-bottom:.9rem}
+.hilfe-karte h2{margin:0 0 .4rem}
+.hilfe-karte h3{margin:0 0 .5rem;font-family:Georgia,"Iowan Old Style","Times New Roman",serif;color:#174f3b}
+.hilfe-karte--hell{background:#f3f7f1;border-color:#cbdacb}
+.hilfe-knoepfe{display:grid;gap:.55rem;margin:.6rem 0 0}
+.hilfe-knoepfe .btn{display:block;text-align:center;text-decoration:none}
+.hilfe-schritte{margin:.3rem 0 .6rem;padding-left:1.35rem;line-height:1.55}
+.hilfe-schritte li{margin:.35rem 0}
+.hilfe-liste{margin:.3rem 0 .4rem;padding-left:1.15rem;line-height:1.55}
+.hilfe-liste li{margin:.4rem 0}
+.hilfe-tipp{margin-top:.7rem;padding:.7rem .85rem;border-radius:12px;background:#fff;border:1px solid #dbe5da}
+.hilfe-tipp ul{margin:.35rem 0 0;padding-left:1.1rem;line-height:1.5}
+.hilfe-karte details{padding:.55rem 0;border-bottom:1px solid #e3e9e1}
+.hilfe-karte details:last-of-type{border-bottom:0}
+.hilfe-karte details>summary{cursor:pointer;color:#24583f}
+.hilfe-klein{font-size:.78rem;color:#80897f}
+
+/* Familienspuren v360 – Plausibilitätsprüfung */
+.plaus-eintrag{padding:.45rem 0}
+.plaus-tag{display:inline-block;margin-right:.4rem;padding:.1rem .5rem;border-radius:999px;font-size:.72rem;font-weight:700;letter-spacing:.2px}
+.plaus-tag--fehler{background:#f6dcd7;color:#8a2b1f}
+.plaus-tag--warnung{background:#f8ecd0;color:#7a5a12}
+.plaus-tag--hinweis{background:#e3ecf5;color:#2d4f73}
