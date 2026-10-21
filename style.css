@@ -1909,3 +1909,7 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .imp-kandidat { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem; align-items: center; border-top: 1px dashed #d9d3c3; padding-top: .5rem; }
 .imp-kandidat > div:first-child { display: grid; }
 .imp-kandidat.is-gewaehlt { background: #edf1e9; border-radius: 8px; padding: .4rem; }
+.imp-liste { margin: .4rem 0 0; padding-left: 1.1rem; font-size: .88rem; display: grid; gap: .15rem; }
+.imp-bereich details summary { cursor: pointer; font-weight: 600; padding: .3rem 0; }
+.pv-herkunft { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: center; font-size: .85rem; color: #5d5a50; margin: .3rem 0 0; }
+.pv-herkunft[hidden] { display: none; }
