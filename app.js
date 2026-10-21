@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 360
+// Partezettel Archiv – Version 361
+// v361: Trauungsbuch-Quelle einer Ehe lässt sich entfernen (Feld leeren + speichern); alte Personenfelder gelten nur eindeutig für eine Ehe; keine Doppelzeile in „Kirchenbücher“.
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
 // v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
@@ -4021,6 +4022,9 @@ async function openPersonDetail(personId, options = {}) {
       const link = document.createElement("a"); link.href = String(url).trim(); link.target = "_blank"; link.rel = "noopener noreferrer";
       link.textContent = `📖 ${label} öffnen`;
       row.appendChild(link);
+      // v361: alte Trauungsbuch-Zeile der Person markieren, damit sie entfällt,
+      // sobald dieselbe Quelle bei einer Ehe hinterlegt ist.
+      if (label === "Trauungsbuch") row.dataset.altTrauung = trauungsUrlSchluessel(url);
       if (line !== null && line !== undefined && String(line).trim() !== "") {
         const lineText = document.createElement("span"); lineText.className = "person-view-book-line"; lineText.textContent = `Zeile ${line}`; row.appendChild(lineText);
       }
@@ -4070,6 +4074,10 @@ async function openPersonDetail(personId, options = {}) {
           const lineLabel = line !== null && line !== undefined && String(line).trim() !== "" ? `Zeile ${line}` : "";
           const key = `${new URL(url, window.location.href).href}|${lineLabel}`;
           if (bereitsAngezeigt.has(key)) continue;
+          // v361: gleiche Seite wie die alte Personen-Quelle → alte Zeile ausblenden (Doppel vermeiden)
+          booksList.querySelectorAll("[data-alt-trauung]").forEach(alt => {
+            if (alt.dataset.altTrauung === trauungsUrlSchluessel(url)) alt.remove();
+          });
 
           const row = document.createElement("div");
           row.className = "person-view-book-row";
@@ -6361,6 +6369,48 @@ document.addEventListener("DOMContentLoaded", () => {
     .observe(famMsg, { childList: true, characterData: true, subtree: true });
 });
 
+// v361: Trauungsbuch-Quellen – Hilfsfunktionen
+function trauungsUrlSchluessel(url) {
+  try { return new URL(String(url || "").trim(), window.location.href).href; } catch { return String(url || "").trim(); }
+}
+// Alte Personenfelder (trauungsbuch_link) gelten nur dann für eine Ehe, wenn es eindeutig ist:
+// beide Partner haben denselben Link, oder nur einer hat einen Link und hat genau eine Partnerschaft.
+async function eindeutigeAlteTrauungsQuelle(personenListe) {
+  const mitLink = personenListe.filter(p => String(p.trauungsbuch_link || "").trim());
+  if (!mitLink.length) return null;
+  if (mitLink.length === 2) {
+    return trauungsUrlSchluessel(mitLink[0].trauungsbuch_link) === trauungsUrlSchluessel(mitLink[1].trauungsbuch_link) ? mitLink[0] : null;
+  }
+  const p = mitLink[0];
+  try {
+    const { data, error } = await sb.from("familien").select("id, familientyp, partner_a_id, partner_b_id")
+      .or(`partner_a_id.eq.${p.id},partner_b_id.eq.${p.id}`);
+    if (error) throw error;
+    const ehen = (data || []).filter(x => x.partner_a_id && x.partner_b_id && x.familientyp !== "Eltern");
+    return ehen.length === 1 ? p : null;
+  } catch (err) {
+    debugLog(`⚠️ Alte Trauungsbuchquelle prüfen: ${err.message || err}`);
+    return null;
+  }
+}
+// Entfernt die Quelle einer Ehe. Stammte die Anzeige aus den alten Personenfeldern,
+// werden diese bei beiden Partnern geleert (nur wenn sie genau diesen Link enthalten).
+async function entferneTrauungsQuelle(familieId, url, personIds, ausAltfeldern) {
+  const schluessel = trauungsUrlSchluessel(url);
+  if (!ausAltfeldern) {
+    const { error } = await sb.from("familien_trauungsbuch_quellen").delete().eq("familie_id", familieId);
+    return error ? error.message : null;
+  }
+  const { data: leute, error: e2 } = await sb.from("personen").select("id, trauungsbuch_link").in("id", personIds.filter(Boolean));
+  if (e2) return e2.message;
+  for (const p of leute || []) {
+    if (trauungsUrlSchluessel(p.trauungsbuch_link) !== schluessel) continue;
+    const { error: e3 } = await sb.from("personen").update({ trauungsbuch_link: null, trauungsbuch_zeile: null }).eq("id", p.id);
+    if (e3) return e3.message;
+  }
+  return null;
+}
+
 async function loadDetailFamilie(personId) {
   const parentSelectVater = document.getElementById("d-vater");
   const parentSelectMutter = document.getElementById("d-mutter");
@@ -6533,7 +6583,7 @@ async function loadDetailFamilie(personId) {
             <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
           </div>
           <div class="familie-auto-ende"></div>
-          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span><button type="button" class="source-edit-btn familie-source-edit" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button><div class="familie-source-editor" hidden><input type="url" class="familie-source-url" placeholder="https://…" aria-label="Trauungsbuch-URL"><label>Zeile <input type="number" class="familie-source-row" min="1" placeholder="–"></label><button type="button" class="btn btn--secondary familie-source-save">Quelle speichern</button></div></div>
+          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span><button type="button" class="source-edit-btn familie-source-edit" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button><div class="familie-source-editor" hidden><input type="url" class="familie-source-url" placeholder="https://…" aria-label="Trauungsbuch-URL"><label>Zeile <input type="number" class="familie-source-row" min="1" placeholder="–"></label><button type="button" class="btn btn--secondary familie-source-save">Quelle speichern</button><small class="familie-source-hint">Feld leeren und speichern entfernt den Link.</small></div></div>
           <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
         </div>
       </div>`;
@@ -6624,8 +6674,9 @@ async function loadDetailFamilie(personId) {
           .select("id, vorname, nachname, trauungsbuch_link, trauungsbuch_zeile")
           .in("id", [personId, otherId]);
         if (quellenError) throw quellenError;
-        const legacyQuelle = (quellenPersonen || []).find(p => String(p.trauungsbuch_link || "").trim());
+        const legacyQuelle = await eindeutigeAlteTrauungsQuelle(quellenPersonen || []);
         if (legacyQuelle) eheQuelle = {
+          alt: true,
           familie_id: f.id,
           trauungsbuch_link: legacyQuelle.trauungsbuch_link || "",
           trauungsbuch_zeile: legacyQuelle.trauungsbuch_zeile || null
@@ -6667,9 +6718,18 @@ async function loadDetailFamilie(personId) {
         sourceRowInput.focus();
         return;
       }
+      if (!url) {
+        // v361: leeres Feld = Quelle dieser Ehe entfernen (vorher wurde der alte Link behalten)
+        if (!eheQuelle?.trauungsbuch_link) { sourceEditor.hidden = true; return; }
+        if (!confirm("Trauungsbuch-Link dieser Ehe entfernen?")) return;
+        const fehler = await entferneTrauungsQuelle(f.id, eheQuelle.trauungsbuch_link, [personId, otherId], !!eheQuelle.alt);
+        if (fehler) { alert(`Trauungsbuch-Quelle konnte nicht entfernt werden: ${fehler}`); return; }
+        await loadDetailFamilie(currentDetailPersonId);
+        return;
+      }
       const updateDaten = {
         familie_id: f.id,
-        trauungsbuch_link: url || eheQuelle?.trauungsbuch_link || null,
+        trauungsbuch_link: url,
         trauungsbuch_zeile: row,
         geaendert_am: new Date().toISOString()
       };
@@ -10567,7 +10627,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=360");
+      treeModul3D = await import("./tree3d.js?v=361");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

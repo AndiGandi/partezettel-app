@@ -1879,3 +1879,4 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .plaus-tag--fehler{background:#f6dcd7;color:#8a2b1f}
 .plaus-tag--warnung{background:#f8ecd0;color:#7a5a12}
 .plaus-tag--hinweis{background:#e3ecf5;color:#2d4f73}
+.familie-source-hint { color: var(--muted, #6b6b6b); font-size: .8rem; }
