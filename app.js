@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 363
+// Partezettel Archiv – Version 365
+// v365: Prüf-Punkt (orange = ungeprüft, grün = geprüft) bei importierten Personen in Liste, Personenansicht und Stammbaum; Filter „Anzeigen“ im Bestand.
+// v364: Lebensalter/Ehedauer unter 1 Jahr in Monaten, unter 1 Monat in Tagen (nie „0 Jahre“); nach Import/Rückgängig vollständig neu laden.
 // v363: Hausblätter-Import Stufe 2: Vorschau, Import (Personen, Familien, Häuser, Stationen) mit Import-Kennung, „Rückgängig“; Vermerk „aus Hausblatt · ungeprüft“; Backup enthält Häuser/Stationen/Importe.
 // v362: Hausblätter-Import Stufe 1 (Export / Sicherung, nur Eigentümer): Import-Datei laden, Abweichungen entscheiden, „Gleiche Person?“ bestätigen.
 // v361: Trauungsbuch-Quelle einer Ehe lässt sich entfernen (Feld leeren + speichern); alte Personenfelder gelten nur eindeutig für eine Ehe; keine Doppelzeile in „Kirchenbücher“.
@@ -2267,6 +2269,22 @@ function sortierJahr(person, feld) {
   if (feld === "sterbejahr") return person.sterbedatum ? Number(String(person.sterbedatum).slice(0,4)) : (person.sterbejahr ? Number(person.sterbejahr) : null);
   return null;
 }
+// v364: Dauer verständlich anzeigen – ab 1 Jahr in Jahren, darunter in Monaten, darunter in Tagen (nie „0 Jahre“).
+// exakt = beide Daten taggenau bekannt; sonst „ca. N Jahre“ bzw. „unter 1 Jahr“.
+function dauerText(start, ende, exakt = true) {
+  if (!(start instanceof Date) || !(ende instanceof Date) || Number.isNaN(start.getTime()) || Number.isNaN(ende.getTime()) || ende < start) return "";
+  const vorTag = (a, b) => a.getMonth() < b.getMonth() || (a.getMonth() === b.getMonth() && a.getDate() < b.getDate());
+  let j = ende.getFullYear() - start.getFullYear();
+  if (vorTag(ende, start)) j--;
+  if (j >= 1) return `${exakt ? "" : "ca. "}${j} ${j === 1 ? "Jahr" : "Jahre"}`;
+  if (!exakt) return "unter 1 Jahr";
+  let m = (ende.getFullYear() - start.getFullYear()) * 12 + ende.getMonth() - start.getMonth();
+  if (ende.getDate() < start.getDate()) m--;
+  if (m >= 1) return `${m} ${m === 1 ? "Monat" : "Monate"}`;
+  const t = Math.round((Date.UTC(ende.getFullYear(), ende.getMonth(), ende.getDate()) - Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())) / 86400000);
+  if (t >= 1) return `${t} ${t === 1 ? "Tag" : "Tage"}`;
+  return "unter 1 Tag";
+}
 function lebensalterInTagen(person) {
   if (!person?.geburtsdatum && !person?.geburtsjahr) return null;
   const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T00:00:00`);
@@ -2305,9 +2323,10 @@ function lebensalterSortierungInTagen(person) {
 function lebensalterAnzeige(person) {
   const tage = lebensalterInTagen(person);
   if (tage === null) return "";
+  const exakt = !!(person.geburtsdatum && person.sterbedatum);
+  if (exakt) return dauerText(new Date(`${person.geburtsdatum}T00:00:00`), new Date(`${person.sterbedatum}T00:00:00`), true);
   const jahre = Math.floor(tage / 365.2425);
-  const nurSterbejahr = !person.sterbedatum && !!person.sterbejahr;
-  return `${nurSterbejahr ? "ca. " : ""}${jahre} Jahre`;
+  return jahre >= 1 ? `ca. ${jahre} ${jahre === 1 ? "Jahr" : "Jahre"}` : "unter 1 Jahr";
 }
 function sortierNachnameSchluessel(p) {
   return PersonSuche.sortSchluessel(p);
@@ -2497,7 +2516,8 @@ function ehejahreAnzeige(familie, lookup = personenCache, allePartnerschaften = 
         const startJahr = Number(beginn.slice(0, 4));
         const endeJahr = Number(tod.jahr);
         if (Number.isFinite(startJahr) && Number.isFinite(endeJahr) && endeJahr >= startJahr) {
-          return `${endeJahr - startJahr} Jahre`;
+          const d = endeJahr - startJahr;
+          return d >= 1 ? `${d} ${d === 1 ? "Jahr" : "Jahre"}` : "unter 1 Jahr";
         }
         return "";
       }
@@ -2513,7 +2533,7 @@ function ehejahreAnzeige(familie, lookup = personenCache, allePartnerschaften = 
   const monatsTagEnde = end.getMonth() * 100 + end.getDate();
   const monatsTagStart = start.getMonth() * 100 + start.getDate();
   if (monatsTagEnde < monatsTagStart) jahre--;
-  return jahre >= 0 ? `${jahre} Jahre` : "";
+  return jahre >= 0 ? dauerText(start, end, true) : "";
 }
 
 function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
@@ -2800,6 +2820,38 @@ async function ladeFamilienAusSupabaseFuerSync() {
   baueAuswahlCachesAusSyncDaten();
 }
 
+// v365: Prüf-Kennzeichen. Personen aus einem Import tragen herkunft_quelle; geprueft_am zeigt, ob schon geprüft.
+// Fehlen die Spalten (Paket 3 nicht eingespielt), wird ohne sie weitergearbeitet.
+let pruefSpaltenVorhanden = true;
+const mitPruefSpalten = (basis) => pruefSpaltenVorhanden ? `${basis}, herkunft_quelle, geprueft_am` : basis;
+function istPruefSpaltenFehler(error) {
+  return pruefSpaltenVorhanden && /herkunft_quelle|geprueft_am|42703/i.test(`${error?.code || ""} ${error?.message || ""}`);
+}
+async function personenMitPruefSpalten(basis, bau) {
+  let r = await bau(mitPruefSpalten(basis));
+  if (r.error && istPruefSpaltenFehler(r.error)) {
+    pruefSpaltenVorhanden = false;
+    debugLog("ℹ️ Prüf-Kennzeichen nicht verfügbar (Spalten fehlen), Personen werden ohne geladen.");
+    r = await bau(basis);
+  }
+  return r;
+}
+// Kleiner Punkt: Bernstein = ungeprüft, Grün = geprüft; Personen ohne Import-Herkunft erhalten keinen Punkt.
+function pruefPunkt(p) {
+  if (!p?.herkunft_quelle) return null;
+  const s = document.createElement("span");
+  s.className = `pruef-punkt ${p.geprueft_am ? "is-geprueft" : "is-offen"}`;
+  s.title = `${p.geprueft_am ? "geprüft" : "ungeprüft"} · aus ${p.herkunft_quelle}`;
+  s.setAttribute("role", "img");
+  s.setAttribute("aria-label", s.title);
+  return s;
+}
+function pruefPunktHtml(p) {
+  if (!p?.herkunft_quelle) return "";
+  const t = `${p.geprueft_am ? "geprüft" : "ungeprüft"} · aus ${p.herkunft_quelle}`;
+  return `<span class="pruef-punkt ${p.geprueft_am ? "is-geprueft" : "is-offen"}" role="img" title="${escapeHtml(t)}" aria-label="${escapeHtml(t)}"></span>`;
+}
+
 async function synchronisierePersonenDelta() {
   if (!personenCacheGeladen || !personenCacheSyncInitialisiert) return false;
   if (syncPruefungSeitCacheLaden) return false;
@@ -2851,9 +2903,9 @@ async function synchronisierePersonenDelta() {
     }
 
     if (zuLadendePersonen.length) {
-      const { data, error } = await sb.from("personen")
-        .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
-        .in("id", [...new Set(zuLadendePersonen)]);
+      const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => sb.from("personen")
+        .select(sp)
+        .in("id", [...new Set(zuLadendePersonen)]));
       if (error) throw error;
       const byId = new Map(personenCache.map(p => [p.id, p]));
       for (const person of data || []) byId.set(person.id, person);
@@ -3091,7 +3143,9 @@ async function loadPersonen(force = false) {
   if (!force) {
     const lokalGeladen = await ladePersonenAusPersistentemCache();
     ersteLadung = !lokalGeladen;
-    if (lokalGeladen && personenCacheSyncInitialisiert) {
+    const cacheOhnePruefFelder = lokalGeladen && pruefSpaltenVorhanden && personenCache.length > 0 && !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geprueft_am"));
+    if (cacheOhnePruefFelder) debugLog("ℹ️ Cache ohne Prüf-Kennzeichen: einmalige vollständige Aktualisierung.");
+    if (lokalGeladen && personenCacheSyncInitialisiert && !cacheOhnePruefFelder) {
       try {
         await synchronisierePersonenDelta();
       } catch (syncErr) {
@@ -3114,10 +3168,10 @@ async function loadPersonen(force = false) {
     aktualisiereEgressMessung();
     ladeHinweisStart(ersteLadung && !force);
     ladeHinweisSchritt("Personen werden abgerufen");
-    const { data, error } = await sb
+    const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => sb
       .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am")
-      .order("nachname", { ascending: true });
+      .select(sp)
+      .order("nachname", { ascending: true }));
 
     if (error) throw error;
 
@@ -3472,6 +3526,8 @@ function aktualisierePersonenKarte(karte, p) {
   karte.person = p;
   karte.li.dataset.personId = p.id;
   karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
+  const punkt = pruefPunkt(p);
+  if (punkt) karte.name.prepend(punkt);
   const kartenLedigenname = String(p.Ledigenname || p.ledigenname || "").trim();
   if (kartenLedigenname) {
     const maiden = document.createElement("span");
@@ -3679,6 +3735,8 @@ async function renderPersonenList(personen) {
     if (karte) fragment.appendChild(karte.li);
   }
   list.appendChild(fragment);
+  const filterFeld = document.getElementById("personen-pruef-filter-feld");
+  if (filterFeld) filterFeld.hidden = !personenCache.some((x) => x.herkunft_quelle);
   beobachteSchluesselfotos();
   // Trefferzähler („272 Personen“) nach jedem Neuaufbau der Liste aktualisieren.
   if (typeof window.partezettelPersonenSuche === "function") {
@@ -3688,6 +3746,10 @@ async function renderPersonenList(personen) {
 
 
 const personenSortSelect=document.getElementById("personen-sortierung");
+document.getElementById("personen-pruef-filter")?.addEventListener("change", (e) => {
+  personenPruefFilter = e.target.value || "";
+  window.partezettelPersonenSuche?.(document.getElementById("search-input")?.value || "");
+});
 const personenSortButton=document.getElementById("personen-sort-richtung");
 
 // ---------- Robuste lokale Namenssuche ----------
@@ -3710,6 +3772,13 @@ function personenSuchTreffer(person, suchwert, extra = "") {
   return PersonSuche.trifft(person || {}, suchwert, extra);
 }
 
+// v365: Filter „aus Hausblatt · ungeprüft / geprüft“ im Bestand
+let personenPruefFilter = "";
+function pruefFilterPasst(p) {
+  if (personenPruefFilter === "offen") return !!p.herkunft_quelle && !p.geprueft_am;
+  if (personenPruefFilter === "geprueft") return !!p.herkunft_quelle && !!p.geprueft_am;
+  return true;
+}
 function wendePersonenSucheAn(suchwert) {
   const q = normalizePersonenSuchtext(suchwert);
   const tokens = q ? q.split(" ").filter(Boolean) : [];
@@ -3741,7 +3810,7 @@ function wendePersonenSucheAn(suchwert) {
     // Mehrwortsuche: Jeder Suchbegriff muss als Teilstring im gemeinsamen
     // Namens-Suchraum vorkommen. Dadurch ist die Reihenfolge egal:
     // "Ganahl Alois" findet "Alois Ganahl" und umgekehrt.
-    const sichtbar = tokens.length === 0 || personenSuchTreffer(p, q);
+    const sichtbar = (tokens.length === 0 || personenSuchTreffer(p, q)) && pruefFilterPasst(p);
     karte.li.hidden = !sichtbar;
     if (sichtbar) treffer++;
   }
@@ -3749,13 +3818,14 @@ function wendePersonenSucheAn(suchwert) {
   if (empty) {
     empty.textContent = treffer
       ? ""
-      : `Keine Person für „${suchwert || q}“ gefunden.`;
+      : (q ? `Keine Person für „${suchwert || q}“ gefunden.` : "Keine Personen für diesen Filter.");
     empty.hidden = treffer > 0;
   }
   if (list) list.setAttribute("data-suchtreffer", String(treffer));
 
   const status = document.getElementById("personen-suchtreffer");
-  if (status) status.textContent = q ? `${treffer} Treffer` : `${treffer} Personen`;
+  const filterText = personenPruefFilter === "offen" ? " ungeprüft" : personenPruefFilter === "geprueft" ? " geprüft" : "";
+  if (status) status.textContent = q ? `${treffer} Treffer${filterText}` : `${treffer} Personen${filterText}`;
   return true;
 }
 
@@ -3896,7 +3966,7 @@ function personViewDatum(value) {
   return new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
-function personViewAlter(person, bisDatum = null) {
+function personViewAlter(person, bisDatum = null, endeExakt = true) {
   const birthValue = person?.geburtsdatum || person?.geburtsjahr;
   if (!birthValue) return "";
   const birth = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T00:00:00`);
@@ -3906,7 +3976,7 @@ function personViewAlter(person, bisDatum = null) {
   let years = end.getFullYear() - birth.getFullYear();
   if (end.getMonth() < birth.getMonth() || (end.getMonth() === birth.getMonth() && end.getDate() < birth.getDate())) years--;
   if (years < 0 || years > 125) return "";
-  return `${person.geburtsdatum ? "" : "ca. "}${years} ${years === 1 ? "Jahr" : "Jahre"}`;
+  return dauerText(birth, end, !!person.geburtsdatum && endeExakt);
 }
 
 // v359: Lebenszeile der Personenansicht in verständlichem Wortlaut
@@ -3919,8 +3989,9 @@ function personViewLebenszeile(person) {
   const tod = person?.sterbedatum || person?.sterbejahr;
   const gebText = geb ? personViewDatum(geb) : "";
   const todText = tod ? personViewDatum(tod) : "";
-  const alter = personViewAlter(person, person?.sterbedatum || (person?.sterbejahr ? `${person.sterbejahr}-12-31` : null));
-  if (geb && tod) return [`${gebText} – ${todText}`, alter ? `wurde ${alter} alt` : ""].filter(Boolean).join(" · ");
+  const alter = personViewAlter(person, person?.sterbedatum || (person?.sterbejahr ? `${person.sterbejahr}-12-31` : null), !!person?.sterbedatum || !person?.sterbejahr);
+  const alterSatz = alter === "unter 1 Tag" ? "starb am Tag der Geburt" : alter === "unter 1 Jahr" ? "starb im ersten Lebensjahr" : alter ? `wurde ${alter} alt` : "";
+  if (geb && tod) return [`${gebText} – ${todText}`, alterSatz].filter(Boolean).join(" · ");
   if (tod) return `gestorben ${todText}`;
   if (geb) {
     const gebJahr = Number(String(person.geburtsdatum || person.geburtsjahr).slice(0, 4));
@@ -4129,7 +4200,7 @@ async function openPersonDetail(personId, options = {}) {
     const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean), ...parentIds])];
     let relatedPeople = [];
     if (relatedIds.length) {
-      const { data, error: relatedError } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", relatedIds);
+      const { data, error: relatedError } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => sb.from("personen").select(sp).in("id", relatedIds));
       if (relatedError) debugLog(`⚠️ Verwandte Personen laden: ${relatedError.message}`);
       relatedPeople = data || [];
     }
@@ -4148,24 +4219,13 @@ async function openPersonDetail(personId, options = {}) {
       // Das Alter wird nur für verstorbene Personen ergänzt. Bei unvollständigen
       // Daten (nur Jahreszahlen) ist es ausdrücklich eine ungefähre Angabe.
       if (death && birth) {
-        const birthDate = String(related.geburtsdatum || "").trim();
-        const deathDate = String(related.sterbedatum || "").trim();
-        const birthYear = Number(related.geburtsjahr || (birthDate.match(/^(\d{4})/) || [])[1] || (birthDate.match(/\.(\d{4})$/) || [])[1]);
-        const deathYear = Number(related.sterbejahr || (deathDate.match(/^(\d{4})/) || [])[1] || (deathDate.match(/\.(\d{4})$/) || [])[1]);
-        if (Number.isFinite(birthYear) && birthYear > 0 && Number.isFinite(deathYear) && deathYear >= birthYear) {
-          let age = deathYear - birthYear;
-          const parseDate = value => {
-            const m = String(value || "").match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
-            return m ? { day:Number(m[1]), month:Number(m[2]), year:Number(m[3]) } : null;
-          };
-          const bd = parseDate(birthDate), dd = parseDate(deathDate);
-          if (bd && dd && (dd.month < bd.month || (dd.month === bd.month && dd.day < bd.day))) age--;
-          const exact = !!(bd && dd);
-          details.push(`${exact ? "" : "ca. "}${age} Jahre`);
-        }
+        const alterText = lebensalterAnzeige(related);
+        if (alterText) details.push(alterText);
       }
       if (extra) details.push(extra);
       button.textContent = details.join(" · ");
+      const relPunkt = pruefPunkt(related);
+      if (relPunkt) button.prepend(relPunkt);
       button.addEventListener("click", () => openPersonDetail(related.id, { behalteRueckkehr: true })); container.appendChild(button);
     };
     const parentsSection = document.getElementById("pv-parents-section");
@@ -4258,7 +4318,7 @@ async function openPersonDetail(personId, options = {}) {
         if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
           let years = endDate.getFullYear() - startDate.getFullYear();
           if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
-          if (years >= 0) duration = ` · ${earliest.approximate ? "ca. " : ""}${years} ${years === 1 ? "Jahr" : "Jahre"}`;
+          if (years >= 0) duration = ` · ${dauerText(startDate, endDate, !earliest.approximate)}`;
         }
         date.textContent = `💍 Hochzeit: ${marriage}${duration}`; row.appendChild(date);
       }
@@ -6799,12 +6859,12 @@ async function loadDetailFamilie(personId) {
           if (!Number.isNaN(a.getTime()) && !Number.isNaN(b.getTime()) && b >= a) {
             let j = b.getFullYear() - a.getFullYear();
             if ((b.getMonth() * 100 + b.getDate()) < (a.getMonth() * 100 + a.getDate())) j--;
-            if (j >= 0) text = `${j} Jahre`;
+            if (j >= 0) text = dauerText(a, b, true);
           }
         } else if (tod?.jahr) {
           const sj = Number(String(start).slice(0,4));
           const ej = Number(tod.jahr);
-          if (Number.isFinite(sj) && Number.isFinite(ej) && ej >= sj) text = `${ej-sj} Jahre`;
+          if (Number.isFinite(sj) && Number.isFinite(ej) && ej >= sj) text = ej - sj >= 1 ? `${ej - sj} ${ej - sj === 1 ? "Jahr" : "Jahre"}` : "unter 1 Jahr";
         }
       }
       jahreEl.textContent = text;
@@ -7237,7 +7297,7 @@ function aktualisiereNeueEhejahre() {
   if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) { el.textContent = "–"; return; }
   let jahre = b.getFullYear() - a.getFullYear();
   if ((b.getMonth() * 100 + b.getDate()) < (a.getMonth() * 100 + a.getDate())) jahre--;
-  el.textContent = jahre >= 0 ? `${jahre} Jahre` : "–";
+  el.textContent = jahre >= 0 ? dauerText(a, b, true) : "–";
 }
 
 document.getElementById("d-partner-person").addEventListener("change", () => {
@@ -8300,7 +8360,7 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
     ? ` <span class="tree-node__maiden-name">geb. ${escTree(ledigenname)}</span>` : "";
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
-    <span class="tree-node__name">${escTree(treeAnzeigeName(person).name)}${maidenLabel}</span>
+    <span class="tree-node__name">${pruefPunktHtml(person)}${escTree(treeAnzeigeName(person).name)}${maidenLabel}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
   </button>`;
 }
@@ -8371,7 +8431,7 @@ function treeParentFamiliesForPerson(id) {
 async function loadStammbaumData(optionen = {}) {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
-    sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").order("nachname", { ascending: true }),
+    personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => sb.from("personen").select(sp).order("nachname", { ascending: true })),
     sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
     sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
   ]);
@@ -10639,7 +10699,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=363");
+      treeModul3D = await import("./tree3d.js?v=365");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11468,7 +11528,7 @@ const ImportAssistent = (() => {
       await schreibe("person_stationen", plan.stationen, "Stationen", importId);
       meldung(`Import abgeschlossen ✓ ${zusammenfassung.personen} Personen angelegt.`);
       plan = null;
-      loadPersonen().catch((err) => debugLog(`⚠️ Neu laden nach Import: ${err.message || err}`));
+      loadPersonen(true).catch((err) => debugLog(`⚠️ Neu laden nach Import: ${err.message || err}`));
     } catch (err) {
       meldung(`Import abgebrochen: ${err.message || err}. Bereits Angelegtes entfernst du mit „Import rückgängig“.`);
     } finally {
@@ -11519,7 +11579,7 @@ const ImportAssistent = (() => {
       if (ue) throw new Error(ue.message);
       delete zustand.importId; zustandSichern();
       meldung(`Import rückgängig gemacht ✓ ${pers.length} Personen entfernt${hausBleibt ? `, ${hausBleibt} Häuser bleiben (werden noch verwendet)` : ""}.`);
-      loadPersonen().catch((err) => debugLog(`⚠️ Neu laden nach Rückgängig: ${err.message || err}`));
+      loadPersonen(true).catch((err) => debugLog(`⚠️ Neu laden nach Rückgängig: ${err.message || err}`));
     } catch (err) {
       meldung(`Rückgängig abgebrochen: ${err.message || err}`);
     } finally {
@@ -11614,7 +11674,9 @@ function zeigeHerkunftsvermerk(person) {
   box.hidden = false;
   const text = document.createElement("span");
   const geprueft = person.geprueft_am ? `geprüft am ${personViewDatum(String(person.geprueft_am).slice(0, 10))}${person.geprueft_von ? ` (${person.geprueft_von})` : ""}` : "ungeprüft";
-  text.textContent = `📥 aus ${person.herkunft_quelle} · ${geprueft}`;
+  text.textContent = `aus ${person.herkunft_quelle} · ${geprueft}`;
+  const kopfPunkt = pruefPunkt(person);
+  if (kopfPunkt) text.prepend(kopfPunkt);
   box.appendChild(text);
   const darf = rolleDarfSchreiben();
   if (!person.geprueft_am && darf) {
@@ -11626,6 +11688,14 @@ function zeigeHerkunftsvermerk(person) {
       const { error } = await sb.from("personen").update({ geprueft_am: jetzt, geprueft_von: zugang?.name || null }).eq("id", person.id);
       if (error) { window.alert(`Konnte nicht gespeichert werden: ${error.message}`); return; }
       person.geprueft_am = jetzt; person.geprueft_von = zugang?.name || null;
+      const imCache = personenCache.find((x) => x.id === person.id);
+      if (imCache) {
+        imCache.geprueft_am = jetzt;
+        const karte = personenKartenCache.get(person.id);
+        if (karte) aktualisierePersonenKarte(karte, imCache);
+      }
+      const imBaum = (treeData?.personen || []).find((x) => x.id === person.id);
+      if (imBaum) imBaum.geprueft_am = jetzt;
       zeigeHerkunftsvermerk(person);
     });
     box.appendChild(btn);

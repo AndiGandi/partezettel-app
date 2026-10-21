@@ -1913,3 +1913,11 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .imp-bereich details summary { cursor: pointer; font-weight: 600; padding: .3rem 0; }
 .pv-herkunft { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; justify-content: center; font-size: .85rem; color: #5d5a50; margin: .3rem 0 0; }
 .pv-herkunft[hidden] { display: none; }
+
+/* v365: Prüf-Kennzeichen */
+.pruef-punkt { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; flex: none; }
+.pruef-punkt.is-offen { background: #e09a2b; }
+.pruef-punkt.is-geprueft { background: #3b8a3e; }
+.tree-node__name .pruef-punkt { width: 8px; height: 8px; margin-right: 4px; }
+.personen-pruef-filter { margin: 0 0 .75rem; }
+.personen-pruef-filter[hidden] { display: none; }
