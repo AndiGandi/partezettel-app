@@ -1880,3 +1880,32 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .plaus-tag--warnung{background:#f8ecd0;color:#7a5a12}
 .plaus-tag--hinweis{background:#e3ecf5;color:#2d4f73}
 .familie-source-hint { color: var(--muted, #6b6b6b); font-size: .8rem; }
+
+/* v362: Hausblätter-Import */
+.imp-bereich { margin-top: .75rem; display: grid; gap: .75rem; }
+.imp-bereich[hidden] { display: none !important; }
+.imp-kopf { background: #edf1e9; border-radius: 10px; padding: .75rem; display: grid; gap: .3rem; }
+.imp-zahlen { margin: .25rem 0 0; padding-left: 1.1rem; }
+.imp-filter { display: flex; gap: .4rem; align-items: center; font-size: .9rem; }
+.imp-titel { font-family: Georgia, serif; color: #174f3b; margin: .5rem 0 0; }
+.imp-karte { border: 1px solid #d9d3c3; border-radius: 10px; padding: .75rem; background: #fff; display: grid; gap: .5rem; }
+.imp-karte[data-status="erledigt"], .imp-karte[data-status="gleich"] { background: #f8f6ef; }
+.imp-karte__kopf { display: flex; flex-wrap: wrap; gap: .25rem .5rem; align-items: baseline; }
+.imp-badge { margin-left: auto; font-size: .75rem; background: #8b7047; color: #fff; border-radius: 99px; padding: .1rem .55rem; }
+.imp-klein { font-size: .82rem; color: #5d5a50; }
+.imp-warn { color: #9a3b1b; }
+.imp-unsicher { font-style: italic; }
+.imp-vergleich { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.imp-vergleich > div { background: #f8f6ef; border-radius: 8px; padding: .5rem; display: grid; gap: .2rem; }
+.imp-vergleich small { font-size: .75rem; color: #5d5a50; }
+.imp-knoepfe { display: flex; flex-wrap: wrap; gap: .4rem; }
+.imp-knoepfe .btn { min-height: 44px; }
+.imp-links { display: flex; flex-wrap: wrap; gap: .4rem; }
+.imp-link { min-height: 36px; padding: .3rem .6rem; font-size: .85rem; }
+.imp-anders { display: flex; gap: .4rem; }
+.imp-anders[hidden] { display: none; }
+.imp-anders input { flex: 1; min-width: 0; padding: .55rem; border: 1px solid #d9d3c3; border-radius: 8px; font-size: 1rem; }
+.imp-erledigt { color: #174f3b; margin: 0; }
+.imp-kandidat { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem; align-items: center; border-top: 1px dashed #d9d3c3; padding-top: .5rem; }
+.imp-kandidat > div:first-child { display: grid; }
+.imp-kandidat.is-gewaehlt { background: #edf1e9; border-radius: 8px; padding: .4rem; }

@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 361
+// Partezettel Archiv – Version 362
+// v362: Hausblätter-Import Stufe 1 (Export / Sicherung, nur Eigentümer): Import-Datei laden, Abweichungen entscheiden, „Gleiche Person?“ bestätigen.
 // v361: Trauungsbuch-Quelle einer Ehe lässt sich entfernen (Feld leeren + speichern); alte Personenfelder gelten nur eindeutig für eine Ehe; keine Doppelzeile in „Kirchenbücher“.
 // Partezettel Archiv – Version 321
 // Partezettel Archiv – Version 320
@@ -10627,7 +10628,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=361");
+      treeModul3D = await import("./tree3d.js?v=362");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11043,3 +11044,276 @@ initTreeRelationFields();
 initTreeSuggestions();
 initTreeDescendants();
 initTreeCousinsUI();
+
+// ===================== v362: Hausblätter-Import, Stufe 1 (nur Eigentümer) =====================
+// Lädt eine Import-Datei (format „familienspuren-import“), zeigt Abweichungen bei vorhandenen
+// Personen und die Frage „gleiche Person?“. Geändert wird nur nach Bestätigung, neue Personen
+// werden in dieser Stufe nicht angelegt. Entscheidungen werden auf dem Gerät gemerkt.
+const ImportAssistent = (() => {
+  const FELD = { geburt: "Geburt", tod: "Tod", vorname: "Vorname" };
+  let paket = null, personByKey = new Map(), bestand = new Map(), partnerText = new Map(), zustand = { abw: {}, gleich: {} }, nurOffene = true;
+  const $ = (id) => document.getElementById(id);
+  const speicherKey = () => `fs-import-${paket?.id || "unbekannt"}`;
+  const heute = () => new Date().toISOString().slice(0, 10);
+  function zustandLaden() {
+    try { const z = JSON.parse(localStorage.getItem(speicherKey()) || "null"); if (z && z.abw && z.gleich) return z; } catch { /* leer */ }
+    return { abw: {}, gleich: {} };
+  }
+  function zustandSichern() { try { localStorage.setItem(speicherKey(), JSON.stringify(zustand)); } catch { /* Gerät erlaubt keinen Speicher */ } }
+  const meldung = (t) => { const m = $("imp-message"); if (m) m.textContent = t || ""; };
+
+  // „TT.MM.JJJJ“ oder „JJJJ“ → { datum, jahr }; ungültig → null
+  function textZuDatum(text) {
+    const s = String(text || "").trim();
+    let m = s.match(/^(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})$/);
+    if (m) {
+      const d = +m[1], mo = +m[2], y = +m[3], dt = new Date(Date.UTC(y, mo - 1, d));
+      if (dt.getUTCMonth() !== mo - 1 || dt.getUTCDate() !== d) return null;
+      return { datum: `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`, jahr: null };
+    }
+    m = s.match(/^(\d{4})$/);
+    return m ? { datum: null, jahr: +m[1] } : null;
+  }
+  function bestandWert(p, feld) {
+    if (!p) return "";
+    if (feld === "vorname") return p.vorname || "";
+    const w = feld === "geburt" ? "geburts" : "sterbe";
+    return String(p[`${w}datum`] || "").slice(0, 10) || (p[`${w}jahr`] ? String(p[`${w}jahr`]) : "");
+  }
+  function zeige(feld, w) {
+    if (feld === "vorname") return w || "–";
+    if (!w) return "leer";
+    return /^\d{4}-\d{2}-\d{2}$/.test(w) ? personViewDatum(w) : w;
+  }
+  const gleichWert = (feld, a, b) => feld === "vorname" ? String(a || "").trim() === String(b || "").trim() : String(a || "") === String(b || "");
+  function hbAlsBestandsform(a) {
+    if (a.feld === "vorname") return a.hausblatt;
+    const w = textZuDatum(a.hausblatt);
+    return w ? (w.datum || String(w.jahr)) : "";
+  }
+  const lebensdaten = (geb, tod) => [geb ? `* ${geb}` : "", tod ? `† ${tod}` : ""].filter(Boolean).join(" ");
+  const bestandDaten = (p) => lebensdaten(zeige("geburt", bestandWert(p, "geburt")) === "leer" ? "" : zeige("geburt", bestandWert(p, "geburt")),
+    zeige("tod", bestandWert(p, "tod")) === "leer" ? "" : zeige("tod", bestandWert(p, "tod")));
+  const bestandName = (p) => plausName(p);
+
+  async function dateiLaden(file) {
+    if (typeof rolleIstEigentuemer === "function" && zugang?.rolle && !rolleIstEigentuemer()) { meldung("Der Import ist dem Eigentümer vorbehalten."); return; }
+    meldung("Datei wird gelesen …");
+    let daten;
+    try { daten = JSON.parse(await file.text()); } catch { meldung("Die Datei ist keine gültige Import-Datei (JSON)."); return; }
+    if (daten?.format !== "familienspuren-import" || !Array.isArray(daten.personen) || !Array.isArray(daten.abweichungen)) {
+      meldung("Das ist keine Familienspuren-Import-Datei."); return;
+    }
+    if (Number(daten.version) > 1) { meldung("Diese Import-Datei ist für eine neuere App-Version. Bitte die App aktualisieren."); return; }
+    paket = daten;
+    personByKey = new Map(paket.personen.map((p) => [p.key, p]));
+    const ids = new Set();
+    for (const p of paket.personen) { if (p.bestand_id) ids.add(p.bestand_id); (p.kandidaten || []).forEach((i) => ids.add(i)); }
+    for (const a of paket.abweichungen) if (a.bestand_id) ids.add(a.bestand_id);
+    bestand = new Map();
+    const liste = [...ids];
+    try {
+      for (let i = 0; i < liste.length; i += 80) {
+        const { data, error } = await sb.from("personen")
+          .select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, taufbuch_link, sterbebuch_link")
+          .in("id", liste.slice(i, i + 80));
+        if (error) throw error;
+        (data || []).forEach((p) => bestand.set(p.id, p));
+      }
+    } catch (err) { meldung(`Bestand konnte nicht geladen werden: ${err.message || err}`); return; }
+    // Partner der vorgeschlagenen Personen laden (hilft bei „Gleiche Person?“)
+    partnerText = new Map();
+    try {
+      const kandIds = [...new Set(paket.personen.flatMap((p) => p.kandidaten || []))];
+      if (kandIds.length) {
+        const [ra, rb] = await Promise.all([
+          sb.from("familien").select("partner_a_id, partner_b_id, familientyp").in("partner_a_id", kandIds),
+          sb.from("familien").select("partner_a_id, partner_b_id, familientyp").in("partner_b_id", kandIds)
+        ]);
+        const fams = [...(ra.data || []), ...(rb.data || [])].filter((f) => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern");
+        const andereIds = [...new Set(fams.flatMap((f) => [f.partner_a_id, f.partner_b_id]))].filter((i) => !bestand.has(i));
+        const partner = new Map([...bestand]);
+        for (let i = 0; i < andereIds.length; i += 80) {
+          const { data } = await sb.from("personen").select("id, vorname, nachname, Ledigenname").in("id", andereIds.slice(i, i + 80));
+          (data || []).forEach((p) => partner.set(p.id, p));
+        }
+        for (const f of fams) {
+          for (const [x, y] of [[f.partner_a_id, f.partner_b_id], [f.partner_b_id, f.partner_a_id]]) {
+            if (!kandIds.includes(x) || !partner.has(y)) continue;
+            partnerText.set(x, [...(partnerText.get(x) || []), plausName(partner.get(y))]);
+          }
+        }
+      }
+    } catch (err) { debugLog(`⚠️ Import: Partner laden: ${err.message || err}`); }
+    zustand = zustandLaden();
+    for (const a of paket.abweichungen) {
+      if (a.vorentschieden && !zustand.abw[a.id]) zustand.abw[a.id] = { wahl: a.vorentschieden.wahl, grund: a.vorentschieden.grund, am: paket.erstellt, vor: true };
+    }
+    zustandSichern();
+    meldung("");
+    render();
+  }
+
+  function abwStatus(a) {
+    const p = bestand.get(a.bestand_id);
+    if (!p) return "fehlt";
+    if (zustand.abw[a.id]) return "erledigt";
+    if (a.art === "feld" && gleichWert(a.feld, bestandWert(p, a.feld), hbAlsBestandsform(a))) return "gleich";
+    if (a.art === "feld" && !gleichWert(a.feld, bestandWert(p, a.feld), a.bestand_vorher)) return "veraendert";
+    return "offen";
+  }
+  const gleichFaelle = () => paket.personen.filter((p) => p.abgleich === "moeglich" || p.abgleich === "wahrscheinlich");
+
+  function karteAbweichung(a) {
+    const p = bestand.get(a.bestand_id), hb = personByKey.get(a.person_key) || {}, st = abwStatus(a);
+    const name = p ? bestandName(p) : `${hb.vorname || ""} ${hb.nachname || ""}`;
+    const link = a.feld === "tod" ? p?.sterbebuch_link : p?.taufbuch_link;
+    const kopf = `<div class="imp-karte__kopf"><strong>${escapeHtml(name)}</strong>${p ? `<span class="imp-klein">${escapeHtml(bestandDaten(p))}</span>` : ""}
+      <span class="imp-badge">${escapeHtml(a.art === "hinweis" ? "Hinweis" : FELD[a.feld] || a.feld)}</span></div>`;
+    const werkzeuge = `<div class="imp-links">${p ? `<button type="button" class="btn btn--ghost imp-link" data-aktion="person" data-id="${escapeHtml(p.id)}">Person öffnen</button>` : ""}${link ? `<a class="btn btn--ghost imp-link" href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">📖 ${a.feld === "tod" ? "Sterbebuch" : "Taufbuch"}</a>` : ""}</div>`;
+    const hinweis = hb.unsicher ? `<p class="imp-klein imp-unsicher">Unsicher gelesen: ${escapeHtml(hb.unsicher)}</p>` : "";
+    let mitte = "", fuss = "";
+    if (a.art === "hinweis") {
+      mitte = `<p>${escapeHtml(a.text)}</p><p class="imp-klein">${escapeHtml(a.quelle || "")}</p>`;
+    } else {
+      mitte = `<div class="imp-vergleich">
+        <div><small>${escapeHtml(a.quelle || "Hausblatt")}</small><b>${escapeHtml(a.hausblatt)}</b></div>
+        <div><small>Bestand</small><b>${escapeHtml(zeige(a.feld, bestandWert(p, a.feld)))}</b></div></div>`;
+    }
+    if (st === "fehlt") fuss = `<p class="imp-klein imp-warn">Diese Person ist im Bestand nicht mehr vorhanden.</p>`;
+    else if (st === "erledigt") {
+      const z = zustand.abw[a.id];
+      const text = { bestand: "Bestand stimmt", hausblatt: "Hausblatt übernommen", anders: `Anderer Wert: ${z.wert || ""}`, gesehen: "Zur Kenntnis genommen" }[z.wahl] || z.wahl;
+      fuss = `<p class="imp-erledigt">✓ ${escapeHtml(text)}${z.grund ? ` · ${escapeHtml(z.grund)}` : ""} <button type="button" class="btn btn--ghost imp-link" data-aktion="zuruecksetzen" data-id="${escapeHtml(a.id)}">ändern</button></p>`;
+    } else if (st === "gleich") {
+      fuss = `<p class="imp-erledigt">✓ Bestand entspricht bereits dem Hausblatt.</p>`;
+    } else if (a.art === "hinweis") {
+      fuss = `<div class="imp-knoepfe"><button type="button" class="btn btn--secondary" data-aktion="gesehen" data-id="${escapeHtml(a.id)}">Zur Kenntnis genommen</button></div>`;
+    } else {
+      fuss = `${st === "veraendert" ? `<p class="imp-klein imp-warn">Der Bestand wurde seit dem Erstellen der Datei geändert (damals: ${escapeHtml(zeige(a.feld, a.bestand_vorher))}).</p>` : ""}
+        <div class="imp-knoepfe">
+          <button type="button" class="btn btn--secondary" data-aktion="bestand" data-id="${escapeHtml(a.id)}">Bestand stimmt</button>
+          <button type="button" class="btn btn--secondary" data-aktion="hausblatt" data-id="${escapeHtml(a.id)}">Hausblatt stimmt</button>
+          <button type="button" class="btn btn--ghost" data-aktion="anders-zeigen" data-id="${escapeHtml(a.id)}">Anderer Wert …</button>
+        </div>
+        <div class="imp-anders" data-anders="${escapeHtml(a.id)}" hidden>
+          <input type="text" ${a.feld === "vorname" ? "" : 'inputmode="numeric"'} placeholder="${a.feld === "vorname" ? "Vorname" : "TT.MM.JJJJ oder JJJJ"}" aria-label="Anderer Wert" value="${escapeHtml(a.feld === "vorname" ? a.hausblatt : "")}">
+          <button type="button" class="btn btn--primary" data-aktion="anders" data-id="${escapeHtml(a.id)}">Übernehmen</button>
+        </div>`;
+    }
+    return `<div class="imp-karte" data-status="${st}">${kopf}${mitte}${hinweis}${werkzeuge}${fuss}</div>`;
+  }
+
+  function karteGleich(hp) {
+    const z = zustand.gleich[hp.key];
+    const kand = (hp.kandidaten || []).map((id) => bestand.get(id)).filter(Boolean);
+    const kopf = `<div class="imp-karte__kopf"><strong>${escapeHtml(`${hp.vorname} ${hp.nachname}`.trim())}</strong>
+      <span class="imp-klein">${escapeHtml(lebensdaten(hp.geburt, hp.tod))}</span>
+      <span class="imp-badge">${hp.abgleich === "wahrscheinlich" ? "Bitte bestätigen" : "Gleiche Person?"}</span></div>
+      <p class="imp-klein">Hausblatt Innerberg Nr. ${escapeHtml((hp.haeuser || []).join(", "))}${(hp.kontext || []).length ? ` · ${escapeHtml(hp.kontext.slice(0, 3).join(" · "))}` : ""}</p>
+      ${hp.unsicher ? `<p class="imp-klein imp-unsicher">Unsicher gelesen: ${escapeHtml(hp.unsicher)}</p>` : ""}`;
+    const kandHtml = kand.map((p) => {
+      const gewaehlt = z?.wahl === p.id;
+      return `<div class="imp-kandidat${gewaehlt ? " is-gewaehlt" : ""}"><div><b>${escapeHtml(bestandName(p))}</b><span class="imp-klein">${escapeHtml(bestandDaten(p) || "ohne Lebensdaten")}</span>${partnerText.get(p.id) ? `<span class="imp-klein">verheiratet mit ${escapeHtml(partnerText.get(p.id).join(", "))}</span>` : ""}</div>
+        <div class="imp-knoepfe"><button type="button" class="btn btn--ghost imp-link" data-aktion="person" data-id="${escapeHtml(p.id)}">Öffnen</button>
+        ${z ? "" : `<button type="button" class="btn btn--secondary" data-aktion="gleich" data-key="${escapeHtml(hp.key)}" data-id="${escapeHtml(p.id)}">Ja, diese Person</button>`}</div></div>`;
+    }).join("");
+    const fuss = z
+      ? `<p class="imp-erledigt">✓ ${z.wahl === "neu" ? "Neue Person (nicht im Bestand)" : "Ist dieselbe Person wie im Bestand"} <button type="button" class="btn btn--ghost imp-link" data-aktion="gleich-zuruecksetzen" data-key="${escapeHtml(hp.key)}">ändern</button></p>`
+      : `<div class="imp-knoepfe"><button type="button" class="btn btn--secondary" data-aktion="gleich" data-key="${escapeHtml(hp.key)}" data-id="neu">Nein, neue Person</button></div>`;
+    return `<div class="imp-karte" data-status="${z ? "erledigt" : "offen"}">${kopf}${kandHtml || '<p class="imp-klein imp-warn">Die vorgeschlagene Person ist im Bestand nicht mehr vorhanden.</p>'}${fuss}</div>`;
+  }
+
+  function render() {
+    const bereich = $("imp-bereich");
+    if (!bereich || !paket) return;
+    const abw = paket.abweichungen, gl = gleichFaelle();
+    const offenAbw = abw.filter((a) => ["offen", "veraendert"].includes(abwStatus(a))).length;
+    const offenGl = gl.filter((p) => !zustand.gleich[p.key]).length;
+    const fehlend = [...new Set(paket.personen.filter((p) => p.bestand_id).map((p) => p.bestand_id))].filter((id) => !bestand.has(id)).length;
+    const zaehl = (l, f) => l.filter(f).length;
+    const neu = zaehl(paket.personen, (p) => p.auswahl === "import"), leb = zaehl(paket.personen, (p) => p.auswahl === "lebend");
+    const sichtbar = (status) => !nurOffene || ["offen", "veraendert"].includes(status);
+    bereich.innerHTML = `
+      <div class="imp-kopf">
+        <strong>${escapeHtml(paket.titel || "Import")}</strong>
+        <span class="imp-klein">Datei vom ${escapeHtml(paket.erstellt || "?")} · ${escapeHtml(paket.bestand_stand || "")}</span>
+        <ul class="imp-zahlen">
+          <li>Im Bestand gefunden: <b>${zaehl(paket.personen, (p) => p.bestand_id)}</b>${fehlend ? ` <span class="imp-warn">(davon ${fehlend} nicht mehr vorhanden)</span>` : ""}</li>
+          <li>Abweichungen offen: <b>${offenAbw}</b> von ${abw.length}</li>
+          <li>Gleiche Person? offen: <b>${offenGl}</b> von ${gl.length}</li>
+          <li>Neu für später: ${neu} Personen · zurückgestellt (evtl. lebend): ${leb}</li>
+        </ul>
+        <label class="imp-filter"><input type="checkbox" id="imp-nur-offene" ${nurOffene ? "checked" : ""}> nur offene zeigen</label>
+      </div>
+      <h4 class="imp-titel">1 · Abweichungen bei vorhandenen Personen</h4>
+      ${abw.filter((a) => sichtbar(abwStatus(a))).map(karteAbweichung).join("") || '<p class="imp-klein">Keine offenen Abweichungen. ✓</p>'}
+      <h4 class="imp-titel">2 · Gleiche Person?</h4>
+      ${gl.filter((p) => sichtbar(zustand.gleich[p.key] ? "erledigt" : "offen")).map(karteGleich).join("") || '<p class="imp-klein">Alles entschieden. ✓</p>'}
+      <p class="imp-klein">Der Import neuer Personen folgt in einer späteren Version. Deine Entscheidungen bleiben auf diesem Gerät gespeichert.</p>
+      <div class="imp-knoepfe"><button type="button" class="btn btn--ghost" data-aktion="schliessen">Datei schließen</button></div>`;
+    bereich.hidden = false;
+  }
+
+  async function personAendern(a, text) {
+    const p = bestand.get(a.bestand_id);
+    if (!p) return false;
+    let upd;
+    if (a.feld === "vorname") {
+      const v = String(text || "").trim();
+      if (!v) { window.alert("Bitte einen Vornamen eingeben."); return false; }
+      upd = { vorname: v };
+    } else {
+      const w = textZuDatum(text);
+      if (!w) { window.alert("Bitte das Datum als TT.MM.JJJJ oder nur das Jahr (JJJJ) eingeben."); return false; }
+      upd = a.feld === "geburt" ? { geburtsdatum: w.datum, geburtsjahr: w.jahr } : { sterbedatum: w.datum, sterbejahr: w.jahr };
+    }
+    const neu = { ...p, ...upd };
+    if (a.feld !== "vorname") {
+      const befunde = [...plausLebensdaten(neu), ...(await plausVerwandteDerPerson(p.id, neu))];
+      if (!(await plausFragen(befunde, plausName(neu)))) return false;
+    }
+    const vorher = zeige(a.feld, bestandWert(p, a.feld));
+    if (!window.confirm(`${plausName(p)}: ${FELD[a.feld]} von „${vorher}“ auf „${String(text).trim()}“ ändern?`)) return false;
+    const { error } = await sb.from("personen").update(upd).eq("id", p.id);
+    if (error) { window.alert(`Konnte nicht gespeichert werden: ${error.message}`); return false; }
+    Object.assign(p, upd);
+    loadPersonen().catch((err) => debugLog(`⚠️ Bestand nach Import-Prüfung: ${err.message || err}`));
+    return true;
+  }
+
+  async function klick(event) {
+    const btn = event.target.closest("[data-aktion]");
+    if (!btn || !paket) return;
+    const aktion = btn.dataset.aktion, id = btn.dataset.id, a = paket.abweichungen.find((x) => x.id === id);
+    if (aktion === "person") { await openPersonDetail(id); return; }
+    if (aktion === "schliessen") { paket = null; const b = $("imp-bereich"); b.hidden = true; b.innerHTML = ""; const f = $("imp-datei"); if (f) f.value = ""; return; }
+    if (aktion === "anders-zeigen") { const box = document.querySelector(`[data-anders="${CSS.escape(id)}"]`); if (box) { box.hidden = !box.hidden; box.querySelector("input")?.focus(); } return; }
+    if (aktion === "bestand" && a) zustand.abw[id] = { wahl: "bestand", am: heute() };
+    else if (aktion === "gesehen" && a) zustand.abw[id] = { wahl: "gesehen", am: heute() };
+    else if (aktion === "hausblatt" && a) { btn.disabled = true; const ok = await personAendern(a, a.hausblatt); btn.disabled = false; if (!ok) return; zustand.abw[id] = { wahl: "hausblatt", wert: a.hausblatt, am: heute() }; }
+    else if (aktion === "anders" && a) {
+      const wert = btn.closest(".imp-anders")?.querySelector("input")?.value || "";
+      btn.disabled = true; const ok = await personAendern(a, wert); btn.disabled = false; if (!ok) return;
+      zustand.abw[id] = { wahl: "anders", wert: wert.trim(), am: heute() };
+    }
+    else if (aktion === "zuruecksetzen") {
+      const z = zustand.abw[id];
+      if (z && (z.wahl === "hausblatt" || z.wahl === "anders") && !window.confirm("Die Entscheidung wird wieder geöffnet. Die bereits gespeicherte Änderung im Bestand bleibt bestehen. Fortfahren?")) return;
+      delete zustand.abw[id];
+    }
+    else if (aktion === "gleich") zustand.gleich[btn.dataset.key] = { wahl: id, am: heute() };
+    else if (aktion === "gleich-zuruecksetzen") delete zustand.gleich[btn.dataset.key];
+    else return;
+    zustandSichern();
+    render();
+  }
+
+  function init() {
+    $("imp-datei")?.addEventListener("change", (e) => { const f = e.target.files?.[0]; if (f) dateiLaden(f); });
+    $("imp-bereich")?.addEventListener("click", (e) => { klick(e).catch((err) => meldung(`Fehler: ${err.message || err}`)); });
+    $("imp-bereich")?.addEventListener("change", (e) => { if (e.target.id === "imp-nur-offene") { nurOffene = e.target.checked; render(); } });
+  }
+  return { init, dateiLaden, get zustand() { return zustand; } };
+})();
+ImportAssistent.init();
