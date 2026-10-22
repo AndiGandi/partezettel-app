@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 365
+// Partezettel Archiv – Version 366
+// v366: Hausblätter-Import: zweiter Durchgang für evtl. lebende Personen (eigene Import-Kennung, eigenes Rückgängig); Zuordnung zum ersten Import.
 // v365: Prüf-Punkt (orange = ungeprüft, grün = geprüft) bei importierten Personen in Liste, Personenansicht und Stammbaum; Filter „Anzeigen“ im Bestand.
 // v364: Lebensalter/Ehedauer unter 1 Jahr in Monaten, unter 1 Monat in Tagen (nie „0 Jahre“); nach Import/Rückgängig vollständig neu laden.
 // v363: Hausblätter-Import Stufe 2: Vorschau, Import (Personen, Familien, Häuser, Stationen) mit Import-Kennung, „Rückgängig“; Vermerk „aus Hausblatt · ungeprüft“; Backup enthält Häuser/Stationen/Importe.
@@ -10699,7 +10700,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=365");
+      treeModul3D = await import("./tree3d.js?v=366");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11330,19 +11331,35 @@ const ImportAssistent = (() => {
   }
 
   // ---------- v363: Stufe 2 – Vorschau, Import, Rückgängig ----------
-  let plan = null, frueherImport = null, laeuft = false, trotzdem = false;
+  let plan = null, frueherImport = null, lebendImport = null, laeuft = false, trotzdem = false;
+  const quelleFuer = (modus) => modus === "lebend" ? `${paket.id}#lebend` : paket.id;
+  const anzahlLebend = () => paket.personen.filter((p) => p.auswahl === "lebend" && !(zustand.gleich[p.key] && zustand.gleich[p.key].wahl !== "neu")).length;
+  function importKarte(imp, modus) {
+    const z = imp.zusammenfassung || {};
+    return `<div class="imp-karte" data-status="erledigt">
+        <p class="imp-erledigt">✓ ${modus === "lebend" ? "Evtl. lebende Personen importiert" : "Importiert"} am ${escapeHtml(personViewDatum(String(imp.zeitpunkt).slice(0, 10)))}${z.personen != null ? ` · ${z.personen} neue Personen, ${z.familien || 0} Familien, ${z.kinder || 0} Eltern-Kind-Verbindungen, ${z.stationen || 0} Stationen` : ""}</p>
+        <p class="imp-klein">Die neuen Personen tragen den Vermerk „aus Hausblatt … · ungeprüft“. „Rückgängig“ entfernt genau das, was dieser Import angelegt hat.</p>
+        <div class="imp-knoepfe"><button type="button" class="btn btn--danger" data-aktion="rueckgaengig" data-modus="${modus}" ${laeuft ? "disabled" : ""}>${modus === "lebend" ? "Import der Lebenden rückgängig" : "Import rückgängig"}</button></div></div>`;
+  }
+  function lebendTeil() {
+    if (lebendImport) return importKarte(lebendImport, "lebend");
+    const n = anzahlLebend();
+    if (!n) return "";
+    if (plan && plan.modus === "lebend") return planHtml();
+    return `<div class="imp-karte">
+        <p><b>Zurückgestellt: ${n} möglicherweise noch lebende Personen</b> (ab 1921 geboren, ohne Sterbedatum, dazu ihre Ehepartner ohne Lebensdaten).</p>
+        <p class="imp-klein">Sie werden in einem eigenen Durchgang importiert, mit eigenem „Rückgängig“. Auch sie erhalten den Vermerk „aus Hausblatt … · ungeprüft“.</p>
+        <div class="imp-knoepfe"><button type="button" class="btn btn--primary" data-aktion="vorschau" data-modus="lebend">Vorschau erstellen</button></div></div>`;
+  }
   const zahl = (n) => `<b>${n}</b>`;
   function importAbschnitt(offenAbw, offenGl) {
-    if (frueherImport && !frueherImport.rueckgaengig_am) {
-      const z = frueherImport.zusammenfassung || {};
-      return `<div class="imp-karte" data-status="erledigt">
-        <p class="imp-erledigt">✓ Importiert am ${escapeHtml(personViewDatum(String(frueherImport.zeitpunkt).slice(0, 10)))}${z.personen != null ? ` · ${z.personen} neue Personen, ${z.familien || 0} Familien, ${z.kinder || 0} Eltern-Kind-Verbindungen, ${z.stationen || 0} Stationen` : ""}</p>
-        <p class="imp-klein">Die neuen Personen tragen den Vermerk „aus Hausblatt … · ungeprüft“. „Rückgängig“ entfernt genau das, was dieser Import angelegt hat.</p>
-        <div class="imp-knoepfe"><button type="button" class="btn btn--danger" data-aktion="rueckgaengig" ${laeuft ? "disabled" : ""}>Import rückgängig</button></div></div>`;
-    }
+    if (frueherImport) return importKarte(frueherImport, "haupt") + lebendTeil();
     if (offenAbw || offenGl) return `<p class="imp-klein">Bitte zuerst alle offenen Karten oben entscheiden (${offenAbw + offenGl} offen).</p>`;
     if (!plan) return `<p class="imp-klein">Die Vorschau zeigt, was angelegt würde. Geschrieben wird erst nach „Import starten“.</p>
-      <div class="imp-knoepfe"><button type="button" class="btn btn--primary" data-aktion="vorschau">Vorschau erstellen</button></div>`;
+      <div class="imp-knoepfe"><button type="button" class="btn btn--primary" data-aktion="vorschau" data-modus="haupt">Vorschau erstellen</button></div>`;
+    return planHtml();
+  }
+  function planHtml() {
     const fehler = plan.befunde.filter((b) => b.stufe === "fehler"), warn = plan.befunde.filter((b) => b.stufe === "warnung");
     const liste = (arr, max) => arr.slice(0, max).map((t) => `<li>${escapeHtml(t)}</li>`).join("") + (arr.length > max ? `<li>… und ${arr.length - max} weitere</li>` : "");
     return `<div class="imp-karte">
@@ -11350,15 +11367,15 @@ const ImportAssistent = (() => {
         <li>Neue Personen: ${zahl(plan.personen.length)} <span class="imp-klein">(davon ${plan.frauenUmbenannt} Frauen mit Nachname des Mannes, Geburtsname als „geb.“)</span></li>
         <li>Neue Familien: ${zahl(plan.familien.length)} · neue Eltern-Kind-Verbindungen: ${zahl(plan.kinder.length)}</li>
         <li>Neue Häuser/Orte: ${zahl(plan.haeuser.length)} · Stationen: ${zahl(plan.stationen.length)} (davon ${plan.stationenBestand} bei vorhandenen Personen)</li>
-        <li>Nicht importiert: ${plan.ausgelassen.lebend} evtl. lebend, ${plan.ausgelassen.nicht} nicht ausgewählt</li>
+        ${plan.modus === "lebend" ? "" : `<li>Nicht importiert: ${plan.ausgelassen.lebend} evtl. lebend (eigener Durchgang danach), ${plan.ausgelassen.nicht} nicht ausgewählt</li>`}
       </ul>
       ${plan.uebersprungen.length ? `<details><summary>Übersprungen (${plan.uebersprungen.length})</summary><ul class="imp-liste">${liste(plan.uebersprungen, 40)}</ul></details>` : ""}
       ${fehler.length || warn.length ? `<details ${fehler.length ? "open" : ""}><summary>Plausibilität: ${fehler.length} Fehler, ${warn.length} Hinweise</summary><ul class="imp-liste">${liste([...fehler, ...warn].map((b) => (b.stufe === "fehler" ? "⛔ " : "⚠️ ") + b.text), 40)}</ul></details>` : '<p class="imp-erledigt">✓ Plausibilität ohne Auffälligkeiten.</p>'}
       <details><summary>Neue Personen anzeigen</summary><ul class="imp-liste">${liste(plan.personen.map((p) => `${plausName(p)} ${lebensdaten(plausDatumText(p.geburtsdatum, p.geburtsjahr), plausDatumText(p.sterbedatum, p.sterbejahr))} · ${p.herkunft_quelle.replace("Hausblatt ", "")}`), 400)}</ul></details>
       ${fehler.length ? `<label class="imp-filter"><input type="checkbox" id="imp-trotzdem" ${trotzdem ? "checked" : ""}> Fehler gesehen, trotzdem importieren</label>` : ""}
       <div class="imp-knoepfe">
-        <button type="button" class="btn btn--primary" data-aktion="importieren" ${laeuft || (fehler.length && !trotzdem) ? "disabled" : ""}>Import starten</button>
-        <button type="button" class="btn btn--ghost" data-aktion="vorschau">Vorschau neu erstellen</button>
+        <button type="button" class="btn btn--primary" data-aktion="importieren" data-modus="${plan.modus}" ${laeuft || (fehler.length && !trotzdem) ? "disabled" : ""}>Import starten</button>
+        <button type="button" class="btn btn--ghost" data-aktion="vorschau" data-modus="${plan.modus}">Vorschau neu erstellen</button>
       </div></div>`;
   }
 
@@ -11392,9 +11409,51 @@ const ImportAssistent = (() => {
   }
   const hausSchluessel = (ort, nr) => `${String(ort || "").trim().toLowerCase()}|${String(nr || "").trim()}`;
 
-  async function planErstellen() {
-    const p = { personen: [], familien: [], kinder: [], haeuser: [], stationen: [], befunde: [], uebersprungen: [], ausgelassen: { lebend: 0, nicht: 0 }, frauenUmbenannt: 0, stationenBestand: 0 };
+  function neuePersonZeile(hp) {
+    const g = datumFelder(hp.geburt, "geburt"), t = datumFelder(hp.tod, "tod");
+    const haeuserText = `Hausblatt Innerberg Nr. ${(hp.haeuser || []).join(", ")}`;
+    const notiz = [hp.notiz ? `${haeuserText}: ${hp.notiz}` : "", g.hinweis, t.hinweis, hp.unsicher ? `Unsicher gelesen: ${hp.unsicher}` : ""].filter(Boolean).join("\n");
+    const nachname = hp.import_nachname !== undefined ? (hp.import_nachname || "") : (hp.nachname || "");
+    return {
+      vorname: hp.vorname, nachname, Ledigenname: hp.import_ledigenname || null, geschlecht: hp.geschlecht || null,
+      geburtsdatum: g.geburtsdatum, geburtsjahr: g.geburtsjahr, sterbedatum: t.sterbedatum, sterbejahr: t.sterbejahr,
+      Notiz: notiz || null, herkunft_quelle: haeuserText
+    };
+  }
+  const signatur = (o) => [o.vorname, o.nachname || "", o.Ledigenname || "", String(o.geburtsdatum || "").slice(0, 10), o.geburtsjahr || "", String(o.sterbedatum || "").slice(0, 10), o.sterbejahr || "", o.herkunft_quelle || ""].join("|");
+  // Zuordnung Datei-Schlüssel → Personen-ID des ersten Imports (gespeichert oder über die Daten wiedergefunden)
+  async function hauptZuordnung() {
+    const m = new Map();
+    if (!frueherImport) return m;
+    const zeilen = await alleZeilen("personen", "id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, herkunft_quelle", (q) => q.eq("import_id", frueherImport.id));
+    const nachId = new Map(zeilen.map((z) => [z.id, z]));
+    const gespeichert = frueherImport.zusammenfassung?.schluessel;
+    if (gespeichert) {
+      for (const [key, id] of Object.entries(gespeichert)) if (nachId.has(id)) m.set(key, nachId.get(id));
+      return m;
+    }
+    const nachSig = new Map();
+    for (const z of zeilen) { const k = signatur(z); nachSig.set(k, nachSig.has(k) ? null : z); }
+    // Rückfall, falls eine Person nach dem Import bearbeitet wurde: Herkunft + Geburtsjahr + Vorname bzw. Nachname
+    const jahr = (x) => String(x.geburtsdatum || "").slice(0, 4) || String(x.geburtsjahr || "");
+    const grob = (x, feld) => [x.herkunft_quelle || "", jahr(x), String(x[feld] || "").trim().toLowerCase()].join("|");
+    const index = (feld) => { const i = new Map(); for (const z of zeilen) { const k = grob(z, feld); i.set(k, i.has(k) ? null : z); } return i; };
+    const nachVor = index("vorname"), nachNach = index("nachname");
+    const vergeben = new Set();
+    for (const hp of paket.personen) {
+      if (hp.auswahl !== "import") continue;
+      const neu = neuePersonZeile(hp);
+      let z = nachSig.get(signatur(neu));
+      if (!z && jahr(neu)) z = nachVor.get(grob(neu, "vorname")) || nachNach.get(grob(neu, "nachname"));
+      if (z && !vergeben.has(z.id)) { m.set(hp.key, z); vergeben.add(z.id); }
+    }
+    return m;
+  }
+
+  async function planErstellen(modus = "haupt") {
+    const p = { modus, personen: [], familien: [], kinder: [], haeuser: [], stationen: [], befunde: [], uebersprungen: [], ausgelassen: { lebend: 0, nicht: 0 }, frauenUmbenannt: 0, stationenBestand: 0, schluessel: {} };
     const zu = new Map();
+    const ausErstemImport = modus === "lebend" ? await hauptZuordnung() : new Map();
     for (const hp of paket.personen) {
       let id = null;
       if (hp.abgleich === "sicher") id = hp.bestand_id;
@@ -11408,18 +11467,16 @@ const ImportAssistent = (() => {
         zu.set(hp.key, { id, neu: false, obj: bestand.get(id) });
         continue;
       }
-      if (hp.auswahl === "lebend") { p.ausgelassen.lebend++; continue; }
-      if (hp.auswahl !== "import") { p.ausgelassen.nicht++; continue; }
-      const g = datumFelder(hp.geburt, "geburt"), t = datumFelder(hp.tod, "tod");
-      const haeuserText = `Hausblatt Innerberg Nr. ${(hp.haeuser || []).join(", ")}`;
-      const notiz = [hp.notiz ? `${haeuserText}: ${hp.notiz}` : "", g.hinweis, t.hinweis, hp.unsicher ? `Unsicher gelesen: ${hp.unsicher}` : ""].filter(Boolean).join("\n");
-      const nachname = hp.import_nachname !== undefined ? (hp.import_nachname || "") : (hp.nachname || "");
-      const obj = {
-        id: crypto.randomUUID(), vorname: hp.vorname, nachname, Ledigenname: hp.import_ledigenname || null,
-        geschlecht: hp.geschlecht || null,
-        geburtsdatum: g.geburtsdatum, geburtsjahr: g.geburtsjahr, sterbedatum: t.sterbedatum, sterbejahr: t.sterbejahr,
-        Notiz: notiz || null, herkunft_quelle: haeuserText
-      };
+      if (ausErstemImport.has(hp.key)) { const z = ausErstemImport.get(hp.key); zu.set(hp.key, { id: z.id, neu: false, obj: z }); continue; }
+      const soll = modus === "lebend" ? "lebend" : "import";
+      if (hp.auswahl !== soll) {
+        if (hp.auswahl === "lebend") p.ausgelassen.lebend++;
+        else if (hp.auswahl === "import" && modus === "lebend") p.uebersprungen.push(`${hp.vorname} ${hp.nachname}: aus dem ersten Import nicht mehr gefunden`);
+        else p.ausgelassen.nicht++;
+        continue;
+      }
+      const obj = { id: crypto.randomUUID(), ...neuePersonZeile(hp) };
+      p.schluessel[hp.key] = obj.id;
       if (obj.Ledigenname && obj.Ledigenname !== obj.nachname) p.frauenUmbenannt++;
       zu.set(hp.key, { id: obj.id, neu: true, obj });
       p.personen.push(obj);
@@ -11510,17 +11567,19 @@ const ImportAssistent = (() => {
   }
   async function importieren() {
     if (!plan || laeuft) return;
+    const modus = plan.modus || "haupt";
     if (!window.confirm(`Jetzt ${plan.personen.length} neue Personen, ${plan.familien.length} Familien, ${plan.kinder.length} Eltern-Kind-Verbindungen und ${plan.stationen.length} Stationen anlegen?\n\nVorher eine Sicherung gemacht? „Import rückgängig“ entfernt alles wieder.`)) return;
     laeuft = true; render();
     const importId = crypto.randomUUID();
-    const zusammenfassung = { personen: plan.personen.length, familien: plan.familien.length, kinder: plan.kinder.length, haeuser: plan.haeuser.length, stationen: plan.stationen.length };
+    const zusammenfassung = { personen: plan.personen.length, familien: plan.familien.length, kinder: plan.kinder.length, haeuser: plan.haeuser.length, stationen: plan.stationen.length, schluessel: plan.schluessel };
     try {
-      const { error } = await sb.from("importe").insert({ id: importId, zeitpunkt: new Date().toISOString(), beschreibung: paket.titel || "Import", quelle: paket.id, entscheidungen: zustand, zusammenfassung });
+      const { error } = await sb.from("importe").insert({ id: importId, zeitpunkt: new Date().toISOString(), beschreibung: `${paket.titel || "Import"}${modus === "lebend" ? " – evtl. lebende Personen" : ""}`, quelle: quelleFuer(modus), entscheidungen: zustand, zusammenfassung });
       if (error) {
         if (/entscheidungen|zusammenfassung|column/i.test(error.message)) throw new Error("In Supabase fehlt Paket 3b (Import-Entscheidungen). Bitte zuerst das SQL ausführen");
         throw new Error(error.message);
       }
-      zustand.importId = importId; zustandSichern();
+      if (modus === "lebend") zustand.importIdLebend = importId; else zustand.importId = importId;
+      zustandSichern();
       await schreibe("haeuser", plan.haeuser, "Häuser", importId);
       await schreibe("personen", plan.personen, "Personen", importId);
       await schreibe("familien", plan.familien, "Familien", importId);
@@ -11538,18 +11597,21 @@ const ImportAssistent = (() => {
   }
 
   async function frueherenImportLaden() {
-    frueherImport = null;
+    frueherImport = null; lebendImport = null;
     if (!paket) return;
     try {
-      const { data, error } = await sb.from("importe").select("id, zeitpunkt, rueckgaengig_am, zusammenfassung").eq("quelle", paket.id).is("rueckgaengig_am", null).order("zeitpunkt", { ascending: false });
+      const { data, error } = await sb.from("importe").select("id, zeitpunkt, rueckgaengig_am, zusammenfassung, quelle").in("quelle", [quelleFuer("haupt"), quelleFuer("lebend")]).is("rueckgaengig_am", null).order("zeitpunkt", { ascending: false });
       if (error) throw error;
-      frueherImport = (data || [])[0] || null;
+      frueherImport = (data || []).find((x) => x.quelle === quelleFuer("haupt")) || null;
+      lebendImport = (data || []).find((x) => x.quelle === quelleFuer("lebend")) || null;
     } catch (err) { debugLog(`⚠️ Import-Stand: ${err.message || err}`); }
   }
 
-  async function rueckgaengig() {
-    if (!frueherImport || laeuft) return;
-    const id = frueherImport.id;
+  async function rueckgaengig(modus = "haupt") {
+    const imp = modus === "lebend" ? lebendImport : frueherImport;
+    if (!imp || laeuft) return;
+    if (modus !== "lebend" && lebendImport) { window.alert("Bitte zuerst den Import der evtl. lebenden Personen rückgängig machen – er baut auf diesem Import auf."); return; }
+    const id = imp.id;
     laeuft = true; meldung("Rückgängig wird geprüft …");
     try {
       const pers = (await alleZeilen("personen", "id", (q) => q.eq("import_id", id))).map((x) => x.id);
@@ -11566,7 +11628,7 @@ const ImportAssistent = (() => {
         window.alert(`Rückgängig ist nicht möglich: An importierten Personen hängen inzwischen weitere Daten (${fremd.join(", ")}). Bitte diese zuerst entfernen.`);
         meldung(""); return;
       }
-      if (!window.confirm(`Import vom ${personViewDatum(String(frueherImport.zeitpunkt).slice(0, 10))} rückgängig machen?\n\n${pers.length} Personen und alles, was dieser Import angelegt hat, werden entfernt. Dein übriger Bestand bleibt unverändert.`)) { meldung(""); return; }
+      if (!window.confirm(`Import vom ${personViewDatum(String(imp.zeitpunkt).slice(0, 10))} rückgängig machen?\n\n${pers.length} Personen und alles, was dieser Import angelegt hat, werden entfernt. Dein übriger Bestand bleibt unverändert.`)) { meldung(""); return; }
       for (const [tab, label] of [["person_stationen", "Stationen"], ["familien_kinder", "Eltern-Kind-Verbindungen"], ["familien", "Familien"], ["personen", "Personen"]]) {
         meldung(`Rückgängig … ${label}`);
         const { error } = await sb.from(tab).delete().eq("import_id", id);
@@ -11577,7 +11639,8 @@ const ImportAssistent = (() => {
       for (const h of hs) { const { error } = await sb.from("haeuser").delete().eq("id", h.id); if (error) hausBleibt++; }
       const { error: ue } = await sb.from("importe").update({ rueckgaengig_am: new Date().toISOString() }).eq("id", id);
       if (ue) throw new Error(ue.message);
-      delete zustand.importId; zustandSichern();
+      if (modus === "lebend") delete zustand.importIdLebend; else delete zustand.importId;
+      zustandSichern();
       meldung(`Import rückgängig gemacht ✓ ${pers.length} Personen entfernt${hausBleibt ? `, ${hausBleibt} Häuser bleiben (werden noch verwendet)` : ""}.`);
       loadPersonen(true).catch((err) => debugLog(`⚠️ Neu laden nach Rückgängig: ${err.message || err}`));
     } catch (err) {
@@ -11623,12 +11686,12 @@ const ImportAssistent = (() => {
     if (aktion === "person") { await openPersonDetail(id); return; }
     if (aktion === "vorschau") {
       btn.disabled = true; meldung("Vorschau wird erstellt …");
-      try { plan = await planErstellen(); trotzdem = false; meldung(""); } catch (err) { plan = null; meldung(`Vorschau nicht möglich: ${err.message || err}`); }
+      try { plan = await planErstellen(btn.dataset.modus || "haupt"); trotzdem = false; meldung(""); } catch (err) { plan = null; meldung(`Vorschau nicht möglich: ${err.message || err}`); }
       render(); return;
     }
     if (aktion === "importieren") { await importieren(); return; }
-    if (aktion === "rueckgaengig") { await rueckgaengig(); return; }
-    if (aktion === "schliessen") { paket = null; plan = null; frueherImport = null; const b = $("imp-bereich"); b.hidden = true; b.innerHTML = ""; const f = $("imp-datei"); if (f) f.value = ""; return; }
+    if (aktion === "rueckgaengig") { await rueckgaengig(btn.dataset.modus || "haupt"); return; }
+    if (aktion === "schliessen") { paket = null; plan = null; frueherImport = null; lebendImport = null; const b = $("imp-bereich"); b.hidden = true; b.innerHTML = ""; const f = $("imp-datei"); if (f) f.value = ""; return; }
     if (aktion === "anders-zeigen") { const box = document.querySelector(`[data-anders="${CSS.escape(id)}"]`); if (box) { box.hidden = !box.hidden; box.querySelector("input")?.focus(); } return; }
     if (aktion === "bestand" && a) zustand.abw[id] = { wahl: "bestand", am: heute() };
     else if (aktion === "gesehen" && a) zustand.abw[id] = { wahl: "gesehen", am: heute() };
