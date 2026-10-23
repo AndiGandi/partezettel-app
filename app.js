@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 367
+// Partezettel Archiv – Version 368
+// v368: „Import rückgängig“ prüft Foto-Markierungen jetzt über die richtige Spalte (personen_id).
 // v367: Wohnorte (Hausnummern) in der Personenansicht; Prüf-Punkt, Herkunftsvermerk und Filter nur für den Eigentümer; Filter „aus Hausblatt · alle“ und „selbst erfasst“.
 // v366: Hausblätter-Import: zweiter Durchgang für evtl. lebende Personen (eigene Import-Kennung, eigenes Rückgängig); Zuordnung zum ersten Import.
 // v365: Prüf-Punkt (orange = ungeprüft, grün = geprüft) bei importierten Personen in Liste, Personenansicht und Stammbaum; Filter „Anzeigen“ im Bestand.
@@ -10705,7 +10706,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=367");
+      treeModul3D = await import("./tree3d.js?v=368");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11623,7 +11624,7 @@ const ImportAssistent = (() => {
       const fremd = [];
       const zaehle = async (tab, feld, text) => { try { const r = await inStuecken(tab, "id", feld, pers); if (r.length) fremd.push(`${r.length} ${text}`); } catch { /* Tabelle fehlt */ } };
       await zaehle("fotos", "personen_id", "Fotos");
-      await zaehle("foto_personen", "person_id", "Foto-Markierungen");
+      await zaehle("foto_personen", "personen_id", "Foto-Markierungen");
       await zaehle("sprachnotizen", "person_id", "Sprachnotizen");
       const fa = [...await inStuecken("familien", "id, import_id", "partner_a_id", pers), ...await inStuecken("familien", "id, import_id", "partner_b_id", pers)].filter((f) => f.import_id !== id);
       if (fa.length) fremd.push(`${new Set(fa.map((f) => f.id)).size} später angelegte Partnerschaften/Elternfamilien`);
