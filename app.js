@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 366
+// Partezettel Archiv – Version 367
+// v367: Wohnorte (Hausnummern) in der Personenansicht; Prüf-Punkt, Herkunftsvermerk und Filter nur für den Eigentümer; Filter „aus Hausblatt · alle“ und „selbst erfasst“.
 // v366: Hausblätter-Import: zweiter Durchgang für evtl. lebende Personen (eigene Import-Kennung, eigenes Rückgängig); Zuordnung zum ersten Import.
 // v365: Prüf-Punkt (orange = ungeprüft, grün = geprüft) bei importierten Personen in Liste, Personenansicht und Stammbaum; Filter „Anzeigen“ im Bestand.
 // v364: Lebensalter/Ehedauer unter 1 Jahr in Monaten, unter 1 Monat in Tagen (nie „0 Jahre“); nach Import/Rückgängig vollständig neu laden.
@@ -2839,7 +2840,7 @@ async function personenMitPruefSpalten(basis, bau) {
 }
 // Kleiner Punkt: Bernstein = ungeprüft, Grün = geprüft; Personen ohne Import-Herkunft erhalten keinen Punkt.
 function pruefPunkt(p) {
-  if (!p?.herkunft_quelle) return null;
+  if (!p?.herkunft_quelle || !rolleIstEigentuemer()) return null;
   const s = document.createElement("span");
   s.className = `pruef-punkt ${p.geprueft_am ? "is-geprueft" : "is-offen"}`;
   s.title = `${p.geprueft_am ? "geprüft" : "ungeprüft"} · aus ${p.herkunft_quelle}`;
@@ -2848,7 +2849,7 @@ function pruefPunkt(p) {
   return s;
 }
 function pruefPunktHtml(p) {
-  if (!p?.herkunft_quelle) return "";
+  if (!p?.herkunft_quelle || !rolleIstEigentuemer()) return "";
   const t = `${p.geprueft_am ? "geprüft" : "ungeprüft"} · aus ${p.herkunft_quelle}`;
   return `<span class="pruef-punkt ${p.geprueft_am ? "is-geprueft" : "is-offen"}" role="img" title="${escapeHtml(t)}" aria-label="${escapeHtml(t)}"></span>`;
 }
@@ -3737,7 +3738,8 @@ async function renderPersonenList(personen) {
   }
   list.appendChild(fragment);
   const filterFeld = document.getElementById("personen-pruef-filter-feld");
-  if (filterFeld) filterFeld.hidden = !personenCache.some((x) => x.herkunft_quelle);
+  if (filterFeld) filterFeld.hidden = !rolleIstEigentuemer() || !personenCache.some((x) => x.herkunft_quelle);
+  if (filterFeld?.hidden && personenPruefFilter) { personenPruefFilter = ""; const sel = document.getElementById("personen-pruef-filter"); if (sel) sel.value = ""; }
   beobachteSchluesselfotos();
   // Trefferzähler („272 Personen“) nach jedem Neuaufbau der Liste aktualisieren.
   if (typeof window.partezettelPersonenSuche === "function") {
@@ -3778,6 +3780,8 @@ let personenPruefFilter = "";
 function pruefFilterPasst(p) {
   if (personenPruefFilter === "offen") return !!p.herkunft_quelle && !p.geprueft_am;
   if (personenPruefFilter === "geprueft") return !!p.herkunft_quelle && !!p.geprueft_am;
+  if (personenPruefFilter === "hausblatt") return !!p.herkunft_quelle;
+  if (personenPruefFilter === "eigene") return !p.herkunft_quelle;
   return true;
 }
 function wendePersonenSucheAn(suchwert) {
@@ -3825,7 +3829,7 @@ function wendePersonenSucheAn(suchwert) {
   if (list) list.setAttribute("data-suchtreffer", String(treffer));
 
   const status = document.getElementById("personen-suchtreffer");
-  const filterText = personenPruefFilter === "offen" ? " ungeprüft" : personenPruefFilter === "geprueft" ? " geprüft" : "";
+  const filterText = { offen: " ungeprüft", geprueft: " geprüft", hausblatt: " aus Hausblatt", eigene: " selbst erfasst" }[personenPruefFilter] || "";
   if (status) status.textContent = q ? `${treffer} Treffer${filterText}` : `${treffer} Personen${filterText}`;
   return true;
 }
@@ -4056,6 +4060,7 @@ async function openPersonDetail(personId, options = {}) {
     }
     document.getElementById("pv-lifetime").textContent = personViewLebenszeile(person);
     zeigeHerkunftsvermerk(person);
+    ladeWohnorte(person.id);
 
     const keyphoto = document.getElementById("pv-keyphoto");
     keyphoto.hidden = true; keyphoto.removeAttribute("src");
@@ -10700,7 +10705,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=366");
+      treeModul3D = await import("./tree3d.js?v=367");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11733,7 +11738,7 @@ function zeigeHerkunftsvermerk(person) {
   let box = document.getElementById("pv-herkunft");
   if (!box) { box = document.createElement("p"); box.id = "pv-herkunft"; box.className = "pv-herkunft"; ziel.insertAdjacentElement("afterend", box); }
   box.innerHTML = "";
-  if (!person?.herkunft_quelle) { box.hidden = true; return; }
+  if (!person?.herkunft_quelle || !rolleIstEigentuemer()) { box.hidden = true; return; }
   box.hidden = false;
   const text = document.createElement("span");
   const geprueft = person.geprueft_am ? `geprüft am ${personViewDatum(String(person.geprueft_am).slice(0, 10))}${person.geprueft_von ? ` (${person.geprueft_von})` : ""}` : "ungeprüft";
@@ -11762,5 +11767,51 @@ function zeigeHerkunftsvermerk(person) {
       zeigeHerkunftsvermerk(person);
     });
     box.appendChild(btn);
+  }
+}
+
+// v367: Wohnorte (Stationen) in der Personenansicht – für alle Rollen sichtbar
+let wohnorteLauf = 0;
+const STATION_ART = { geboren: "geboren", wohnte: "wohnte", zugezogen: "zugezogen" };
+async function ladeWohnorte(personId) {
+  const lauf = ++wohnorteLauf;
+  const section = document.getElementById("pv-wohnorte-section");
+  const liste = document.getElementById("pv-wohnorte-list");
+  if (!section || !liste) return;
+  section.hidden = true; liste.innerHTML = "";
+  try {
+    const { data: st, error } = await sb.from("person_stationen").select("id, haus_id, art, jahr, datum, sortierung, quelle, notiz").eq("personen_id", personId);
+    if (error) { if (!tabelleFehlt(error)) debugLog(`⚠️ Wohnorte: ${error.message}`); return; }
+    if (lauf !== wohnorteLauf || !(st || []).length) return;
+    const ids = [...new Set(st.map((x) => x.haus_id))];
+    const { data: haeuser, error: he } = await sb.from("haeuser").select("id, ort, nummer, name").in("id", ids);
+    if (he) { debugLog(`⚠️ Häuser: ${he.message}`); return; }
+    if (lauf !== wohnorteLauf) return;
+    const hausNach = new Map((haeuser || []).map((h) => [h.id, h]));
+    const jahrVon = (x) => x.jahr || (x.datum ? Number(String(x.datum).slice(0, 4)) : null);
+    const sortiert = [...st].sort((a, b) => (a.sortierung || 0) - (b.sortierung || 0) || (jahrVon(a) || 0) - (jahrVon(b) || 0));
+    for (const x of sortiert) {
+      const h = hausNach.get(x.haus_id);
+      if (!h) continue;
+      const li = document.createElement("li");
+      const zeit = x.datum ? personViewDatum(String(x.datum).slice(0, 10)) : (x.jahr ? String(x.jahr) : "");
+      const kopf = document.createElement("span");
+      kopf.className = "wohnort-haus";
+      kopf.textContent = `${h.ort}${h.nummer ? ` Nr. ${h.nummer}` : ""}${h.name ? ` „${h.name}“` : ""}`;
+      const info = document.createElement("span");
+      info.className = "wohnort-info";
+      info.textContent = [STATION_ART[x.art] || x.art, zeit].filter(Boolean).join(" ");
+      li.append(kopf, info);
+      if (x.quelle || x.notiz) {
+        const q = document.createElement("small");
+        q.className = "wohnort-quelle";
+        q.textContent = [x.quelle, x.notiz ? `„${x.notiz}“` : ""].filter(Boolean).join(" · ");
+        li.appendChild(q);
+      }
+      liste.appendChild(li);
+    }
+    section.hidden = !liste.children.length;
+  } catch (err) {
+    debugLog(`⚠️ Wohnorte: ${err.message || err}`);
   }
 }

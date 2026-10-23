@@ -1921,3 +1921,11 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .tree-node__name .pruef-punkt { width: 8px; height: 8px; margin-right: 4px; }
 .personen-pruef-filter { margin: 0 0 .75rem; }
 .personen-pruef-filter[hidden] { display: none; }
+
+/* v367: Wohnorte in der Personenansicht */
+.person-view-wohnorte { list-style: none; margin: 0; padding: 0; display: grid; gap: .1rem; }
+.person-view-wohnorte li { display: grid; grid-template-columns: 1fr auto; gap: .1rem .5rem; padding: .45rem 0 .45rem 1rem; border-left: 2px solid #c9bfa6; position: relative; }
+.person-view-wohnorte li::before { content: ""; position: absolute; left: -6px; top: .85rem; width: 10px; height: 10px; border-radius: 50%; background: #174f3b; }
+.wohnort-haus { font-weight: 600; color: #174f3b; }
+.wohnort-info { color: #5d5a50; font-size: .9rem; text-align: right; }
+.wohnort-quelle { grid-column: 1 / -1; color: #7a7566; font-size: .78rem; }
