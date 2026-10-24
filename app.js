@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 368
+// Partezettel Archiv – Version 369
+// v369: Kirchenbuch-Quellen mit „Seite“ (links/rechts) bei Taufe, Trauung, Tod und Ehe-Quelle; ohne Paket 4 wird ohne Seite gespeichert.
 // v368: „Import rückgängig“ prüft Foto-Markierungen jetzt über die richtige Spalte (personen_id).
 // v367: Wohnorte (Hausnummern) in der Personenansicht; Prüf-Punkt, Herkunftsvermerk und Filter nur für den Eigentümer; Filter „aus Hausblatt · alle“ und „selbst erfasst“.
 // v366: Hausblätter-Import: zweiter Durchgang für evtl. lebende Personen (eigene Import-Kennung, eigenes Rückgängig); Zuordnung zum ersten Import.
@@ -1859,6 +1860,9 @@ form.addEventListener("submit", async (e) => {
     taufbuch_zeile: document.getElementById("taufbuch-zeile").value.trim() ? Number(document.getElementById("taufbuch-zeile").value) : null,
     trauungsbuch_zeile: document.getElementById("trauungsbuch-zeile").value.trim() ? Number(document.getElementById("trauungsbuch-zeile").value) : null,
     sterbebuch_zeile: document.getElementById("sterbebuch-zeile").value.trim() ? Number(document.getElementById("sterbebuch-zeile").value) : null,
+    taufbuch_seite: kbSeiteWert("taufbuch-seite"),
+    trauungsbuch_seite: kbSeiteWert("trauungsbuch-seite"),
+    sterbebuch_seite: kbSeiteWert("sterbebuch-seite"),
     notiz: document.getElementById("notiz").value.trim() || null,
     fotos: currentFotoBlobs,
     schluesselfotoIndex: currentSchluesselfotoIndex,
@@ -1981,8 +1985,7 @@ async function sendEintrag(eintrag, onProgress) {
     );
 
     step("Schritt 2/4: Person speichern …");
-    const { error: personError } = await mitTimeout(
-      sb.from("personen").upsert({
+    const personZeile = {
         id: eintrag.id,
         vorname: eintrag.vorname,
         nachname: eintrag.nachname,
@@ -1998,11 +2001,16 @@ async function sendEintrag(eintrag, onProgress) {
         taufbuch_zeile: eintrag.taufbuch_zeile,
         trauungsbuch_zeile: eintrag.trauungsbuch_zeile,
         sterbebuch_zeile: eintrag.sterbebuch_zeile,
+        taufbuch_seite: eintrag.taufbuch_seite || null,
+        trauungsbuch_seite: eintrag.trauungsbuch_seite || null,
+        sterbebuch_seite: eintrag.sterbebuch_seite || null,
         Notiz: eintrag.notiz,
-      }, { onConflict: "id" }),
+      };
+    const { error: personError } = await mitKbSeite((mitSeite) => mitTimeout(
+      sb.from("personen").upsert(mitSeite ? personZeile : ohneKbSeite(personZeile), { onConflict: "id" }),
       15000,
       "Zeitüberschreitung beim Speichern der Person (Netzwerk antwortet nicht)"
-    );
+    ));
     if (personError) throw personError;
     personenFrischAm = 0;   // v340: neue Person soll in allen Auswahllisten sofort verfügbar sein
 
@@ -2853,6 +2861,30 @@ function pruefPunktHtml(p) {
   if (!p?.herkunft_quelle || !rolleIstEigentuemer()) return "";
   const t = `${p.geprueft_am ? "geprüft" : "ungeprüft"} · aus ${p.herkunft_quelle}`;
   return `<span class="pruef-punkt ${p.geprueft_am ? "is-geprueft" : "is-offen"}" role="img" title="${escapeHtml(t)}" aria-label="${escapeHtml(t)}"></span>`;
+}
+
+// v369: Seite der Doppelseite im Kirchenbuch (links/rechts). Fehlen die Spalten (Paket 4 nicht eingespielt),
+// wird ohne sie gespeichert, damit nichts verloren geht.
+let kbSeiteVorhanden = true;
+function istKbSeitenFehler(error) {
+  return kbSeiteVorhanden && /_seite/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
+}
+const ohneKbSeite = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !k.endsWith("_seite")));
+async function mitKbSeite(bau) {
+  let r = await bau(kbSeiteVorhanden);
+  if (r?.error && istKbSeitenFehler(r.error)) {
+    kbSeiteVorhanden = false;
+    debugLog("ℹ️ Kirchenbuch-Seite nicht verfügbar (Spalten fehlen) – gespeichert ohne Seitenangabe.");
+    r = await bau(false);
+  }
+  return r;
+}
+const kbSeiteWert = (id) => { const v = document.getElementById(id)?.value || ""; return v === "links" || v === "rechts" ? v : null; };
+function kbFundstelleText(seite, zeile) {
+  const teile = [];
+  if (seite === "links" || seite === "rechts") teile.push(`${seite === "links" ? "linke" : "rechte"} Seite`);
+  if (zeile !== null && zeile !== undefined && String(zeile).trim() !== "") teile.push(`Zeile ${zeile}`);
+  return teile.join(", ");
 }
 
 async function synchronisierePersonenDelta() {
@@ -4094,11 +4126,11 @@ async function openPersonDetail(personId, options = {}) {
     const booksList = document.getElementById("pv-books-list");
     booksList.replaceChildren();
     const books = [
-      ["Taufbuch", person.taufbuch_link, person.taufbuch_zeile],
-      ["Trauungsbuch", person.trauungsbuch_link, person.trauungsbuch_zeile],
-      ["Sterbebuch", person.sterbebuch_link, person.sterbebuch_zeile]
+      ["Taufbuch", person.taufbuch_link, person.taufbuch_zeile, person.taufbuch_seite],
+      ["Trauungsbuch", person.trauungsbuch_link, person.trauungsbuch_zeile, person.trauungsbuch_seite],
+      ["Sterbebuch", person.sterbebuch_link, person.sterbebuch_zeile, person.sterbebuch_seite]
     ];
-    books.filter(([, link]) => String(link || "").trim()).forEach(([label, url, line]) => {
+    books.filter(([, link]) => String(link || "").trim()).forEach(([label, url, line, seite]) => {
       const row = document.createElement("div"); row.className = "person-view-book-row";
       const link = document.createElement("a"); link.href = String(url).trim(); link.target = "_blank"; link.rel = "noopener noreferrer";
       link.textContent = `📖 ${label} öffnen`;
@@ -4106,8 +4138,9 @@ async function openPersonDetail(personId, options = {}) {
       // v361: alte Trauungsbuch-Zeile der Person markieren, damit sie entfällt,
       // sobald dieselbe Quelle bei einer Ehe hinterlegt ist.
       if (label === "Trauungsbuch") row.dataset.altTrauung = trauungsUrlSchluessel(url);
-      if (line !== null && line !== undefined && String(line).trim() !== "") {
-        const lineText = document.createElement("span"); lineText.className = "person-view-book-line"; lineText.textContent = `Zeile ${line}`; row.appendChild(lineText);
+      const fundstelle = kbFundstelleText(seite, line);
+      if (fundstelle) {
+        const lineText = document.createElement("span"); lineText.className = "person-view-book-line"; lineText.textContent = fundstelle; row.appendChild(lineText);
       }
       booksList.appendChild(row);
     });
@@ -4136,7 +4169,7 @@ async function openPersonDetail(personId, options = {}) {
       try {
         const { data: eheQuellen, error: eheQuellenError } = await sb
           .from("familien_trauungsbuch_quellen")
-          .select("familie_id, trauungsbuch_link, trauungsbuch_zeile")
+          .select("*")
           .in("familie_id", eheFamilienIds);
         if (eheQuellenError) throw eheQuellenError;
 
@@ -4152,7 +4185,7 @@ async function openPersonDetail(personId, options = {}) {
           const url = String(quelle.trauungsbuch_link || "").trim();
           if (!url) continue;
           const line = quelle.trauungsbuch_zeile;
-          const lineLabel = line !== null && line !== undefined && String(line).trim() !== "" ? `Zeile ${line}` : "";
+          const lineLabel = kbFundstelleText(quelle.trauungsbuch_seite, line);
           const key = `${new URL(url, window.location.href).href}|${lineLabel}`;
           if (bereitsAngezeigt.has(key)) continue;
           // v361: gleiche Seite wie die alte Personen-Quelle → alte Zeile ausblenden (Doppel vermeiden)
@@ -4681,6 +4714,7 @@ async function openPersonEdit(personId, options = {}) {
   document.getElementById("d-taufbuch-zeile").value = person.taufbuch_zeile ?? "";
   document.getElementById("d-trauungsbuch-zeile").value = person.trauungsbuch_zeile ?? "";
   document.getElementById("d-sterbebuch-zeile").value = person.sterbebuch_zeile ?? "";
+  for (const b of ["taufbuch", "trauungsbuch", "sterbebuch"]) { const el = document.getElementById(`d-${b}-seite`); if (el) el.value = person[`${b}_seite`] || ""; }
   aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
   aktualisiereLinkButton("d-trauungsbuch-open", person.trauungsbuch_link);
   aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
@@ -4824,7 +4858,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
       return;
     }
   }
-  const { error } = await sb.from("personen").update({
+  const personAenderung = {
     vorname,
     nachname,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
@@ -4839,9 +4873,13 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     taufbuch_zeile: document.getElementById("d-taufbuch-zeile").value.trim() ? Number(document.getElementById("d-taufbuch-zeile").value) : null,
     trauungsbuch_zeile: document.getElementById("d-trauungsbuch-zeile").value.trim() ? Number(document.getElementById("d-trauungsbuch-zeile").value) : null,
     sterbebuch_zeile: document.getElementById("d-sterbebuch-zeile").value.trim() ? Number(document.getElementById("d-sterbebuch-zeile").value) : null,
+    taufbuch_seite: kbSeiteWert("d-taufbuch-seite"),
+    trauungsbuch_seite: kbSeiteWert("d-trauungsbuch-seite"),
+    sterbebuch_seite: kbSeiteWert("d-sterbebuch-seite"),
     Notiz: document.getElementById("d-notiz").value.trim() || null,
     weiterfuehrende_links: leseWeiterfuehrendeLinksEditor(),
-  }).eq("id", currentDetailPersonId);
+  };
+  const { error } = await mitKbSeite((mitSeite) => sb.from("personen").update(mitSeite ? personAenderung : ohneKbSeite(personAenderung)).eq("id", currentDetailPersonId));
   personenFrischAm = 0;   // v340: geänderte Namen sofort in allen Auswahllisten verwenden
   if (error) {
     msg.textContent = `Fehler: ${error.message}`;
@@ -6475,7 +6513,7 @@ async function entferneTrauungsQuelle(familieId, url, personIds, ausAltfeldern) 
   if (e2) return e2.message;
   for (const p of leute || []) {
     if (trauungsUrlSchluessel(p.trauungsbuch_link) !== schluessel) continue;
-    const { error: e3 } = await sb.from("personen").update({ trauungsbuch_link: null, trauungsbuch_zeile: null }).eq("id", p.id);
+    const { error: e3 } = await mitKbSeite((mitSeite) => sb.from("personen").update(mitSeite ? { trauungsbuch_link: null, trauungsbuch_zeile: null, trauungsbuch_seite: null } : { trauungsbuch_link: null, trauungsbuch_zeile: null }).eq("id", p.id));
     if (e3) return e3.message;
   }
   return null;
@@ -6653,7 +6691,7 @@ async function loadDetailFamilie(personId) {
             <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
           </div>
           <div class="familie-auto-ende"></div>
-          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span><button type="button" class="source-edit-btn familie-source-edit" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button><div class="familie-source-editor" hidden><input type="url" class="familie-source-url" placeholder="https://…" aria-label="Trauungsbuch-URL"><label>Zeile <input type="number" class="familie-source-row" min="1" placeholder="–"></label><button type="button" class="btn btn--secondary familie-source-save">Quelle speichern</button><small class="familie-source-hint">Feld leeren und speichern entfernt den Link.</small></div></div>
+          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span><button type="button" class="source-edit-btn familie-source-edit" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button><div class="familie-source-editor" hidden><input type="url" class="familie-source-url" placeholder="https://…" aria-label="Trauungsbuch-URL"><label>Zeile <input type="number" class="familie-source-row" min="1" placeholder="–"></label><label>Seite <select class="familie-source-side" aria-label="Seite der Doppelseite"><option value="">–</option><option value="links">links</option><option value="rechts">rechts</option></select></label><button type="button" class="btn btn--secondary familie-source-save">Quelle speichern</button><small class="familie-source-hint">Feld leeren und speichern entfernt den Link.</small></div></div>
           <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
         </div>
       </div>`;
@@ -6734,14 +6772,14 @@ async function loadDetailFamilie(personId) {
     try {
       const { data: eheQuelleData, error: eheQuelleError } = await sb
         .from("familien_trauungsbuch_quellen")
-        .select("familie_id, trauungsbuch_link, trauungsbuch_zeile")
+        .select("*")
         .eq("familie_id", f.id)
         .maybeSingle();
       if (eheQuelleError) throw eheQuelleError;
       eheQuelle = eheQuelleData || null;
       if (!eheQuelle) {
         const { data: quellenPersonen, error: quellenError } = await sb.from("personen")
-          .select("id, vorname, nachname, trauungsbuch_link, trauungsbuch_zeile")
+          .select("*")
           .in("id", [personId, otherId]);
         if (quellenError) throw quellenError;
         const legacyQuelle = await eindeutigeAlteTrauungsQuelle(quellenPersonen || []);
@@ -6749,7 +6787,8 @@ async function loadDetailFamilie(personId) {
           alt: true,
           familie_id: f.id,
           trauungsbuch_link: legacyQuelle.trauungsbuch_link || "",
-          trauungsbuch_zeile: legacyQuelle.trauungsbuch_zeile || null
+          trauungsbuch_zeile: legacyQuelle.trauungsbuch_zeile || null,
+          trauungsbuch_seite: legacyQuelle.trauungsbuch_seite || null
         };
       }
       if (eheQuelle?.trauungsbuch_link) {
@@ -6758,7 +6797,7 @@ async function loadDetailFamilie(personId) {
         familienQuelleLink.hidden = false;
         familienQuelleLink.classList.add("btn--link-present");
         familienQuelleLink.removeAttribute("aria-disabled");
-        familienQuelleZeile.textContent = eheQuelle.trauungsbuch_zeile ? `Zeile ${eheQuelle.trauungsbuch_zeile}` : "Zeile –";
+        familienQuelleZeile.textContent = kbFundstelleText(eheQuelle.trauungsbuch_seite, eheQuelle.trauungsbuch_zeile) || "Zeile –";
       } else {
         familienQuelleLink.hidden = false;
         familienQuelleLink.href = "#";
@@ -6778,6 +6817,8 @@ async function loadDetailFamilie(personId) {
 
     sourceUrlInput.value = eheQuelle?.trauungsbuch_link || "";
     sourceRowInput.value = eheQuelle?.trauungsbuch_zeile ?? "";
+    const sourceSideInput = div.querySelector(".familie-source-side");
+    if (sourceSideInput) sourceSideInput.value = eheQuelle?.trauungsbuch_seite || "";
     sourceEditBtn.addEventListener("click", () => { sourceEditor.hidden = !sourceEditor.hidden; });
     div.querySelector(".familie-source-save").addEventListener("click", async () => {
       const url = sourceUrlInput.value.trim();
@@ -6801,9 +6842,10 @@ async function loadDetailFamilie(personId) {
         familie_id: f.id,
         trauungsbuch_link: url,
         trauungsbuch_zeile: row,
+        trauungsbuch_seite: sourceSideInput && ["links", "rechts"].includes(sourceSideInput.value) ? sourceSideInput.value : null,
         geaendert_am: new Date().toISOString()
       };
-      const { error } = await sb.from("familien_trauungsbuch_quellen").upsert(updateDaten, { onConflict: "familie_id" });
+      const { error } = await mitKbSeite((mitSeite) => sb.from("familien_trauungsbuch_quellen").upsert(mitSeite ? updateDaten : ohneKbSeite(updateDaten), { onConflict: "familie_id" }));
       if (error) { alert(`Trauungsbuch-Quelle konnte nicht gespeichert werden: ${error.message}`); return; }
       await loadDetailFamilie(currentDetailPersonId);
     });
@@ -10706,7 +10748,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=368");
+      treeModul3D = await import("./tree3d.js?v=369");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

@@ -1929,3 +1929,9 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .wohnort-haus { font-weight: 600; color: #174f3b; }
 .wohnort-info { color: #5d5a50; font-size: .9rem; text-align: right; }
 .wohnort-quelle { grid-column: 1 / -1; color: #7a7566; font-size: .78rem; }
+
+/* v369: Seite der Doppelseite (links/rechts) */
+.source-side-select { padding: .35rem .4rem; border: 1px solid var(--line, #d9d3c3); border-radius: 7px; background: #fff; font-size: .9rem; min-width: 5.5rem; }
+.familie-source-editor label { display: flex; align-items: center; gap: .4rem; }
+.familie-source-side { padding: .4rem; border: 1px solid var(--line, #d9d3c3); border-radius: 7px; }
+.source-button-line .source-side-select, .source-link-inline .source-side-select { width: auto !important; max-width: 9rem; justify-self: start; }

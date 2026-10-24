@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 368 -->
+    <!-- Version 369 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=368">
+<link rel="stylesheet" href="style.css?v=369">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 368</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 369</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -223,6 +223,7 @@
               <input type="url" id="taufbuch-link" placeholder="https://…" inputmode="url">
               <span class="source-line-label">Zeile</span>
               <input type="number" id="taufbuch-zeile" min="1" inputmode="numeric" placeholder="–">
+              <select id="taufbuch-seite" class="source-side-select" aria-label="Seite der Doppelseite" title="Seite der Doppelseite"><option value="">Seite –</option><option value="links">links</option><option value="rechts">rechts</option></select>
             </div>
           </label>
           <label class="field source-link-field">
@@ -231,6 +232,7 @@
               <input type="url" id="trauungsbuch-link" placeholder="https://…" inputmode="url">
               <span class="source-line-label">Zeile</span>
               <input type="number" id="trauungsbuch-zeile" min="1" inputmode="numeric" placeholder="–">
+              <select id="trauungsbuch-seite" class="source-side-select" aria-label="Seite der Doppelseite" title="Seite der Doppelseite"><option value="">Seite –</option><option value="links">links</option><option value="rechts">rechts</option></select>
             </div>
           </label>
           <label class="field source-link-field">
@@ -239,6 +241,7 @@
               <input type="url" id="sterbebuch-link" placeholder="https://…" inputmode="url">
               <span class="source-line-label">Zeile</span>
               <input type="number" id="sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–">
+              <select id="sterbebuch-seite" class="source-side-select" aria-label="Seite der Doppelseite" title="Seite der Doppelseite"><option value="">Seite –</option><option value="links">links</option><option value="rechts">rechts</option></select>
             </div>
           </label>
         </div>
@@ -578,6 +581,7 @@
       <details data-rolle="eigentuemer">
         <summary><strong>Verlauf und Lücken &amp; Inseln (nur Eigentümer)</strong></summary>
         <p><strong>Verlauf:</strong> zeigt, wer wann was angelegt, geändert oder gelöscht hat, je Person und gesamt. <strong>Lücken &amp; Inseln</strong> (im Stammbaum) zeigt Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen.</p>
+        <p><strong>Kirchenbuch-Seite:</strong> Neben „Zeile“ gibt es „Seite“ (– / links / rechts). „–“ heißt, der Eintrag geht über die ganze Doppelseite; „links“ oder „rechts“, wenn auf der Doppelseite zwei Einträge stehen. Angezeigt wird z. B. „rechte Seite, Zeile 3“.</p>
         <p><strong>Hausblätter-Import</strong> (Export / Sicherung): Import-Datei laden, dann Abweichungen bei vorhandenen Personen entscheiden („Bestand stimmt“, „Hausblatt stimmt“ oder „anderer Wert“) und bestätigen, ob eine Person schon im Bestand ist. Geändert wird nur, was du bestätigst. Danach „Vorschau erstellen“ und „Import starten“: neue Personen erhalten den Vermerk „aus Hausblatt … · ungeprüft“ (in der Personenansicht „als geprüft markieren“). Ein kleiner Punkt vor dem Namen zeigt den Stand: orange = ungeprüft, grün = geprüft. Im Bestand filtert „Anzeigen“ nach diesen Personen (aus Hausblatt, geprüft, ungeprüft, selbst erfasst). Punkte, Vermerk und Filter sieht nur der Eigentümer. Die Wohnorte (Hausnummern mit Jahr und Quelle) stehen in der Personenansicht für alle. „Import rückgängig“ entfernt alles, was der Import angelegt hat. Möglicherweise noch lebende Personen (ab 1921 geboren, ohne Sterbedatum) kommen in einem eigenen zweiten Durchgang mit eigenem „Rückgängig“.</p>
       </details>
     </div>
@@ -756,7 +760,7 @@
             <select id="d-geburtsdatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Geburtsjahr bekannt</span><select id="d-geburtsjahr"><option value="">Jahr</option></select></div>
           </div>
-          <div class="detail-event-source date-source-inline"><span class="source-heading">Taufbuch</span><input type="url" id="d-taufbuch-link" class="source-url-hidden" aria-label="Taufbuch-URL"><div class="source-button-line"><a id="d-taufbuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Taufbuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–"><button type="button" class="source-edit-btn" data-source-edit="d-taufbuch-link" title="Taufbuch-Link bearbeiten" aria-label="Taufbuch-Link bearbeiten">✏️</button></div></div></div>
+          <div class="detail-event-source date-source-inline"><span class="source-heading">Taufbuch</span><input type="url" id="d-taufbuch-link" class="source-url-hidden" aria-label="Taufbuch-URL"><div class="source-button-line"><a id="d-taufbuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Taufbuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-taufbuch-zeile" min="1" inputmode="numeric" placeholder="–"><select id="d-taufbuch-seite" class="source-side-select" aria-label="Seite der Doppelseite" title="Seite der Doppelseite"><option value="">Seite –</option><option value="links">links</option><option value="rechts">rechts</option></select><button type="button" class="source-edit-btn" data-source-edit="d-taufbuch-link" title="Taufbuch-Link bearbeiten" aria-label="Taufbuch-Link bearbeiten">✏️</button></div></div></div>
           </label>
           <label class="field"><span>Sterbedatum</span><div class="date-source-row"><div class="date-parts date-parts--with-year">
             <select id="d-sterbedatum-tag"><option value="">Tag</option></select>
@@ -764,10 +768,10 @@
             <select id="d-sterbedatum-jahr"><option value="">Jahr</option></select>
             <div class="date-year-only-field"><span>nur Todesjahr bekannt</span><select id="d-sterbejahr"><option value="">Jahr</option></select></div>
           </div>
-          <div class="detail-event-source date-source-inline"><span class="source-heading">Sterbebuch</span><input type="url" id="d-sterbebuch-link" class="source-url-hidden" aria-label="Sterbebuch-URL"><div class="source-button-line"><a id="d-sterbebuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Sterbebuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–"><button type="button" class="source-edit-btn" data-source-edit="d-sterbebuch-link" title="Sterbebuch-Link bearbeiten" aria-label="Sterbebuch-Link bearbeiten">✏️</button></div></div></div>
+          <div class="detail-event-source date-source-inline"><span class="source-heading">Sterbebuch</span><input type="url" id="d-sterbebuch-link" class="source-url-hidden" aria-label="Sterbebuch-URL"><div class="source-button-line"><a id="d-sterbebuch-open" class="btn source-open-btn" href="#" target="_blank" rel="noopener">📖 Sterbebuch öffnen</a><span class="source-line-label">Zeile</span><input type="number" id="d-sterbebuch-zeile" min="1" inputmode="numeric" placeholder="–"><select id="d-sterbebuch-seite" class="source-side-select" aria-label="Seite der Doppelseite" title="Seite der Doppelseite"><option value="">Seite –</option><option value="links">links</option><option value="rechts">rechts</option></select><button type="button" class="source-edit-btn" data-source-edit="d-sterbebuch-link" title="Sterbebuch-Link bearbeiten" aria-label="Sterbebuch-Link bearbeiten">✏️</button></div></div></div>
           </label>
         </div>
-<div hidden><input type="url" id="d-trauungsbuch-link"><input type="number" id="d-trauungsbuch-zeile"><a id="d-trauungsbuch-open" href="#"></a></div>
+<div hidden><input type="url" id="d-trauungsbuch-link"><input type="number" id="d-trauungsbuch-zeile"><select id="d-trauungsbuch-seite"><option value=""></option><option value="links">links</option><option value="rechts">rechts</option></select><a id="d-trauungsbuch-open" href="#"></a></div>
 
         <label class="field"><span>Notiz</span><textarea id="d-notiz" rows="3"></textarea></label>
         <section class="weiterfuehrende-links-editor" aria-labelledby="d-weiterfuehrende-links-heading">
@@ -982,7 +986,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=368"></script>
-<script src="app.js?v=368"></script>
+<script src="hinweise.js?v=369"></script>
+<script src="app.js?v=369"></script>
 </body>
 </html>
