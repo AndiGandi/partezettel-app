@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 371
+// Partezettel Archiv – Version 372
+// v372: Kinder aus Familien mit nur einem Elternteil erscheinen in der Personenansicht und in der Zählung im Bestand.
 // v371: Listen über 1000 Einträge werden seitenweise geladen (Supabase liefert pro Abfrage höchstens 1000 Zeilen).
 // v370: Wohnorte mit „Geburtshaus“/„Elternhaus“, Hinweis „Haus des Ehepartners“, Bearbeiten (Art, Jahr, entfernen, hinzufügen).
 // v369: Kirchenbuch-Quellen mit „Seite“ (links/rechts) bei Taufe, Trauung, Tod und Ehe-Quelle; ohne Paket 4 wird ohne Seite gespeichert.
@@ -2716,10 +2717,11 @@ async function ladePersonenAusPersistentemCache() {
     const typ = String(familie.familientyp || "").trim().toLocaleLowerCase("de");
     const istEheOderPartnerschaft = typ === "ehe" || typ === "partnerschaft";
     for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-      if (!partnerId || !istEheOderPartnerschaft) continue;
+      if (!partnerId) continue;
       const info = personenVerwandtschaftCache.get(partnerId);
       if (!info) continue;
-      info.ehePartnerschaften.add(familie.id);
+      if (istEheOderPartnerschaft) info.ehePartnerschaften.add(familie.id);
+      // v372: Kinder auch aus Familien mit nur einem Elternteil zählen
       for (const kindId of familie._kinder || []) {
         if (kindId && kindId !== partnerId) info.kinder.add(kindId);
       }
@@ -2806,10 +2808,11 @@ function baueAuswahlCachesAusSyncDaten() {
     const typ = String(familie.familientyp || "").trim().toLocaleLowerCase("de");
     const istEheOderPartnerschaft = typ === "ehe" || typ === "partnerschaft";
     for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-      if (!partnerId || !istEheOderPartnerschaft) continue;
+      if (!partnerId) continue;
       const info = personenVerwandtschaftCache.get(partnerId);
       if (!info) continue;
-      info.ehePartnerschaften.add(familie.id);
+      if (istEheOderPartnerschaft) info.ehePartnerschaften.add(familie.id);
+      // v372: Kinder auch aus Familien mit nur einem Elternteil zählen
       for (const kindId of familie._kinder || []) {
         if (kindId && kindId !== partnerId) info.kinder.add(kindId);
       }
@@ -3288,10 +3291,10 @@ async function loadPersonen(force = false) {
         const typ = String(familie.familientyp || '').trim().toLocaleLowerCase('de');
         const istEheOderPartnerschaft = typ === 'ehe' || typ === 'partnerschaft';
         for (const partnerId of [familie.partner_a_id, familie.partner_b_id]) {
-          if (!partnerId || !istEheOderPartnerschaft) continue;
+          if (!partnerId) continue;
           const info = personenVerwandtschaftCache.get(partnerId);
           if (!info) continue;
-          info.ehePartnerschaften.add(familie.id);
+          if (istEheOderPartnerschaft) info.ehePartnerschaften.add(familie.id);
           for (const kindId of familie._kinder || []) {
             if (kindId && kindId !== partnerId) info.kinder.add(kindId);
           }
@@ -4233,7 +4236,8 @@ async function openPersonDetail(personId, options = {}) {
     }
 
     const spouseIds = [...new Set(partnerFamilies.map(f => f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id).filter(Boolean))];
-    const childFamilyIds = new Set(partnerFamilies.map(f => f.id));
+    // v372: auch Kinder aus Familien mit nur einem Elternteil (z. B. ledige oder verwitwete Mutter)
+    const childFamilyIds = new Set((familyRows || []).map(f => f.id));
     const childrenLinks = (childLinks || []).filter(link => childFamilyIds.has(link.familie_id));
 
     // Eltern der aktuellen Person: familien_kinder verknüpft das Kind mit seiner Elternfamilie.
@@ -10763,7 +10767,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=371");
+      treeModul3D = await import("./tree3d.js?v=372");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
