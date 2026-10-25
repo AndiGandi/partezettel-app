@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 370
+// Partezettel Archiv – Version 371
+// v371: Listen über 1000 Einträge werden seitenweise geladen (Supabase liefert pro Abfrage höchstens 1000 Zeilen).
 // v370: Wohnorte mit „Geburtshaus“/„Elternhaus“, Hinweis „Haus des Ehepartners“, Bearbeiten (Art, Jahr, entfernen, hinzufügen).
 // v369: Kirchenbuch-Quellen mit „Seite“ (links/rechts) bei Taufe, Trauung, Tod und Ehe-Quelle; ohne Paket 4 wird ohne Seite gespeichert.
 // v368: „Import rückgängig“ prüft Foto-Markierungen jetzt über die richtige Spalte (personen_id).
@@ -2819,9 +2820,9 @@ function baueAuswahlCachesAusSyncDaten() {
 
 async function ladeFamilienAusSupabaseFuerSync() {
   const [{ data: familien, error: familienError }, { data: familienKinder, error: kinderError }, { data: beziehungen, error: beziehungsError }] = await Promise.all([
-    sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
-    sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp"),
-    sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp")
+    alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren").order("id")),
+    alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id")),
+    alleZeilenLaden(() => sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp").order("id"))
   ]);
   if (familienError) throw familienError;
   if (kinderError) throw kinderError;
@@ -2830,6 +2831,18 @@ async function ladeFamilienAusSupabaseFuerSync() {
   familienKinderAuswahlCache = familienKinder || [];
   beziehungenAuswahlCache = beziehungen || [];
   baueAuswahlCachesAusSyncDaten();
+}
+
+// v371: Supabase liefert pro Abfrage höchstens 1000 Zeilen. Alle Zeilen seitenweise laden.
+async function alleZeilenLaden(bau, seite = 1000) {
+  const alle = [];
+  for (let von = 0; ; von += seite) {
+    const { data, error } = await bau().range(von, von + seite - 1);
+    if (error) return { data: null, error };
+    alle.push(...(data || []));
+    if (!data || data.length < seite) break;
+  }
+  return { data: alle, error: null };
 }
 
 // v365: Prüf-Kennzeichen. Personen aus einem Import tragen herkunft_quelle; geprueft_am zeigt, ob schon geprüft.
@@ -3204,10 +3217,11 @@ async function loadPersonen(force = false) {
     aktualisiereEgressMessung();
     ladeHinweisStart(ersteLadung && !force);
     ladeHinweisSchritt("Personen werden abgerufen");
-    const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => sb
+    const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => alleZeilenLaden(() => sb
       .from("personen")
       .select(sp)
-      .order("nachname", { ascending: true }));
+      .order("nachname", { ascending: true })
+      .order("id", { ascending: true })));
 
     if (error) throw error;
 
@@ -3230,9 +3244,9 @@ async function loadPersonen(force = false) {
     personenKeineDaten = false;
     try {
       const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
-        sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
-        sb.from("familien_kinder").select("familie_id, kind_id"),
-        sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp")
+        alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren").order("id")),
+        alleZeilenLaden(() => sb.from("familien_kinder").select("familie_id, kind_id").order("familie_id").order("kind_id")),
+        alleZeilenLaden(() => sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp").order("personen_a_id").order("personen_b_id"))
       ]);
       familienAuswahlCache = familien || [];
       partnerIdsAuswahlCache = new Set();
@@ -4151,7 +4165,7 @@ async function openPersonDetail(personId, options = {}) {
     const spouseList = document.getElementById("pv-spouse-list"); spouseList.replaceChildren();
     const [{ data: familyRows, error: familyError }, { data: childLinks, error: childError }] = await Promise.all([
       sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
-      sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
+      alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id"))
     ]);
     if (familyError) debugLog(`⚠️ Ehepartner laden: ${familyError.message}`);
     if (childError) debugLog(`⚠️ Kinder laden: ${childError.message}`);
@@ -7099,7 +7113,7 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
   if (selectId === "d-kind-person") {
     try {
       const [{ data: kinderLinks, error: kinderError }, { data: eigeneFamilien, error: familienError }] = await Promise.all([
-        sb.from("familien_kinder").select("kind_id"),
+        alleZeilenLaden(() => sb.from("familien_kinder").select("kind_id").order("kind_id")),
         sb.from("familien").select("partner_a_id, partner_b_id").or(`partner_a_id.eq.${excludePersonId},partner_b_id.eq.${excludePersonId}`)
       ]);
       if (kinderError) throw kinderError;
@@ -8481,9 +8495,9 @@ function treeParentFamiliesForPerson(id) {
 async function loadStammbaumData(optionen = {}) {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
-    personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => sb.from("personen").select(sp).order("nachname", { ascending: true })),
-    sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren"),
-    sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp")
+    personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => alleZeilenLaden(() => sb.from("personen").select(sp).order("nachname", { ascending: true }).order("id", { ascending: true }))),
+    alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren").order("id")),
+    alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id"))
   ]);
   if (personenError) throw personenError;
   if (familienError) throw familienError;
@@ -9855,7 +9869,7 @@ async function treeLueckenOeffnen() {
     for (const p of (Array.isArray(personenCache) ? personenCache : [])) if (p.Notiz) notizen.set(p.id, p.Notiz);
     let beziehungen = [];
     try {
-      const { data, error } = await sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp");
+      const { data, error } = await alleZeilenLaden(() => sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp").order("id"));
       if (!error) beziehungen = data || [];
     } catch (_) { /* Tabelle optional */ }
     treeLueckenRender(treeLueckenAnalyse(beziehungen, notizen));
@@ -10749,7 +10763,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=370");
+      treeModul3D = await import("./tree3d.js?v=371");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11962,7 +11976,7 @@ function neuerWohnortFormular(personId) {
       <input type="number" class="wn-jahr" inputmode="numeric" placeholder="Jahr" aria-label="Jahr">
       <button type="button" class="btn btn--primary imp-link wn-speichern">Hinzufügen</button>
     </span><datalist id="wn-orte"></datalist>`;
-  sb.from("haeuser").select("ort").then(({ data }) => {
+  alleZeilenLaden(() => sb.from("haeuser").select("ort").order("ort")).then(({ data }) => {
     const dl = li.querySelector("#wn-orte");
     [...new Set((data || []).map((h) => h.ort))].sort().forEach((o) => dl.appendChild(new Option(o)));
   });
@@ -11974,7 +11988,7 @@ function neuerWohnortFormular(personId) {
     const jahr = jt ? Number(jt) : null;
     if (!ort) { window.alert("Bitte einen Ort eingeben."); return; }
     if (jahr !== null && (!Number.isInteger(jahr) || jahr < 1000 || jahr > 2100)) { window.alert("Bitte ein gültiges Jahr eingeben oder das Feld leer lassen."); return; }
-    const { data: alle, error: he } = await sb.from("haeuser").select("id, ort, nummer");
+    const { data: alle, error: he } = await alleZeilenLaden(() => sb.from("haeuser").select("id, ort, nummer").order("id"));
     if (he) { window.alert(`Häuser konnten nicht geladen werden: ${he.message}`); return; }
     const key = (o, n) => `${String(o || "").trim().toLowerCase()}|${String(n || "").trim()}`;
     let haus = (alle || []).find((h) => key(h.ort, h.nummer) === key(ort, nummer));
