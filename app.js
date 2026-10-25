@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 369
+// Partezettel Archiv – Version 370
+// v370: Wohnorte mit „Geburtshaus“/„Elternhaus“, Hinweis „Haus des Ehepartners“, Bearbeiten (Art, Jahr, entfernen, hinzufügen).
 // v369: Kirchenbuch-Quellen mit „Seite“ (links/rechts) bei Taufe, Trauung, Tod und Ehe-Quelle; ohne Paket 4 wird ohne Seite gespeichert.
 // v368: „Import rückgängig“ prüft Foto-Markierungen jetzt über die richtige Spalte (personen_id).
 // v367: Wohnorte (Hausnummern) in der Personenansicht; Prüf-Punkt, Herkunftsvermerk und Filter nur für den Eigentümer; Filter „aus Hausblatt · alle“ und „selbst erfasst“.
@@ -10748,7 +10749,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=369");
+      treeModul3D = await import("./tree3d.js?v=370");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11813,38 +11814,123 @@ function zeigeHerkunftsvermerk(person) {
   }
 }
 
-// v367: Wohnorte (Stationen) in der Personenansicht – für alle Rollen sichtbar
-let wohnorteLauf = 0;
-const STATION_ART = { geboren: "geboren", wohnte: "wohnte", zugezogen: "zugezogen" };
+// v370: Wohnorte (Stationen) in der Personenansicht – anzeigen für alle, bearbeiten für Bearbeiter/Eigentümer
+let wohnorteLauf = 0, wohnorteBearbeiten = false, wohnortePersonId = null;
+const STATION_ART = { geboren: "Geburtshaus", elternhaus: "Elternhaus", wohnte: "wohnte", zugezogen: "zugezogen" };
+const STATION_RANG = { geboren: 0, elternhaus: 0, wohnte: 1, zugezogen: 2 };
+const hausText = (h) => `${h.ort}${h.nummer ? ` Nr. ${h.nummer}` : ""}${h.name ? ` „${h.name}“` : ""}`;
+function stationFehlerText(error) {
+  const t = `${error?.code || ""} ${error?.message || ""}`;
+  if (/art_check|check constraint/i.test(t)) return "Diese Art ist in der Datenbank noch nicht erlaubt. Bitte zuerst Paket 5 (Elternhaus) in Supabase einspielen.";
+  if (/duplicate|23505|doppelt/i.test(t)) return "Diesen Wohnort gibt es bei der Person schon (gleiches Haus, gleiche Art, gleiches Jahr).";
+  return error?.message || String(error);
+}
 async function ladeWohnorte(personId) {
   const lauf = ++wohnorteLauf;
+  if (wohnortePersonId !== personId) wohnorteBearbeiten = false;
+  wohnortePersonId = personId;
   const section = document.getElementById("pv-wohnorte-section");
   const liste = document.getElementById("pv-wohnorte-list");
   if (!section || !liste) return;
-  section.hidden = true; liste.innerHTML = "";
+  const darf = rolleDarfSchreiben();
+  liste.innerHTML = "";
+  let kopfBtn = document.getElementById("pv-wohnorte-edit");
+  if (!kopfBtn && darf) {
+    kopfBtn = document.createElement("button");
+    kopfBtn.type = "button"; kopfBtn.id = "pv-wohnorte-edit"; kopfBtn.className = "btn btn--ghost imp-link wohnort-edit-toggle";
+    section.querySelector("h3")?.appendChild(kopfBtn);
+    kopfBtn.addEventListener("click", () => { wohnorteBearbeiten = !wohnorteBearbeiten; ladeWohnorte(wohnortePersonId); });
+  }
+  if (kopfBtn) { kopfBtn.hidden = !darf; kopfBtn.textContent = wohnorteBearbeiten ? "Fertig" : "✏️"; kopfBtn.title = wohnorteBearbeiten ? "Bearbeiten beenden" : "Wohnorte bearbeiten"; }
   try {
     const { data: st, error } = await sb.from("person_stationen").select("id, haus_id, art, jahr, datum, sortierung, quelle, notiz").eq("personen_id", personId);
-    if (error) { if (!tabelleFehlt(error)) debugLog(`⚠️ Wohnorte: ${error.message}`); return; }
-    if (lauf !== wohnorteLauf || !(st || []).length) return;
-    const ids = [...new Set(st.map((x) => x.haus_id))];
-    const { data: haeuser, error: he } = await sb.from("haeuser").select("id, ort, nummer, name").in("id", ids);
-    if (he) { debugLog(`⚠️ Häuser: ${he.message}`); return; }
+    if (error) { if (!tabelleFehlt(error)) debugLog(`⚠️ Wohnorte: ${error.message}`); section.hidden = true; return; }
     if (lauf !== wohnorteLauf) return;
-    const hausNach = new Map((haeuser || []).map((h) => [h.id, h]));
+    const stationen = st || [];
+    // Ehepartner und deren Geburts-/Elternhäuser (für „Haus des Ehepartners“)
+    const partnerHaus = new Map();
+    try {
+      const [fa, fb] = await Promise.all([
+        sb.from("familien").select("partner_a_id, partner_b_id, familientyp").eq("partner_a_id", personId),
+        sb.from("familien").select("partner_a_id, partner_b_id, familientyp").eq("partner_b_id", personId)
+      ]);
+      const partnerIds = [...new Set([...(fa.data || []), ...(fb.data || [])].filter((f) => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern")
+        .map((f) => (f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id)))];
+      if (partnerIds.length) {
+        const [{ data: pst }, { data: pp }] = await Promise.all([
+          sb.from("person_stationen").select("personen_id, haus_id, art").in("personen_id", partnerIds),
+          sb.from("personen").select("id, vorname").in("id", partnerIds)
+        ]);
+        const pName = new Map((pp || []).map((x) => [x.id, x.vorname]));
+        for (const x of pst || []) {
+          if (x.art === "geboren" || x.art === "elternhaus") partnerHaus.set(x.haus_id, pName.get(x.personen_id) || "");
+        }
+      }
+    } catch (err) { debugLog(`⚠️ Wohnorte, Ehepartner: ${err.message || err}`); }
+    if (lauf !== wohnorteLauf) return;
+    const hausIds = [...new Set(stationen.map((x) => x.haus_id))];
+    let hausNach = new Map();
+    if (hausIds.length) {
+      const { data: haeuser, error: he } = await sb.from("haeuser").select("id, ort, nummer, name").in("id", hausIds);
+      if (he) { debugLog(`⚠️ Häuser: ${he.message}`); return; }
+      hausNach = new Map((haeuser || []).map((h) => [h.id, h]));
+    }
+    if (lauf !== wohnorteLauf) return;
     const jahrVon = (x) => x.jahr || (x.datum ? Number(String(x.datum).slice(0, 4)) : null);
-    const sortiert = [...st].sort((a, b) => (a.sortierung || 0) - (b.sortierung || 0) || (jahrVon(a) || 0) - (jahrVon(b) || 0));
+    const sortiert = [...stationen].sort((a, b) => (a.sortierung || 0) - (b.sortierung || 0) || (jahrVon(a) || 0) - (jahrVon(b) || 0));
     for (const x of sortiert) {
       const h = hausNach.get(x.haus_id);
       if (!h) continue;
       const li = document.createElement("li");
-      const zeit = x.datum ? personViewDatum(String(x.datum).slice(0, 10)) : (x.jahr ? String(x.jahr) : "");
       const kopf = document.createElement("span");
       kopf.className = "wohnort-haus";
-      kopf.textContent = `${h.ort}${h.nummer ? ` Nr. ${h.nummer}` : ""}${h.name ? ` „${h.name}“` : ""}`;
-      const info = document.createElement("span");
-      info.className = "wohnort-info";
-      info.textContent = [STATION_ART[x.art] || x.art, zeit].filter(Boolean).join(" ");
-      li.append(kopf, info);
+      kopf.textContent = hausText(h);
+      li.appendChild(kopf);
+      if (wohnorteBearbeiten && darf) {
+        li.classList.add("is-edit");
+        const box = document.createElement("span");
+        box.className = "wohnort-edit";
+        const art = document.createElement("select");
+        art.setAttribute("aria-label", "Art");
+        for (const [w, t] of Object.entries(STATION_ART)) art.add(new Option(t, w, false, w === x.art));
+        const jahr = document.createElement("input");
+        jahr.type = "number"; jahr.inputMode = "numeric"; jahr.min = "1000"; jahr.max = "2100"; jahr.placeholder = "Jahr"; jahr.value = jahrVon(x) || "";
+        jahr.setAttribute("aria-label", "Jahr");
+        const speichern = document.createElement("button");
+        speichern.type = "button"; speichern.className = "btn btn--secondary imp-link"; speichern.textContent = "Speichern";
+        const weg = document.createElement("button");
+        weg.type = "button"; weg.className = "btn btn--ghost imp-link"; weg.textContent = "🗑"; weg.title = "Wohnort entfernen";
+        speichern.addEventListener("click", async () => {
+          const j = jahr.value.trim() ? Number(jahr.value) : null;
+          if (j !== null && (!Number.isInteger(j) || j < 1000 || j > 2100)) { window.alert("Bitte ein gültiges Jahr eingeben (z. B. 1874) oder das Feld leer lassen."); return; }
+          const aenderung = { art: art.value, sortierung: STATION_RANG[art.value] ?? 1 };
+          if (j !== jahrVon(x)) { aenderung.jahr = j; aenderung.datum = null; }
+          const { error: ue } = await sb.from("person_stationen").update(aenderung).eq("id", x.id);
+          if (ue) { window.alert(`Konnte nicht gespeichert werden: ${stationFehlerText(ue)}`); return; }
+          ladeWohnorte(personId);
+        });
+        weg.addEventListener("click", async () => {
+          if (!window.confirm(`Wohnort „${hausText(h)}“ bei dieser Person entfernen? Das Haus selbst bleibt bestehen.`)) return;
+          const { error: de } = await sb.from("person_stationen").delete().eq("id", x.id);
+          if (de) { window.alert(`Konnte nicht entfernt werden: ${de.message}`); return; }
+          ladeWohnorte(personId);
+        });
+        box.append(art, jahr, speichern, weg);
+        li.appendChild(box);
+      } else {
+        const info = document.createElement("span");
+        info.className = "wohnort-info";
+        const zeit = x.datum ? personViewDatum(String(x.datum).slice(0, 10)) : (x.jahr ? String(x.jahr) : "");
+        info.textContent = [STATION_ART[x.art] || x.art, zeit].filter(Boolean).join(" ");
+        li.appendChild(info);
+        if ((x.art === "zugezogen" || x.art === "wohnte") && partnerHaus.has(x.haus_id)) {
+          const ehe = document.createElement("small");
+          ehe.className = "wohnort-ehe";
+          const n = partnerHaus.get(x.haus_id);
+          ehe.textContent = `Haus des Ehepartners${n ? ` (${n})` : ""}`;
+          li.appendChild(ehe);
+        }
+      }
       if (x.quelle || x.notiz) {
         const q = document.createElement("small");
         q.className = "wohnort-quelle";
@@ -11853,8 +11939,56 @@ async function ladeWohnorte(personId) {
       }
       liste.appendChild(li);
     }
+    if (wohnorteBearbeiten && darf) liste.appendChild(neuerWohnortFormular(personId));
+    else if (!liste.children.length && darf) {
+      const leer = document.createElement("li");
+      leer.className = "wohnort-leer";
+      leer.textContent = "Noch keine Wohnorte – mit ✏️ hinzufügen.";
+      liste.appendChild(leer);
+    }
     section.hidden = !liste.children.length;
   } catch (err) {
     debugLog(`⚠️ Wohnorte: ${err.message || err}`);
   }
+}
+function neuerWohnortFormular(personId) {
+  const li = document.createElement("li");
+  li.className = "wohnort-neu";
+  li.innerHTML = `<span class="wohnort-haus">＋ Wohnort hinzufügen</span>
+    <span class="wohnort-edit">
+      <input type="text" class="wn-ort" list="wn-orte" placeholder="Ort" value="Innerberg" aria-label="Ort">
+      <input type="text" class="wn-nummer" inputmode="numeric" placeholder="Nr." aria-label="Hausnummer">
+      <select class="wn-art" aria-label="Art">${Object.entries(STATION_ART).map(([w, t]) => `<option value="${w}"${w === "geboren" ? " selected" : ""}>${t}</option>`).join("")}</select>
+      <input type="number" class="wn-jahr" inputmode="numeric" placeholder="Jahr" aria-label="Jahr">
+      <button type="button" class="btn btn--primary imp-link wn-speichern">Hinzufügen</button>
+    </span><datalist id="wn-orte"></datalist>`;
+  sb.from("haeuser").select("ort").then(({ data }) => {
+    const dl = li.querySelector("#wn-orte");
+    [...new Set((data || []).map((h) => h.ort))].sort().forEach((o) => dl.appendChild(new Option(o)));
+  });
+  li.querySelector(".wn-speichern").addEventListener("click", async () => {
+    const ort = li.querySelector(".wn-ort").value.trim();
+    const nummer = li.querySelector(".wn-nummer").value.trim() || null;
+    const art = li.querySelector(".wn-art").value;
+    const jt = li.querySelector(".wn-jahr").value.trim();
+    const jahr = jt ? Number(jt) : null;
+    if (!ort) { window.alert("Bitte einen Ort eingeben."); return; }
+    if (jahr !== null && (!Number.isInteger(jahr) || jahr < 1000 || jahr > 2100)) { window.alert("Bitte ein gültiges Jahr eingeben oder das Feld leer lassen."); return; }
+    const { data: alle, error: he } = await sb.from("haeuser").select("id, ort, nummer");
+    if (he) { window.alert(`Häuser konnten nicht geladen werden: ${he.message}`); return; }
+    const key = (o, n) => `${String(o || "").trim().toLowerCase()}|${String(n || "").trim()}`;
+    let haus = (alle || []).find((h) => key(h.ort, h.nummer) === key(ort, nummer));
+    if (!haus) {
+      if (!window.confirm(`Das Haus „${ort}${nummer ? ` Nr. ${nummer}` : ""}“ gibt es noch nicht. Neu anlegen?`)) return;
+      const neu = { id: crypto.randomUUID(), ort, nummer };
+      const { error: ie } = await sb.from("haeuser").insert(neu);
+      if (ie) { window.alert(`Haus konnte nicht angelegt werden: ${ie.message}`); return; }
+      haus = neu;
+    }
+    const station = { id: crypto.randomUUID(), personen_id: personId, haus_id: haus.id, art, jahr, sortierung: STATION_RANG[art] ?? 1, quelle: `von Hand eingetragen${zugang?.name ? ` (${zugang.name})` : ""}` };
+    const { error: se } = await sb.from("person_stationen").insert(station);
+    if (se) { window.alert(`Konnte nicht gespeichert werden: ${stationFehlerText(se)}`); return; }
+    ladeWohnorte(personId);
+  });
+  return li;
 }

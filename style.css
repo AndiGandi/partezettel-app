@@ -1935,3 +1935,15 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .familie-source-editor label { display: flex; align-items: center; gap: .4rem; }
 .familie-source-side { padding: .4rem; border: 1px solid var(--line, #d9d3c3); border-radius: 7px; }
 .source-button-line .source-side-select, .source-link-inline .source-side-select { width: auto !important; max-width: 9rem; justify-self: start; }
+
+/* v370: Wohnorte bearbeiten, Elternhaus, Haus des Ehepartners */
+.wohnort-edit-toggle { margin-left: .5rem; vertical-align: middle; }
+#pv-wohnorte-section h3 { display: flex; align-items: center; justify-content: space-between; }
+.wohnort-ehe { grid-column: 1 / -1; color: #174f3b; font-size: .82rem; font-style: italic; }
+.person-view-wohnorte li.is-edit, .person-view-wohnorte li.wohnort-neu { grid-template-columns: 1fr; }
+.wohnort-edit { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+.wohnort-edit select, .wohnort-edit input { padding: .4rem; border: 1px solid #d9d3c3; border-radius: 7px; font-size: .95rem; background: #fff; }
+.wohnort-edit input[type=number], .wohnort-edit .wn-nummer { width: 5.2rem; }
+.wohnort-edit .wn-ort { width: 9rem; }
+.person-view-wohnorte li.wohnort-leer { border-left-style: dashed; color: #7a7566; font-size: .88rem; }
+.person-view-wohnorte li.wohnort-leer::before, .person-view-wohnorte li.wohnort-neu::before { background: #c9bfa6; }
