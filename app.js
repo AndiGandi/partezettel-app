@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 372
+// Partezettel Archiv – Version 374
+// v374: Sicherung und Import laden seitenweise mit eindeutiger Reihenfolge (zusätzlich nach id) – vorher konnten bei gleichem Nachnamen Personen doppelt kommen oder fehlen.
+// v373: Gespeicherte Personenliste aus älteren Versionen (bei 1000 abgeschnitten) wird erkannt und einmal vollständig neu geladen; Anzahl wird beim Start mit der Datenbank verglichen.
 // v372: Kinder aus Familien mit nur einem Elternteil erscheinen in der Personenansicht und in der Zählung im Bestand.
 // v371: Listen über 1000 Einträge werden seitenweise geladen (Supabase liefert pro Abfrage höchstens 1000 Zeilen).
 // v370: Wohnorte mit „Geburtshaus“/„Elternhaus“, Hinweis „Haus des Ehepartners“, Bearbeiten (Art, Jahr, entfernen, hinzufügen).
@@ -2605,6 +2607,7 @@ async function speicherePersonenImPersistentenCache(bundle) {
   const cacheBundle = {
     id: "aktuell",
     gespeichertAm,
+    seitenweise: true, // v373: vollständig geladen (nicht bei 1000 abgeschnitten)
     ...bundle
   };
 
@@ -2640,6 +2643,7 @@ async function speicherePersonenImPersistentenCache(bundle) {
   return localGespeichert || indexedGespeichert;
 }
 
+let personenCacheSeitenweise = false;
 async function ladePersonenAusPersistentemCache() {
   // v166: Safari zuerst aus localStorage bedienen. IndexedDB bleibt als
   // zusätzlicher dauerhafter Speicherweg erhalten.
@@ -2667,6 +2671,7 @@ async function ladePersonenAusPersistentemCache() {
 
   if (!bundle || !Array.isArray(bundle.personen) || bundle.personen.length === 0) return false;
 
+  personenCacheSeitenweise = bundle.seitenweise === true;
   personenCache = bundle.personen;
   familienAuswahlCache = Array.isArray(bundle.familien) ? bundle.familien : [];
   const familienKinder = Array.isArray(bundle.familienKinder) ? bundle.familienKinder : [];
@@ -3197,11 +3202,24 @@ async function loadPersonen(force = false) {
     ersteLadung = !lokalGeladen;
     const cacheOhnePruefFelder = lokalGeladen && pruefSpaltenVorhanden && personenCache.length > 0 && !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geprueft_am"));
     if (cacheOhnePruefFelder) debugLog("ℹ️ Cache ohne Prüf-Kennzeichen: einmalige vollständige Aktualisierung.");
-    if (lokalGeladen && personenCacheSyncInitialisiert && !cacheOhnePruefFelder) {
+    // v373: Ein Cache aus der Zeit vor dem seitenweisen Laden kann bei 1000 Personen abgeschnitten sein.
+    const cacheAbgeschnitten = lokalGeladen && !personenCacheSeitenweise;
+    if (cacheAbgeschnitten) debugLog("ℹ️ Gespeicherte Personenliste stammt aus einer älteren Version: einmalige vollständige Aktualisierung.");
+    if (lokalGeladen && personenCacheSyncInitialisiert && !cacheOhnePruefFelder && !cacheAbgeschnitten) {
       try {
         await synchronisierePersonenDelta();
       } catch (syncErr) {
         debugLog(`⚠️ Delta-Sync nach Cache-Laden: ${syncErr.message || syncErr}`);
+      }
+      // v373: Anzahl gegen die Datenbank prüfen; weicht sie ab, die Liste einmal vollständig neu laden.
+      try {
+        const { count, error: countError } = await sb.from("personen").select("id", { count: "exact", head: true });
+        if (!countError && Number.isFinite(count) && count !== personenCache.length) {
+          debugLog(`ℹ️ Personenliste unvollständig (${personenCache.length} statt ${count}): vollständige Aktualisierung.`);
+          return loadPersonen(true);
+        }
+      } catch (countErr) {
+        debugLog(`⚠️ Anzahl prüfen: ${countErr.message || countErr}`);
       }
       return;
     }
@@ -7620,7 +7638,11 @@ async function fetchAllTableRows(table, orderColumn = "id") {
   const pageSize = 500;
   let from = 0;
   while (true) {
-    const { data, error } = await sb.from(table).select("*").order(orderColumn).range(from, from + pageSize - 1);
+    // v374: eindeutige Reihenfolge (zusätzlich nach id), sonst können beim seitenweisen Laden
+    // Zeilen mit gleichem Nachnamen doppelt kommen oder fehlen.
+    let abfrage = sb.from(table).select("*").order(orderColumn);
+    if (orderColumn !== "id") abfrage = abfrage.order("id");
+    const { data, error } = await abfrage.range(from, from + pageSize - 1);
     if (error) throw error;
     const page = data || [];
     rows.push(...page);
@@ -10767,7 +10789,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=372");
+      treeModul3D = await import("./tree3d.js?v=374");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11449,7 +11471,7 @@ const ImportAssistent = (() => {
   async function alleZeilen(tabelle, spalten, filter) {
     const out = [];
     for (let von = 0; ; von += 1000) {
-      const { data, error } = await filter(sb.from(tabelle).select(spalten)).range(von, von + 999);
+      const { data, error } = await filter(sb.from(tabelle).select(spalten)).order("id").range(von, von + 999); // v374: feste Reihenfolge
       if (error) throw error;
       out.push(...(data || []));
       if (!data || data.length < 1000) break;
