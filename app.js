@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 374
+// Partezettel Archiv – Version 375
+// v375: Vater/Mutter in „Person bearbeiten“ auswählen speichert sofort; nur das Entfernen braucht „Eltern speichern“.
 // v374: Sicherung und Import laden seitenweise mit eindeutiger Reihenfolge (zusätzlich nach id) – vorher konnten bei gleichem Nachnamen Personen doppelt kommen oder fehlen.
 // v373: Gespeicherte Personenliste aus älteren Versionen (bei 1000 abgeschnitten) wird erkannt und einmal vollständig neu geladen; Anzahl wird beim Start mit der Datenbank verglichen.
 // v372: Kinder aus Familien mit nur einem Elternteil erscheinen in der Personenansicht und in der Zählung im Bestand.
@@ -6481,7 +6482,16 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   // Eltern: Speichern-Knopf erst nach Tippen auf ✎ oder Auswahl
   document.querySelectorAll("[data-parent-edit]").forEach((b) => b.addEventListener("click", () => { const s = el("d-save-eltern-btn"); if (s) s.hidden = false; }));
-  ["d-vater", "d-mutter"].forEach((id) => el(id)?.addEventListener("change", (e) => { if (e.isTrusted) { const s = el("d-save-eltern-btn"); if (s) s.hidden = false; } }));
+  // v375: Vater/Mutter auswählen speichert sofort (wie angekündigt). Nur das Entfernen braucht „Eltern speichern“.
+  ["d-vater", "d-mutter"].forEach((id) => el(id)?.addEventListener("change", (e) => {
+    const sel = e.currentTarget;
+    const vomNutzer = e.isTrusted || sel.dataset.nutzerAuswahl === "1";
+    delete sel.dataset.nutzerAuswahl;
+    if (!vomNutzer) return;
+    const s = el("d-save-eltern-btn");
+    if (sel.value) { if (s) { s.hidden = true; s.click(); } }
+    else if (s) s.hidden = false;
+  }));
   // Änderungen an der Person erkennen (nur echte Eingaben, keine programmatischen Befüllungen)
   const personFeld = document.querySelector("#detail-overlay .person-edit-fields");
   const alsGeaendert = (e) => { if (e.isTrusted) setzeDetailGeaendert(true); };
@@ -10463,6 +10473,7 @@ function personPickerFuerSelect(select, optionen = {}) {
 
   const auswaehlen = (item) => {
     select.value = item.id;
+    select.dataset.nutzerAuswahl = "1"; // v375: echte Auswahl durch den Nutzer (nicht beim Befüllen)
     select.dispatchEvent(new Event("change", { bubbles: true }));
     input.blur();
   };
@@ -10475,6 +10486,7 @@ function personPickerFuerSelect(select, optionen = {}) {
   });
   loeschen.addEventListener("click", () => {
     select.value = "";
+    select.dataset.nutzerAuswahl = "1";
     select.dispatchEvent(new Event("change", { bubbles: true }));
     input.focus();
   });
@@ -10789,7 +10801,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=374");
+      treeModul3D = await import("./tree3d.js?v=375");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
