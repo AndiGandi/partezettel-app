@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 375
+// Partezettel Archiv – Version 376
+// v376: Ehe/Partnerschaft auch mit nur bekanntem Jahr (beginn_jahr/ende_jahr, Paket 6); Import übernimmt Heiratsjahre.
 // v375: Vater/Mutter in „Person bearbeiten“ auswählen speichert sofort; nur das Entfernen braucht „Eltern speichern“.
 // v374: Sicherung und Import laden seitenweise mit eindeutiger Reihenfolge (zusätzlich nach id) – vorher konnten bei gleichem Nachnamen Personen doppelt kommen oder fehlen.
 // v373: Gespeicherte Personenliste aus älteren Versionen (bei 1000 abgeschnitten) wird erkannt und einmal vollständig neu geladen; Anzahl wird beim Start mit der Datenbank verglichen.
@@ -1608,6 +1609,25 @@ function getDatumElemente(tag, monat, jahr) {
   const y = jahr?.value || "";
   return t && m && y ? `${y}-${m}-${t}` : null;
 }
+// v376: Ehe/Partnerschaft mit nur bekanntem Jahr (Spalten beginn_jahr / ende_jahr, Paket 6)
+function nurJahr(prefix) {
+  const t=document.getElementById(prefix+"-tag")?.value, m=document.getElementById(prefix+"-monat")?.value, y=document.getElementById(prefix+"-jahr")?.value;
+  return y && !(t && m) && /^\d{4}$/.test(y) ? Number(y) : null;
+}
+const familieBeginnWert = (f) => f?.beginn || (f?.beginn_jahr ? String(f.beginn_jahr) : null);
+const familieEndeWert = (f) => f?.ende || (f?.ende_jahr ? String(f.ende_jahr) : null);
+let familienJahrSpalten = true;
+const ohneFamJahr = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => k !== "beginn_jahr" && k !== "ende_jahr"));
+async function mitFamJahr(bau) {
+  let r = await bau(familienJahrSpalten);
+  if (r?.error && familienJahrSpalten && /beginn_jahr|ende_jahr/i.test(`${r.error.message || ""} ${r.error.details || ""}`)) {
+    familienJahrSpalten = false;
+    debugLog("ℹ️ Spalten beginn_jahr/ende_jahr fehlen (Paket 6) – gespeichert ohne Jahresangabe.");
+    r = await bau(false);
+  }
+  return r;
+}
+
 function getDatum(prefix) {
   const t=document.getElementById(prefix+"-tag")?.value, m=document.getElementById(prefix+"-monat")?.value, y=document.getElementById(prefix+"-jahr")?.value;
   return t&&m&&y ? `${y}-${m}-${t}` : null;
@@ -2829,7 +2849,7 @@ function baueAuswahlCachesAusSyncDaten() {
 
 async function ladeFamilienAusSupabaseFuerSync() {
   const [{ data: familien, error: familienError }, { data: familienKinder, error: kinderError }, { data: beziehungen, error: beziehungsError }] = await Promise.all([
-    alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren").order("id")),
+    alleZeilenLaden(() => sb.from("familien").select("*").order("id")),
     alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id")),
     alleZeilenLaden(() => sb.from("beziehung").select("id, personen_a_id, personen_b_id, beziehungstyp").order("id"))
   ]);
@@ -3266,7 +3286,7 @@ async function loadPersonen(force = false) {
     personenKeineDaten = false;
     try {
       const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
-        alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren").order("id")),
+        alleZeilenLaden(() => sb.from("familien").select("*").order("id")),
         alleZeilenLaden(() => sb.from("familien_kinder").select("familie_id, kind_id").order("familie_id").order("kind_id")),
         alleZeilenLaden(() => sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp").order("personen_a_id").order("personen_b_id"))
       ]);
@@ -4186,7 +4206,7 @@ async function openPersonDetail(personId, options = {}) {
     const spouseSection = document.getElementById("pv-spouse-section");
     const spouseList = document.getElementById("pv-spouse-list"); spouseList.replaceChildren();
     const [{ data: familyRows, error: familyError }, { data: childLinks, error: childError }] = await Promise.all([
-      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
+      sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
       alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id"))
     ]);
     if (familyError) debugLog(`⚠️ Ehepartner laden: ${familyError.message}`);
@@ -4194,8 +4214,8 @@ async function openPersonDetail(personId, options = {}) {
     const partnerFamilies = (familyRows || [])
       .filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern")
       .sort((a, b) => {
-        const da = String(a.beginn || "9999-99-99").slice(0, 10);
-        const db = String(b.beginn || "9999-99-99").slice(0, 10);
+        const da = String(familieBeginnWert(a) || "9999-99-99").slice(0, 10);
+        const db = String(familieBeginnWert(b) || "9999-99-99").slice(0, 10);
         return da.localeCompare(db) || String(a.id || "").localeCompare(String(b.id || ""));
       });
 
@@ -4339,11 +4359,12 @@ async function openPersonDetail(personId, options = {}) {
       const row = document.createElement("div"); row.className = "person-view-relation-row";
       // Bei Ehepartnern den Ledigenname immer anzeigen, sofern vorhanden.
       addPersonLink(row, spouse, "", { showMaidenName: true });
-      const marriage = family.beginn ? personViewDatum(family.beginn) : "";
+      const beginnExakt = !!family.beginn;
+      const marriage = personViewDatum(familieBeginnWert(family));
       if (marriage) {
         const date = document.createElement("span"); date.className = "person-view-relation-date";
         let duration = "";
-        const startDate = new Date(`${String(family.beginn).slice(0, 10)}T00:00:00`);
+        const startDate = new Date(`${beginnExakt ? String(family.beginn).slice(0, 10) : `${family.beginn_jahr}-01-01`}T00:00:00`);
         // Ehedauer endet am gespeicherten Ehe-Ende oder – falls keines
         // hinterlegt ist – am früheren Sterbedatum der beiden Ehepartner.
         // So wird bei mehreren Ehen nicht versehentlich bis zum Tod eines
@@ -4363,6 +4384,7 @@ async function openPersonDetail(personId, options = {}) {
           }
         };
         addEndCandidate(family.ende);
+        if (!family.ende && family.ende_jahr) addEndCandidate(`${family.ende_jahr}-12-31`, true);
         const peopleForDuration = [...relatedPeople, ...(Array.isArray(personenCache) ? personenCache : [])];
         const couple = [personId, spouseId]
           .map(id => personAusLookup(peopleForDuration, id))
@@ -4396,7 +4418,7 @@ async function openPersonDetail(personId, options = {}) {
         if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
           let years = endDate.getFullYear() - startDate.getFullYear();
           if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
-          if (years >= 0) duration = ` · ${dauerText(startDate, endDate, !earliest.approximate)}`;
+          if (years >= 0) duration = ` · ${dauerText(startDate, endDate, !earliest.approximate && beginnExakt)}`;
         }
         date.textContent = `💍 Hochzeit: ${marriage}${duration}`; row.appendChild(date);
       }
@@ -6693,8 +6715,8 @@ async function loadDetailFamilie(personId) {
   // Ehe-/Partnerschaftsblöcke chronologisch sortieren: frühester Beginn zuerst.
   // Unbekannte Beginndaten bleiben am Ende; die Originaldaten werden nicht verändert.
   const partnerFamiliesChronologisch = [...(partnerFamilies || [])].sort((a, b) => {
-    const da = String(a?.beginn || "").slice(0, 10);
-    const db = String(b?.beginn || "").slice(0, 10);
+    const da = String(familieBeginnWert(a) || "").slice(0, 10);
+    const db = String(familieBeginnWert(b) || "").slice(0, 10);
     if (da && db) return da.localeCompare(db);
     if (da) return -1;
     if (db) return 1;
@@ -6771,8 +6793,10 @@ async function loadDetailFamilie(personId) {
     // gespeichert werden, ohne beim nächsten Laden sofort wieder aufzutauchen.
     let endeManuellGeaendert = false;
     typEdit.value = typ;
-    setDatumElemente(beginnTag, beginnMonat, beginnJahr, f.beginn || null);
-    if (f.ende) {
+    setDatumElemente(beginnTag, beginnMonat, beginnJahr, familieBeginnWert(f));
+    if (!f.ende && f.ende_jahr) {
+      setDatumElemente(endeTag, endeMonat, endeJahr, String(f.ende_jahr));
+    } else if (f.ende) {
       // Ein tatsächlich gespeichertes Ende hat immer Vorrang.
       setDatumElemente(endeTag, endeMonat, endeJahr, f.ende);
     } else if (tod?.exakt) {
@@ -6916,12 +6940,14 @@ async function loadDetailFamilie(personId) {
       const updates = {
         familientyp: typEdit.value || "Partnerschaft",
         beginn: getDatum(beginnPrefix),
+        beginn_jahr: getDatum(beginnPrefix) ? null : nurJahr(beginnPrefix),
         ende: eingegebenesEnde,
+        ende_jahr: eingegebenesEnde ? null : nurJahr(endePrefix),
         ende_automatik_ignorieren: automatikIgnorieren,
       };
       const msg = document.getElementById("d-familie-message");
       msg.textContent = "Partnerschaft wird gespeichert …";
-      const { error } = await sb.from("familien").update(updates).eq("id", f.id);
+      const { error } = await mitFamJahr((mitJahr) => sb.from("familien").update(mitJahr ? updates : ohneFamJahr(updates)).eq("id", f.id));
       if (error) {
         msg.textContent = `Fehler: ${error.message}`;
       } else {
@@ -7430,7 +7456,7 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
     try {
       const selbstForm = { id: currentDetailPersonId, vorname: document.getElementById("d-vorname")?.value || "", nachname: document.getElementById("d-nachname")?.value || "", ...plausFormPerson("d-") };
       const lookup = await plausLadePersonen([partnerId]);
-      const befunde = lookup.has(partnerId) ? plausPartnerschaft({ beginn, ende, familientyp: typ }, selbstForm, lookup.get(partnerId)) : [];
+      const befunde = lookup.has(partnerId) ? plausPartnerschaft({ beginn, ende, beginn_jahr: beginn ? null : nurJahr("d-partner-beginn"), ende_jahr: ende ? null : nurJahr("d-partner-ende"), familientyp: typ }, selbstForm, lookup.get(partnerId)) : [];
       if (!(await plausFragen(befunde))) { msg.textContent = "Nicht gespeichert."; return; }
     } catch (err) { debugLog(`⚠️ Plausibilität (Partner): ${err.message || err}`); }
 
@@ -7470,14 +7496,16 @@ document.getElementById("d-add-partner-btn").addEventListener("click", async () 
         partner_b_id: partnerId,
         familientyp: typ,
         beginn,
+        beginn_jahr: beginn ? null : nurJahr("d-partner-beginn"),
         ende,
+        ende_jahr: ende ? null : nurJahr("d-partner-ende"),
       };
       debugLog(`FAMILIEN-INSERT: ${JSON.stringify(familienDatensatz)}`);
-      const { data: familienData, error: familyErr } = await sb
+      const { data: familienData, error: familyErr } = await mitFamJahr((mitJahr) => sb
         .from("familien")
-        .insert(familienDatensatz)
+        .insert(mitJahr ? familienDatensatz : ohneFamJahr(familienDatensatz))
         .select("id, partner_a_id, partner_b_id, familientyp, beginn, ende")
-        .single();
+        .single());
 
       if (familyErr) {
         const detail = [familyErr.message, familyErr.details, familyErr.hint, familyErr.code ? `Code: ${familyErr.code}` : ""]
@@ -8116,7 +8144,10 @@ document.getElementById("export-gedcom-btn").addEventListener("click", async () 
     // Für den Export werden vorhandene Partner in der gespeicherten Reihenfolge ausgegeben.
     if (a) lines.push(`1 HUSB ${gidById.get(a.id)}`);
     if (b) lines.push(`1 WIFE ${gidById.get(b.id)}`);
-    if (f.beginn) {
+    if (!f.beginn && f.beginn_jahr) {
+      lines.push("1 MARR");
+      lines.push(`2 DATE ${f.beginn_jahr}`);
+    } else if (f.beginn) {
       lines.push("1 MARR");
       lines.push(`2 DATE ${gedcomDate(f.beginn)}`);
     }
@@ -8532,7 +8563,7 @@ async function loadStammbaumData(optionen = {}) {
   await ensureSession();
   const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
     personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => alleZeilenLaden(() => sb.from("personen").select(sp).order("nachname", { ascending: true }).order("id", { ascending: true }))),
-    alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende, ende_automatik_ignorieren").order("id")),
+    alleZeilenLaden(() => sb.from("familien").select("*").order("id")),
     alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id"))
   ]);
   if (personenError) throw personenError;
@@ -10008,17 +10039,17 @@ function plausElternKind(eltern, kind, typ = "biologisch") {
 // fam: { beginn, ende }; a/b: Personenobjekte
 function plausPartnerschaft(fam, a, b) {
   const f = [], ids = [a?.id, b?.id].filter(Boolean);
-  const beginn = plausZeit(fam?.beginn), ende = plausZeit(fam?.ende);
+  const beginn = plausZeit(fam?.beginn || (fam?.beginn_jahr ? String(fam.beginn_jahr) : null)), ende = plausZeit(fam?.ende || (fam?.ende_jahr ? String(fam.ende_jahr) : null));
   const art = String(fam?.familientyp || "Partnerschaft") === "Ehe" ? "Die Ehe" : "Die Partnerschaft";
-  if (beginn && ende && beginn.von > ende.bis) f.push(plausF("fehler", `${art} endet (${personViewDatum(fam.ende)}) vor ihrem Beginn (${personViewDatum(fam.beginn)}).`, ids));
+  if (beginn && ende && beginn.von > ende.bis) f.push(plausF("fehler", `${art} endet (${personViewDatum(familieEndeWert(fam))}) vor ihrem Beginn (${personViewDatum(familieBeginnWert(fam))}).`, ids));
   for (const p of [a, b]) {
     if (!p) continue;
     const g = plausGeb(p), t = plausTod(p);
     if (beginn && g) {
-      if (beginn.bis < g.von) f.push(plausF("fehler", `${art} beginnt (${personViewDatum(fam.beginn)}) vor der Geburt von ${plausName(p)}.`, ids));
+      if (beginn.bis < g.von) f.push(plausF("fehler", `${art} beginnt (${personViewDatum(familieBeginnWert(fam))}) vor der Geburt von ${plausName(p)}.`, ids));
       else if ((plausMitte(beginn) - plausMitte(g)) / PLAUS_JAHR < PLAUS.heiratMin && (beginn.bis - g.von) / PLAUS_JAHR < PLAUS.heiratMin) f.push(plausF("warnung", `${plausName(p)} wäre bei Beginn ${art === "Die Ehe" ? "der Ehe" : "der Partnerschaft"} erst ca. ${plausJ(plausMitte(beginn) - plausMitte(g))} Jahre alt.`, ids));
     }
-    if (beginn && t && beginn.von > t.bis) f.push(plausF("fehler", `${art} beginnt (${personViewDatum(fam.beginn)}) nach dem Tod von ${plausName(p)}.`, ids));
+    if (beginn && t && beginn.von > t.bis) f.push(plausF("fehler", `${art} beginnt (${personViewDatum(familieBeginnWert(fam))}) nach dem Tod von ${plausName(p)}.`, ids));
   }
   const ga = plausGeb(a), gb = plausGeb(b);
   if (ga && gb && Math.abs(plausMitte(ga) - plausMitte(gb)) / PLAUS_JAHR > PLAUS.partnerAbstandWarnung) {
@@ -10063,7 +10094,7 @@ async function plausVerwandteDerPerson(personId, neu) {
     const selbst = { id: personId, vorname: document.getElementById("d-vorname")?.value || "", nachname: document.getElementById("d-nachname")?.value || "", ...neu };
     const [{ data: alsKind }, { data: partnerFamilien }] = await Promise.all([
       sb.from("familien_kinder").select("familie_id, beziehungstyp").eq("kind_id", personId),
-      sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp, beginn, ende").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`)
+      sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`)
     ]);
     const elternFamilienIds = (alsKind || []).map((k) => k.familie_id);
     const eigeneIds = (partnerFamilien || []).map((f) => f.id);
@@ -10801,7 +10832,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=375");
+      treeModul3D = await import("./tree3d.js?v=376");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11597,6 +11628,9 @@ const ImportAssistent = (() => {
     }
     const name = (key) => { const x = zu.get(key); return x ? plausName(x.obj) : `${personByKey.get(key)?.vorname || "?"} ${personByKey.get(key)?.nachname || ""}`.trim(); };
     const hatEltern = new Set();
+    // v376: Heirat nur mit Jahr in beginn_jahr übernehmen, sofern die Spalte existiert (Paket 6)
+    let famJahrOk = false;
+    try { famJahrOk = !(await sb.from("familien").select("beginn_jahr").limit(1)).error; } catch { famJahrOk = false; }
     for (const fa of paket.familien) {
       const A = fa.a ? zu.get(fa.a) : null, B = fa.b ? zu.get(fa.b) : null;
       if (!A || (fa.b && !B)) {
@@ -11609,6 +11643,7 @@ const ImportAssistent = (() => {
       if (!fam) {
         const notiz = [fa.notiz || "", !fa.heirat_iso && fa.heirat_jahr ? `Heirat ${fa.heirat || fa.heirat_jahr} (laut Hausblatt)` : ""].filter(Boolean).join(" · ");
         const zeile = { id: crypto.randomUUID(), partner_a_id: A.id, partner_b_id: B ? B.id : null, familientyp: B ? "Ehe" : "Eltern", beginn: B ? (fa.heirat_iso || null) : null, notiz: notiz || null };
+        if (famJahrOk && B && !fa.heirat_iso && fa.heirat_jahr) zeile.beginn_jahr = Number(fa.heirat_jahr);
         fam = { id: zeile.id, neu: true, f: zeile };
         famNachPaar.set(k, fam);
         p.familien.push(zeile);

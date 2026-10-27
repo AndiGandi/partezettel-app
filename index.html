@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 375 -->
+    <!-- Version 376 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=375">
+<link rel="stylesheet" href="style.css?v=376">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 375</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 376</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -581,6 +581,7 @@
       <details data-rolle="eigentuemer">
         <summary><strong>Verlauf und Lücken &amp; Inseln (nur Eigentümer)</strong></summary>
         <p><strong>Verlauf:</strong> zeigt, wer wann was angelegt, geändert oder gelöscht hat, je Person und gesamt. <strong>Lücken &amp; Inseln</strong> (im Stammbaum) zeigt Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen.</p>
+        <p><strong>Ehe nur mit Jahr:</strong> Ist von einer Hochzeit nur das Jahr bekannt, einfach nur das Jahr auswählen und Tag/Monat leer lassen. Angezeigt wird dann z. B. „Hochzeit: 1802 · ca. 17 Jahre“. Dasselbe gilt für das Ende einer Partnerschaft.</p>
         <p><strong>Kirchenbuch-Seite:</strong> Neben „Zeile“ gibt es „Seite“ (– / links / rechts). „–“ heißt, der Eintrag geht über die ganze Doppelseite; „links“ oder „rechts“, wenn auf der Doppelseite zwei Einträge stehen. Angezeigt wird z. B. „rechte Seite, Zeile 3“.</p>
         <p><strong>Hausblätter-Import</strong> (Export / Sicherung): Import-Datei laden, dann Abweichungen bei vorhandenen Personen entscheiden („Bestand stimmt“, „Hausblatt stimmt“ oder „anderer Wert“) und bestätigen, ob eine Person schon im Bestand ist. Geändert wird nur, was du bestätigst. Danach „Vorschau erstellen“ und „Import starten“: neue Personen erhalten den Vermerk „aus Hausblatt … · ungeprüft“ (in der Personenansicht „als geprüft markieren“). Ein kleiner Punkt vor dem Namen zeigt den Stand: orange = ungeprüft, grün = geprüft. Im Bestand filtert „Anzeigen“ nach diesen Personen (aus Hausblatt, geprüft, ungeprüft, selbst erfasst). Punkte, Vermerk und Filter sieht nur der Eigentümer. Die Wohnorte (Hausnummern mit Jahr und Quelle) stehen in der Personenansicht für alle: „Geburtshaus“ (belegt), „Elternhaus“ (als Kind der Eltern im Hausblatt), „wohnte“, „zugezogen“; zieht jemand in das Elternhaus des Ehepartners, steht „Haus des Ehepartners“ dabei. Bearbeiter und Eigentümer ändern die Wohnorte mit ✏️ (Art, Jahr, entfernen, hinzufügen). „Import rückgängig“ entfernt alles, was der Import angelegt hat. Möglicherweise noch lebende Personen (ab 1921 geboren, ohne Sterbedatum) kommen in einem eigenen zweiten Durchgang mit eigenem „Rückgängig“.</p>
       </details>
@@ -986,7 +987,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=375"></script>
-<script src="app.js?v=375"></script>
+<script src="hinweise.js?v=376"></script>
+<script src="app.js?v=376"></script>
 </body>
 </html>
