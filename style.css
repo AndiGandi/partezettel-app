@@ -1947,3 +1947,8 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .wohnort-edit .wn-ort { width: 9rem; }
 .person-view-wohnorte li.wohnort-leer { border-left-style: dashed; color: #7a7566; font-size: .88rem; }
 .person-view-wohnorte li.wohnort-leer::before, .person-view-wohnorte li.wohnort-neu::before { background: #c9bfa6; }
+
+/* v377: Todesumstand */
+.todesumstand-row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.todesumstand-row select { flex: 0 0 auto; min-width: 10rem; }
+.todesumstand-row input { flex: 1 1 12rem; min-width: 0; }

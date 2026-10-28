@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 376
+// Partezettel Archiv – Version 377
+// v377: Feld „Todesumstand“ (gefallen/vermisst/verunglückt/Lawine/anderes + Zusatz) in Bearbeiten, Personenansicht und Bestandskarte (Paket 7).
 // v376: Ehe/Partnerschaft auch mit nur bekanntem Jahr (beginn_jahr/ende_jahr, Paket 6); Import übernimmt Heiratsjahre.
 // v375: Vater/Mutter in „Person bearbeiten“ auswählen speichert sofort; nur das Entfernen braucht „Eltern speichern“.
 // v374: Sicherung und Import laden seitenweise mit eindeutiger Reihenfolge (zusätzlich nach id) – vorher konnten bei gleichem Nachnamen Personen doppelt kommen oder fehlen.
@@ -2877,18 +2878,32 @@ async function alleZeilenLaden(bau, seite = 1000) {
 // v365: Prüf-Kennzeichen. Personen aus einem Import tragen herkunft_quelle; geprueft_am zeigt, ob schon geprüft.
 // Fehlen die Spalten (Paket 3 nicht eingespielt), wird ohne sie weitergearbeitet.
 let pruefSpaltenVorhanden = true;
-const mitPruefSpalten = (basis) => pruefSpaltenVorhanden ? `${basis}, herkunft_quelle, geprueft_am` : basis;
+let todesSpaltenVorhanden = true; // v377: Todesumstand (Paket 7)
+const mitPruefSpalten = (basis) => `${basis}${pruefSpaltenVorhanden ? ", herkunft_quelle, geprueft_am" : ""}${todesSpaltenVorhanden ? ", todesumstand, todesumstand_text" : ""}`;
 function istPruefSpaltenFehler(error) {
-  return pruefSpaltenVorhanden && /herkunft_quelle|geprueft_am|42703/i.test(`${error?.code || ""} ${error?.message || ""}`);
+  return pruefSpaltenVorhanden && /herkunft_quelle|geprueft_am/i.test(`${error?.code || ""} ${error?.message || ""}`);
 }
+const istTodesSpaltenFehler = (error) => todesSpaltenVorhanden && /todesumstand/i.test(`${error?.message || ""} ${error?.details || ""}`);
 async function personenMitPruefSpalten(basis, bau) {
   let r = await bau(mitPruefSpalten(basis));
-  if (r.error && istPruefSpaltenFehler(r.error)) {
-    pruefSpaltenVorhanden = false;
-    debugLog("ℹ️ Prüf-Kennzeichen nicht verfügbar (Spalten fehlen), Personen werden ohne geladen.");
-    r = await bau(basis);
+  for (let versuch = 0; versuch < 2 && r.error; versuch++) {
+    if (istTodesSpaltenFehler(r.error)) {
+      todesSpaltenVorhanden = false;
+      debugLog("ℹ️ Todesumstand nicht verfügbar (Paket 7 fehlt), Personen werden ohne geladen.");
+    } else if (istPruefSpaltenFehler(r.error) || (/42703/.test(String(r.error?.code)) && pruefSpaltenVorhanden)) {
+      pruefSpaltenVorhanden = false;
+      debugLog("ℹ️ Prüf-Kennzeichen nicht verfügbar (Spalten fehlen), Personen werden ohne geladen.");
+    } else break;
+    r = await bau(mitPruefSpalten(basis));
   }
   return r;
+}
+// v377: Todesumstand als Text, z. B. „⚔ gefallen in Galizien“, „vermisst seit 1960“
+const TODESUMSTAND = { gefallen: "⚔ gefallen", vermisst: "vermisst", "verunglückt": "verunglückt", lawine: "in der Lawine umgekommen", anderes: "" };
+function todesumstandText(p) {
+  const art = p?.todesumstand;
+  if (!art || !(art in TODESUMSTAND)) return "";
+  return [TODESUMSTAND[art], String(p.todesumstand_text || "").trim()].filter(Boolean).join(" ");
 }
 // Kleiner Punkt: Bernstein = ungeprüft, Grün = geprüft; Personen ohne Import-Herkunft erhalten keinen Punkt.
 function pruefPunkt(p) {
@@ -2910,9 +2925,9 @@ function pruefPunktHtml(p) {
 // wird ohne sie gespeichert, damit nichts verloren geht.
 let kbSeiteVorhanden = true;
 function istKbSeitenFehler(error) {
-  return kbSeiteVorhanden && /_seite/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
+  return kbSeiteVorhanden && /_seite|todesumstand/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
 }
-const ohneKbSeite = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !k.endsWith("_seite")));
+const ohneKbSeite = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !k.endsWith("_seite") && !k.startsWith("todesumstand")));
 async function mitKbSeite(bau) {
   let r = await bau(kbSeiteVorhanden);
   if (r?.error && istKbSeitenFehler(r.error)) {
@@ -3636,8 +3651,8 @@ function aktualisierePersonenKarte(karte, p) {
     p.geburtsdatum ? p.geburtsdatum.split("-")[0] : (p.geburtsjahr ? String(p.geburtsjahr) : ""),
     sterbeJahrAnzeige
   ].filter(Boolean).join(" – ");
-  const alterAnzeige = lebensalterAnzeige(p);
-  karte.years.textContent = `${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}`;
+  const alterAnzeige = (todesumstandText(p) && !(p.sterbedatum || p.sterbejahr)) ? "" : lebensalterAnzeige(p);
+  karte.years.textContent = [`${jahre}${jahre && alterAnzeige ? " · " : ""}${alterAnzeige}`, todesumstandText(p)].filter(Boolean).join(" · ");
   karte.years.hidden = !karte.years.textContent;
 
   const verwandtschaft = personenVerwandtschaftCache.get(p.id);
@@ -4080,6 +4095,14 @@ function personViewAlter(person, bisDatum = null, endeExakt = true) {
 //  sehr alt, ohne Tod:  „geboren 1860 · Sterbedatum unbekannt“
 //  nur Tod bekannt:     „gestorben 15.01.1990“
 function personViewLebenszeile(person) {
+  const umstand = todesumstandText(person);
+  // Bei Todesumstand ohne Sterbedatum (z. B. vermisst, gefallen ohne Datum) kein „… Jahre alt“ wie bei Lebenden
+  const ohneTod = umstand && !(person?.sterbedatum || person?.sterbejahr);
+  const geb = person?.geburtsdatum || person?.geburtsjahr;
+  const basis = ohneTod ? (geb ? `geboren ${personViewDatum(geb)}` : "") : personViewLebenszeileBasis(person);
+  return [basis, umstand].filter(Boolean).join(" · ");
+}
+function personViewLebenszeileBasis(person) {
   const geb = person?.geburtsdatum || person?.geburtsjahr;
   const tod = person?.sterbedatum || person?.sterbejahr;
   const gebText = geb ? personViewDatum(geb) : "";
@@ -4775,6 +4798,9 @@ async function openPersonEdit(personId, options = {}) {
   document.getElementById("d-trauungsbuch-zeile").value = person.trauungsbuch_zeile ?? "";
   document.getElementById("d-sterbebuch-zeile").value = person.sterbebuch_zeile ?? "";
   for (const b of ["taufbuch", "trauungsbuch", "sterbebuch"]) { const el = document.getElementById(`d-${b}-seite`); if (el) el.value = person[`${b}_seite`] || ""; }
+  { const tu = document.getElementById("d-todesumstand"), tt = document.getElementById("d-todesumstand-text");
+    if (tu) tu.value = person.todesumstand && TODESUMSTAND.hasOwnProperty(person.todesumstand) ? person.todesumstand : "";
+    if (tt) tt.value = person.todesumstand_text || ""; }
   aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
   aktualisiereLinkButton("d-trauungsbuch-open", person.trauungsbuch_link);
   aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
@@ -4936,6 +4962,8 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     taufbuch_seite: kbSeiteWert("d-taufbuch-seite"),
     trauungsbuch_seite: kbSeiteWert("d-trauungsbuch-seite"),
     sterbebuch_seite: kbSeiteWert("d-sterbebuch-seite"),
+    todesumstand: document.getElementById("d-todesumstand")?.value || null,
+    todesumstand_text: (document.getElementById("d-todesumstand")?.value && document.getElementById("d-todesumstand-text")?.value.trim()) || null,
     Notiz: document.getElementById("d-notiz").value.trim() || null,
     weiterfuehrende_links: leseWeiterfuehrendeLinksEditor(),
   };
@@ -10832,7 +10860,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=376");
+      treeModul3D = await import("./tree3d.js?v=377");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
