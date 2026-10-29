@@ -1952,3 +1952,12 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .todesumstand-row { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
 .todesumstand-row select { flex: 0 0 auto; min-width: 10rem; }
 .todesumstand-row input { flex: 1 1 12rem; min-width: 0; }
+
+/* v378: grauer Punkt, „nur Name“, Ehepartner unter Kindern, Zurück, Suchleiste fest oben */
+.pruef-punkt.is-eigen { background: #b8b2a4; }
+.nurname-badge { display: inline-block; margin-left: .4rem; padding: 0 .38rem; border: 1px solid #d9d3c3; border-radius: 999px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: .68rem; color: #8a8474; vertical-align: 2px; }
+.pv-kind-ehe { margin: -.1rem 0 .45rem 1.15rem; font-size: .86rem; color: #6d6a60; line-height: 1.35; }
+.pv-kind-ehe__link { background: none; border: 0; padding: 0; color: #2f5f8a; text-decoration: underline; font: inherit; cursor: pointer; }
+.pv-back { display: inline-block; margin: 0 0 .45rem; padding: .3rem .65rem; border: 1px solid #cfd9cd; border-radius: 999px; background: #fff; color: #24583f; font-size: .88rem; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-back[hidden] { display: none; }
+#tab-liste .list-toolbar { position: sticky; top: var(--tabs-h, 2.9rem); z-index: 150; background: var(--paper); padding: .55rem 0; margin: -.55rem 0 .8rem; box-shadow: 0 6px 10px -10px rgba(0,0,0,.25); }

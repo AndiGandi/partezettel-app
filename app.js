@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 377
+// Partezettel Archiv – Version 378
+// v378: Ehepartner unter Kindern, Zurück zur vorherigen Person (auch nach Bearbeiten), „nur Name“ + Filter, grauer Punkt für eigene Einträge, Suchleiste fest oben.
 // v377: Feld „Todesumstand“ (gefallen/vermisst/verunglückt/Lawine/anderes + Zusatz) in Bearbeiten, Personenansicht und Bestandskarte (Paket 7).
 // v376: Ehe/Partnerschaft auch mit nur bekanntem Jahr (beginn_jahr/ende_jahr, Paket 6); Import übernimmt Heiratsjahre.
 // v375: Vater/Mutter in „Person bearbeiten“ auswählen speichert sofort; nur das Entfernen braucht „Eltern speichern“.
@@ -2907,7 +2908,14 @@ function todesumstandText(p) {
 }
 // Kleiner Punkt: Bernstein = ungeprüft, Grün = geprüft; Personen ohne Import-Herkunft erhalten keinen Punkt.
 function pruefPunkt(p) {
-  if (!p?.herkunft_quelle || !rolleIstEigentuemer()) return null;
+  if (!p || !rolleIstEigentuemer()) return null;
+  if (!p.herkunft_quelle) { // v378: grauer Punkt = selbst erfasst
+    if (!pruefSpaltenVorhanden) return null;
+    const e = document.createElement("span");
+    e.className = "pruef-punkt is-eigen"; e.title = "selbst erfasst";
+    e.setAttribute("role", "img"); e.setAttribute("aria-label", e.title);
+    return e;
+  }
   const s = document.createElement("span");
   s.className = `pruef-punkt ${p.geprueft_am ? "is-geprueft" : "is-offen"}`;
   s.title = `${p.geprueft_am ? "geprüft" : "ungeprüft"} · aus ${p.herkunft_quelle}`;
@@ -2916,7 +2924,8 @@ function pruefPunkt(p) {
   return s;
 }
 function pruefPunktHtml(p) {
-  if (!p?.herkunft_quelle || !rolleIstEigentuemer()) return "";
+  if (!p || !rolleIstEigentuemer()) return "";
+  if (!p.herkunft_quelle) return !pruefSpaltenVorhanden ? "" : `<span class="pruef-punkt is-eigen" role="img" title="selbst erfasst" aria-label="selbst erfasst"></span>`;
   const t = `${p.geprueft_am ? "geprüft" : "ungeprüft"} · aus ${p.herkunft_quelle}`;
   return `<span class="pruef-punkt ${p.geprueft_am ? "is-geprueft" : "is-offen"}" role="img" title="${escapeHtml(t)}" aria-label="${escapeHtml(t)}"></span>`;
 }
@@ -3642,6 +3651,11 @@ function aktualisierePersonenKarte(karte, p) {
     maiden.textContent = ` (geb. ${kartenLedigenname})`;
     karte.name.appendChild(maiden);
   }
+  if (istNurName(p)) {
+    const nn = document.createElement("span");
+    nn.className = "nurname-badge"; nn.textContent = "nur Name"; nn.title = "Keine Lebensdaten bekannt";
+    karte.name.appendChild(nn);
+  }
   karte.img.alt = `Schlüsselfoto von ${p.vorname || ""} ${p.nachname || ""}`.trim();
 
   const sterbeJahrAnzeige = p.sterbedatum
@@ -3880,6 +3894,8 @@ function personenSuchTreffer(person, suchwert, extra = "") {
   return PersonSuche.trifft(person || {}, suchwert, extra);
 }
 
+// v378: Personen ohne jedes Datum („nur Name“), meist Ehepartner aus den Hausblättern
+const istNurName = (p) => !!p && !(p.geburtsdatum || p.geburtsjahr || p.sterbedatum || p.sterbejahr);
 // v365: Filter „aus Hausblatt · ungeprüft / geprüft“ im Bestand
 let personenPruefFilter = "";
 function pruefFilterPasst(p) {
@@ -3887,6 +3903,8 @@ function pruefFilterPasst(p) {
   if (personenPruefFilter === "geprueft") return !!p.herkunft_quelle && !!p.geprueft_am;
   if (personenPruefFilter === "hausblatt") return !!p.herkunft_quelle;
   if (personenPruefFilter === "eigene") return !p.herkunft_quelle;
+  if (personenPruefFilter === "ohne-nurname") return !istNurName(p);
+  if (personenPruefFilter === "nurname") return istNurName(p);
   return true;
 }
 function wendePersonenSucheAn(suchwert) {
@@ -4139,7 +4157,98 @@ async function kehreZumGruppenfotoZurueck() {
   return true;
 }
 
+// v378: Höhe der Reiterleiste als CSS-Variable, damit die Suchleiste im Bestand direkt darunter haften bleibt
+function setzeReiterHoehe() {
+  const t = document.querySelector(".tabs");
+  if (t) document.documentElement.style.setProperty("--tabs-h", `${t.offsetHeight}px`);
+}
+window.addEventListener("resize", setzeReiterHoehe);
+window.addEventListener("load", setzeReiterHoehe);
+setTimeout(setzeReiterHoehe, 300);
+// Beim Tippen: wenn weit gescrollt, Liste nach oben holen, damit die Treffer sichtbar sind
+document.getElementById("search-input")?.addEventListener("input", () => {
+  const liste = document.getElementById("personen-list");
+  const leiste = document.querySelector("#tab-liste .list-toolbar");
+  if (!liste || !leiste) return;
+  const oben = liste.getBoundingClientRect().top;
+  const unterLeiste = leiste.getBoundingClientRect().bottom;
+  if (oben < unterLeiste - 4) window.scrollBy({ top: oben - unterLeiste - 8, behavior: "auto" });
+});
+
+// v378: Unter jedem Kind eine kleine Zeile mit seinen Ehepartnern (∞ 1. … · 2. …), Partner im Bestand anklickbar
+async function zeigeEhepartnerDerKinder(kindIds, liste, personId) {
+  if (!kindIds?.length || !liste) return;
+  try {
+    const [a, b] = await Promise.all([
+      sb.from("familien").select("*").in("partner_a_id", kindIds),
+      sb.from("familien").select("*").in("partner_b_id", kindIds)
+    ]);
+    if (currentPersonViewId !== personId) return;
+    const ehen = [...(a.data || []), ...(b.data || [])].filter((f, i, arr) => f.partner_a_id && f.partner_b_id && String(f.familientyp || "").toLowerCase() !== "eltern" && arr.findIndex(x => x.id === f.id) === i);
+    if (!ehen.length) return;
+    const partnerIds = [...new Set(ehen.map(f => kindIds.includes(f.partner_a_id) ? f.partner_b_id : f.partner_a_id))];
+    const { data: partner } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", partnerIds);
+    if (currentPersonViewId !== personId) return;
+    const pMap = new Map((partner || []).map(p => [p.id, p]));
+    for (const kindId of kindIds) {
+      const eigene = ehen.filter(f => f.partner_a_id === kindId || f.partner_b_id === kindId)
+        .sort((x, y) => String(familieBeginnWert(x) || "9999").localeCompare(String(familieBeginnWert(y) || "9999")));
+      if (!eigene.length) continue;
+      const btn = [...liste.querySelectorAll(".person-view-person-link")].find(el => el.dataset.personId === kindId);
+      if (!btn || btn.nextElementSibling?.classList?.contains("pv-kind-ehe")) continue;
+      const zeile = document.createElement("div");
+      zeile.className = "pv-kind-ehe";
+      zeile.append("∞ ");
+      eigene.forEach((f, i) => {
+        const pid = f.partner_a_id === kindId ? f.partner_b_id : f.partner_a_id;
+        const p = pMap.get(pid);
+        if (i) zeile.append(" · ");
+        if (eigene.length > 1) zeile.append(`${i + 1}. `);
+        const jahr = f.beginn ? String(f.beginn).slice(0, 4) : (f.beginn_jahr ? String(f.beginn_jahr) : "");
+        const text = p ? [p.vorname, p.nachname].filter(Boolean).join(" ") : "unbekannt";
+        if (p) {
+          const l = document.createElement("button");
+          l.type = "button"; l.className = "pv-kind-ehe__link"; l.textContent = text;
+          l.title = `${text} öffnen`;
+          l.addEventListener("click", () => openPersonDetail(p.id, { behalteRueckkehr: true }));
+          zeile.append(l);
+        } else zeile.append(text);
+        if (jahr) zeile.append(` (${jahr})`);
+      });
+      btn.after(zeile);
+    }
+  } catch (err) { debugLog(`⚠️ Ehepartner der Kinder: ${err.message || err}`); }
+}
+
+// v378: Verlauf der geöffneten Personen – „←“ bzw. ✕ führt zur vorherigen Person zurück
+let personViewVerlauf = [];
+let bearbeitenAusAnsicht = null;
+function zeigePersonZurueck() {
+  const btn = document.getElementById("pv-back");
+  if (!btn) return;
+  const vorher = personViewVerlauf[personViewVerlauf.length - 1];
+  btn.hidden = !vorher;
+  btn.textContent = vorher ? `← ${vorher.name || "zurück"}` : "";
+  btn.title = vorher ? `Zurück zu ${vorher.name || "der vorherigen Person"}` : "";
+}
+async function personZurueck() {
+  const vorher = personViewVerlauf.pop();
+  if (!vorher) return false;
+  await openPersonDetail(vorher.id, { zurueck: true, behalteRueckkehr: true });
+  const overlay = document.getElementById("person-view-overlay");
+  if (overlay && vorher.scroll) setTimeout(() => { overlay.scrollTop = vorher.scroll; }, 350);
+  return true;
+}
 async function openPersonDetail(personId, options = {}) {
+  const pvOverlay = document.getElementById("person-view-overlay");
+  const pvOffen = pvOverlay && !pvOverlay.hidden;
+  if (options.behalteRueckkehr && !options.zurueck && pvOffen && currentPersonViewId && currentPersonViewId !== personId) {
+    personViewVerlauf.push({ id: currentPersonViewId, name: document.getElementById("pv-name")?.textContent || "", scroll: pvOverlay.scrollTop || 0 });
+    if (personViewVerlauf.length > 30) personViewVerlauf.shift();
+  } else if (!options.behalteRueckkehr && !options.zurueck) {
+    personViewVerlauf = [];
+  }
+  setTimeout(zeigePersonZurueck, 0);
   // Eine Rückkehr bleibt nur beim Öffnen aus dem Gruppenfoto und beim Weiterklicken zu Verwandten erhalten.
   if (!options.vonGruppenfoto && !options.behalteRueckkehr) rueckkehrNachPerson = null;
   currentPersonViewId = personId;
@@ -4347,6 +4456,7 @@ async function openPersonDetail(personId, options = {}) {
       button.textContent = details.join(" · ");
       const relPunkt = pruefPunkt(related);
       if (relPunkt) button.prepend(relPunkt);
+      button.dataset.personId = related.id;
       button.addEventListener("click", () => openPersonDetail(related.id, { behalteRueckkehr: true })); container.appendChild(button);
     };
     const parentsSection = document.getElementById("pv-parents-section");
@@ -4454,6 +4564,7 @@ async function openPersonDetail(personId, options = {}) {
     const uniqueChildIds = [...new Set(childrenLinks.map(x => x.kind_id).filter(id => id && id !== personId))];
     uniqueChildIds.map(id => relatedMap.get(id)).filter(Boolean).sort((a,b) => String(a.geburtsdatum || a.geburtsjahr || "9999").localeCompare(String(b.geburtsdatum || b.geburtsjahr || "9999")) || `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de")).forEach(child => addPersonLink(childrenList, child));
     childrenSection.hidden = !childrenList.children.length;
+    void zeigeEhepartnerDerKinder(uniqueChildIds, childrenList, personId);
 
     // Weitere Fotos dieser Person inklusive Gruppenfotos, auf denen sie markiert ist.
     const photosSection = document.getElementById("pv-photos-section");
@@ -4714,6 +4825,7 @@ async function openPersonDetail(personId, options = {}) {
     };
     document.getElementById("pv-edit").onclick = async () => {
       rueckkehrNachPerson = null;
+      bearbeitenAusAnsicht = personId; // v378: nach dem Schließen der Maske wieder diese Ansicht
       overlay.hidden = true; document.body.classList.remove("person-view-open");
       await openPersonEdit(personId, options);
     };
@@ -4723,13 +4835,16 @@ async function openPersonDetail(personId, options = {}) {
   }
 }
 
-document.getElementById("pv-close")?.addEventListener("click", () => {
+document.getElementById("pv-back")?.addEventListener("click", () => { void personZurueck(); });
+document.getElementById("pv-close")?.addEventListener("click", async () => {
+  if (personViewVerlauf.length) { await personZurueck(); return; }
   document.getElementById("person-view-overlay").hidden = true;
   document.body.classList.remove("person-view-open");
   void kehreZumGruppenfotoZurueck();
 });
 document.getElementById("person-view-overlay")?.addEventListener("click", (event) => {
   if (event.target.id === "person-view-overlay") {
+    personViewVerlauf = [];
     event.currentTarget.hidden = true;
     document.body.classList.remove("person-view-open");
     void kehreZumGruppenfotoZurueck();
@@ -4847,6 +4962,9 @@ document.getElementById("detail-close-btn").addEventListener("click", async () =
     try { await loadStammbaum(); } catch (err) { debugLog(`⚠️ Stammbaum nach Rückkehr: ${err.message || err}`); }
   } else {
     loadPersonen();
+    const zurueckZu = bearbeitenAusAnsicht;
+    bearbeitenAusAnsicht = null;
+    if (zurueckZu) { try { await openPersonDetail(zurueckZu, { zurueck: true, behalteRueckkehr: true }); } catch (err) { debugLog(`⚠️ Rückkehr zur Ansicht: ${err.message || err}`); } }
   }
 });
 
@@ -10860,7 +10978,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=377");
+      treeModul3D = await import("./tree3d.js?v=378");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11693,9 +11811,15 @@ const ImportAssistent = (() => {
         for (const E of [A, B].filter(Boolean)) p.befunde.push(...plausElternKind(E.obj, K.obj));
       }
     }
-    const dbHaeuser = await alleZeilen("haeuser", "id, ort, nummer", (q) => q.order("ort"));
+    const dbHaeuser = await alleZeilen("haeuser", "id, ort, nummer, name", (q) => q.order("ort"));
     const hausNach = new Map(dbHaeuser.map((h) => [hausSchluessel(h.ort, h.nummer), h.id]));
     const hausInfo = new Map((paket.haeuser || []).map((h) => [hausSchluessel(h.ort, h.nummer), h]));
+    // v378: vorhandene Häuser ohne Namen bekommen den Namen aus dem Hausblatt
+    p.hausNamen = [];
+    for (const h of dbHaeuser) {
+      const info = hausInfo.get(hausSchluessel(h.ort, h.nummer));
+      if (info?.name && !String(h.name || "").trim()) p.hausNamen.push({ id: h.id, name: info.name });
+    }
     const dbSt = await inStuecken("person_stationen", "personen_id, haus_id, art, jahr", "personen_id", bestIds);
     const stSchon = new Set(dbSt.map((x) => `${x.personen_id}|${x.haus_id}|${x.art}|${x.jahr || 0}`));
     for (const hp of paket.personen) {
@@ -11745,6 +11869,10 @@ const ImportAssistent = (() => {
       if (modus === "lebend") zustand.importIdLebend = importId; else zustand.importId = importId;
       zustandSichern();
       await schreibe("haeuser", plan.haeuser, "Häuser", importId);
+      for (const hn of plan.hausNamen || []) {
+        const { error: hnErr } = await sb.from("haeuser").update({ name: hn.name }).eq("id", hn.id).or("name.is.null,name.eq.");
+        if (hnErr) debugLog(`⚠️ Hausname ${hn.name}: ${hnErr.message}`);
+      }
       await schreibe("personen", plan.personen, "Personen", importId);
       await schreibe("familien", plan.familien, "Familien", importId);
       await schreibe("familien_kinder", plan.kinder, "Eltern-Kind-Verbindungen", importId);
