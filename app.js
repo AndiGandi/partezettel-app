@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 378
+// Partezettel Archiv – Version 379
+// v379: Ehepartner unter den Kindern – Ehefrauen mit Ledigenname statt Ehenamen.
+// v379: Ehepartner unter den Kindern mit Geburtsnamen (Ledigenname) statt Ehenamen.
 // v378: Ehepartner unter Kindern, Zurück zur vorherigen Person (auch nach Bearbeiten), „nur Name“ + Filter, grauer Punkt für eigene Einträge, Suchleiste fest oben.
 // v377: Feld „Todesumstand“ (gefallen/vermisst/verunglückt/Lawine/anderes + Zusatz) in Bearbeiten, Personenansicht und Bestandskarte (Paket 7).
 // v376: Ehe/Partnerschaft auch mit nur bekanntem Jahr (beginn_jahr/ende_jahr, Paket 6); Import übernimmt Heiratsjahre.
@@ -4176,7 +4178,7 @@ document.getElementById("search-input")?.addEventListener("input", () => {
 });
 
 // v378: Unter jedem Kind eine kleine Zeile mit seinen Ehepartnern (∞ 1. … · 2. …), Partner im Bestand anklickbar
-async function zeigeEhepartnerDerKinder(kindIds, liste, personId) {
+async function zeigeEhepartnerDerKinder(kindIds, liste, personId, kinderMap) {
   if (!kindIds?.length || !liste) return;
   try {
     const [a, b] = await Promise.all([
@@ -4187,7 +4189,7 @@ async function zeigeEhepartnerDerKinder(kindIds, liste, personId) {
     const ehen = [...(a.data || []), ...(b.data || [])].filter((f, i, arr) => f.partner_a_id && f.partner_b_id && String(f.familientyp || "").toLowerCase() !== "eltern" && arr.findIndex(x => x.id === f.id) === i);
     if (!ehen.length) return;
     const partnerIds = [...new Set(ehen.map(f => kindIds.includes(f.partner_a_id) ? f.partner_b_id : f.partner_a_id))];
-    const { data: partner } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", partnerIds);
+    const { data: partner } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", partnerIds);
     if (currentPersonViewId !== personId) return;
     const pMap = new Map((partner || []).map(p => [p.id, p]));
     for (const kindId of kindIds) {
@@ -4205,7 +4207,14 @@ async function zeigeEhepartnerDerKinder(kindIds, liste, personId) {
         if (i) zeile.append(" · ");
         if (eigene.length > 1) zeile.append(`${i + 1}. `);
         const jahr = f.beginn ? String(f.beginn).slice(0, 4) : (f.beginn_jahr ? String(f.beginn_jahr) : "");
-        const text = p ? [p.vorname, p.nachname].filter(Boolean).join(" ") : "unbekannt";
+        // v379: beim Ehepartner nur der Geburtsname (Ledigenname), sonst der Nachname
+        // v379: nur bei Ehefrauen der Ledigenname (wie im Hausblatt), bei Männern der Nachname
+        const istFrau = String(p?.geschlecht || "").toLowerCase().startsWith("w");
+        const ledig = String(p?.Ledigenname || "").trim();
+        // Ist kein Ledigenname bekannt und trägt sie ohnehin den Namen des Mannes, genügt der Vorname
+        const kindName = String(kinderMap?.get?.(kindId)?.nachname || "").trim();
+        const nach = istFrau ? (ledig || (p?.nachname && p.nachname !== kindName ? p.nachname : "")) : p?.nachname;
+        const text = p ? [p.vorname, nach].filter(Boolean).join(" ") : "unbekannt";
         if (p) {
           const l = document.createElement("button");
           l.type = "button"; l.className = "pv-kind-ehe__link"; l.textContent = text;
@@ -4564,7 +4573,7 @@ async function openPersonDetail(personId, options = {}) {
     const uniqueChildIds = [...new Set(childrenLinks.map(x => x.kind_id).filter(id => id && id !== personId))];
     uniqueChildIds.map(id => relatedMap.get(id)).filter(Boolean).sort((a,b) => String(a.geburtsdatum || a.geburtsjahr || "9999").localeCompare(String(b.geburtsdatum || b.geburtsjahr || "9999")) || `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de")).forEach(child => addPersonLink(childrenList, child));
     childrenSection.hidden = !childrenList.children.length;
-    void zeigeEhepartnerDerKinder(uniqueChildIds, childrenList, personId);
+    void zeigeEhepartnerDerKinder(uniqueChildIds, childrenList, personId, relatedMap);
 
     // Weitere Fotos dieser Person inklusive Gruppenfotos, auf denen sie markiert ist.
     const photosSection = document.getElementById("pv-photos-section");
@@ -10978,7 +10987,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=378");
+      treeModul3D = await import("./tree3d.js?v=379");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
