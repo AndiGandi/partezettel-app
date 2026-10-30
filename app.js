@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 379
+// Partezettel Archiv – Version 380
+// v380: Verwandtschaftsweg nennt zu jedem Elternteil auch den zweiten Elternteil (∞) und bei Geschwistern die gemeinsamen Eltern.
 // v379: Ehepartner unter den Kindern – Ehefrauen mit Ledigenname statt Ehenamen.
 // v379: Ehepartner unter den Kindern mit Geburtsnamen (Ledigenname) statt Ehenamen.
 // v378: Ehepartner unter Kindern, Zurück zur vorherigen Person (auch nach Bearbeiten), „nur Name“ + Filter, grauer Punkt für eigene Einträge, Suchleiste fest oben.
@@ -9677,12 +9678,46 @@ function treeBuildBloodPath(aId, bId, model, blood) {
   return path;
 }
 
+// v380: zum Elternteil im Verwandtschaftsweg auch den anderen Elternteil des betreffenden Kindes nennen
+function treeAndererElternteil(elternId, kindId) {
+  if (!elternId || !kindId) return null;
+  const fam = (treeData.kinder || []).filter((k) => k.kind_id === kindId)
+    .map((k) => (treeData.familien || []).find((f) => f.id === k.familie_id))
+    .find((f) => f && (f.partner_a_id === elternId || f.partner_b_id === elternId));
+  if (!fam) return null;
+  const anderer = fam.partner_a_id === elternId ? fam.partner_b_id : fam.partner_a_id;
+  return anderer && treePerson(anderer) ? anderer : null;
+}
+function treeGemeinsameEltern(aId, bId) {
+  const famA = (treeData.kinder || []).filter((k) => k.kind_id === aId).map((k) => k.familie_id);
+  const fid = (treeData.kinder || []).find((k) => k.kind_id === bId && famA.includes(k.familie_id))?.familie_id;
+  const f = fid ? (treeData.familien || []).find((x) => x.id === fid) : null;
+  return f ? [f.partner_a_id, f.partner_b_id].filter((id) => id && treePerson(id)) : [];
+}
+function treeWegPartner(aId, path) {
+  // liefert je Person im Weg den Ehepartner, mit dem das Kind im Weg gemeinsam ist
+  const ids = [aId, ...path.map((e) => e.to)];
+  const partner = new Map();
+  path.forEach((e, i) => {
+    const von = ids[i], zu = ids[i + 1];
+    if (e.type === "parent") { const o = treeAndererElternteil(zu, von); if (o && !ids.includes(o)) partner.set(zu, o); }
+    if (e.type === "child") { const o = treeAndererElternteil(von, zu); if (o && !ids.includes(o)) partner.set(von, o); }
+  });
+  return partner;
+}
 function treeHumanRelationshipPath(aId, path) {
   if (!path || !path.length) return "";
+  const partner = treeWegPartner(aId, path);
+  const mitPartner = (id) => partner.has(id) ? `${treePersonLabel(id)} und ${treePersonLabel(partner.get(id))}` : treePersonLabel(id);
   const steps = [];
   let currentId = aId;
   for (const e of path) {
-    steps.push(`${treeRelationshipStepWord(currentId, e.type, e.to)} ${treePersonLabel(e.to)}`);
+    let ziel = (e.type === "parent") ? mitPartner(e.to) : treePersonLabel(e.to);
+    if (e.type === "sibling") {
+      const ge = treeGemeinsameEltern(currentId, e.to);
+      if (ge.length) ziel += ` (beide Kinder von ${ge.map(treePersonLabel).join(" und ")})`;
+    }
+    steps.push(`${treeRelationshipStepWord(currentId, e.type, e.to)} ${ziel}`);
     currentId = e.to;
   }
   return steps.join(" → ");
@@ -9694,15 +9729,21 @@ function treeRelationshipPathGraphic(aId, path) {
   let currentId = aId;
   for (const edge of path) {
     const relationLabel = treeRelationshipStepWord(currentId, edge.type, edge.to);
-    items.push({ id: edge.to, label: treePersonLabel(edge.to), relationLabel });
+    const ge = edge.type === "sibling" ? treeGemeinsameEltern(currentId, edge.to) : [];
+    items.push({ id: edge.to, label: treePersonLabel(edge.to), relationLabel, elternHinweis: ge.length ? `beide Kinder von ${ge.map(treePersonLabel).join(" und ")}` : "" });
     currentId = edge.to;
   }
+  const partner = treeWegPartner(aId, path);
   return `<div class="tree-relationship-graphic" aria-label="Grafischer Verwandtschaftspfad">${items.map((item, index) => {
     const person = treePerson(item.id);
     const dates = person ? [person.geburtsjahr, person.sterbejahr].filter(Boolean).join("–") : "";
-    const card = `<div class="tree-relationship-node" data-tree-relation-node="${escTree(item.id)}"><strong>${escTree(item.label)}</strong>${dates ? `<small>${escTree(String(dates))}</small>` : ""}</div>`;
+    const p2 = partner.get(item.id);
+    const p2Person = p2 ? treePerson(p2) : null;
+    const p2Daten = p2Person ? [p2Person.geburtsjahr, p2Person.sterbejahr].filter(Boolean).join("–") : "";
+    const partnerZeile = p2 ? `<span class="tree-relationship-partner">∞ ${escTree(treePersonLabel(p2))}${p2Daten ? ` <small>${escTree(String(p2Daten))}</small>` : ""}</span>` : "";
+    const card = `<div class="tree-relationship-node" data-tree-relation-node="${escTree(item.id)}"><strong>${escTree(item.label)}</strong>${dates ? `<small>${escTree(String(dates))}</small>` : ""}${partnerZeile}</div>`;
     if (index === 0) return card;
-    return `<div class="tree-relationship-arrow" aria-hidden="true"><span>${escTree(item.relationLabel)}</span><b>↓</b></div>${card}`;
+    return `<div class="tree-relationship-arrow" aria-hidden="true"><span>${escTree(item.relationLabel)}</span>${item.elternHinweis ? `<small class="tree-relationship-eltern">${escTree(item.elternHinweis)}</small>` : ""}<b>↓</b></div>${card}`;
   }).join("")}</div>`;
 }
 
@@ -10987,7 +11028,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=379");
+      treeModul3D = await import("./tree3d.js?v=380");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
