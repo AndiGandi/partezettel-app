@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 380 -->
+    <!-- Version 381 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=380">
+<link rel="stylesheet" href="style.css?v=381">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,12 +113,13 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 380</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 381</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
   <button class="tab-btn is-active" data-tab="liste" role="tab" aria-selected="true">Bestand</button>
   <button class="tab-btn" data-tab="stammbaum" role="tab" aria-selected="false">Stammbaum</button>
+  <button class="tab-btn" data-tab="chronik" role="tab" aria-selected="false">Chronik</button>
   <button class="tab-btn" data-tab="erfassen" role="tab" aria-selected="false" data-rolle="bearbeiter">Ersteingabe</button>
   <button class="tab-btn" data-tab="fotos" role="tab" aria-selected="false">Gruppenfoto</button>
   <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export / Sicherung</button>
@@ -583,6 +584,7 @@
       <details data-rolle="eigentuemer">
         <summary><strong>Verlauf und Lücken &amp; Inseln (nur Eigentümer)</strong></summary>
         <p><strong>Verlauf:</strong> zeigt, wer wann was angelegt, geändert oder gelöscht hat, je Person und gesamt. <strong>Lücken &amp; Inseln</strong> (im Stammbaum) zeigt Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen.</p>
+        <p><strong>Chronik:</strong> Der Reiter „Chronik“ rechnet aus dem Bestand Zahlen und Rekorde aus (älteste Personen, längste Ehen, meiste Kinder, Alter der Eltern, Namen, Lebensdauer, Todesumstände, Wanderungen, Häuser, Verwandtschaft) und zeigt „Heute vor … Jahren“ sowie das Zeitgeschehen. Namen sind anklickbar. „bitte prüfen“ markiert unwahrscheinliche Angaben. In der Personenansicht steht unter „Zeitgeschehen“, was während ihres Lebens geschah.</p>
         <p><strong>Weiterklicken und zurück:</strong> Öffnest du aus einer Person heraus ein Kind, einen Elternteil oder Ehepartner, steht oben „← Name“. Damit oder mit ✕ geht es zur vorherigen Person zurück (auch nach dem Bearbeiten), erst danach in den Bestand. Unter jedem Kind steht klein der Ehepartner (∞), bei mehreren Ehen nummeriert; Personen im Bestand sind anklickbar. Personen ganz ohne Lebensdaten tragen im Bestand den Hinweis „nur Name“ und lassen sich über „Anzeigen“ ausblenden.</p>
         <p><strong>Todesumstand:</strong> In „Bearbeiten“ unter dem Sterbedatum lässt sich „gefallen“, „vermisst“, „verunglückt“ oder „in der Lawine umgekommen“ wählen, mit einem kurzen Zusatz (z. B. „in Galizien“ oder „seit 1960“). Angezeigt wird das in der Personenansicht und auf der Karte im Bestand, z. B. „⚔ gefallen in Galizien“.</p>
         <p><strong>Ehe nur mit Jahr:</strong> Ist von einer Hochzeit nur das Jahr bekannt, einfach nur das Jahr auswählen und Tag/Monat leer lassen. Angezeigt wird dann z. B. „Hochzeit: 1802 · ca. 17 Jahre“. Dasselbe gilt für das Ende einer Partnerschaft.</p>
@@ -665,6 +667,14 @@
   </section>
 
   <!-- ===================== TAB: VERLAUF (nur Eigentümer) ===================== -->
+  <section id="tab-chronik" class="tab-panel">
+    <div class="chr-kopf">
+      <div><h2>Chronik &amp; Statistik</h2><p id="chronik-status" class="capture-status">Wird beim Öffnen berechnet.</p></div>
+      <button type="button" id="chronik-neu" class="btn btn--secondary">⟳ Neu berechnen</button>
+    </div>
+    <div id="chronik-inhalt" class="chr-raster"></div>
+  </section>
+
   <section id="tab-verlauf" class="tab-panel">
     <fieldset class="field-group">
       <legend>🕘 Änderungsprotokoll</legend>
@@ -714,6 +724,10 @@
       </section>
       <section class="person-view-section person-view-links-section" id="pv-links-section" hidden>
         <h3>Weiterführende Links</h3><div id="pv-links-list" class="person-view-links"></div>
+      </section>
+      <section class="person-view-section" id="pv-zeit-section" hidden>
+        <h3>Zeitgeschehen</h3>
+        <ol id="pv-zeit-list" class="pv-zeit-liste"></ol>
       </section>
       <section class="person-view-section person-view-audio-entry">
         <h3>Sprachnotizen</h3>
@@ -996,7 +1010,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=380"></script>
-<script src="app.js?v=380"></script>
+<script src="hinweise.js?v=381"></script>
+<script src="app.js?v=381"></script>
+<script src="chronik.js?v=381"></script>
 </body>
 </html>

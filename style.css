@@ -1966,3 +1966,41 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .tree-relationship-partner { display: block; margin-top: .2rem; font-size: .88rem; color: #5f5b51; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 .tree-relationship-partner small { color: #8a8474; }
 .tree-relationship-eltern { display: block; font-size: .8rem; color: #7a7566; font-weight: 400; }
+
+/* v381: Chronik & Statistik */
+.chr-kopf { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.chr-kopf h2 { margin: 0; color: var(--ink, #1f3a2c); }
+.chr-raster { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 1rem; align-items: start; }
+.chr-karte { background: #fffdf8; border: 1px solid #e3ddd0; border-radius: 16px; padding: 1rem 1.1rem; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.chr-karte.chr-breit { grid-column: 1 / -1; }
+.chr-karte h3 { margin: 0 0 .6rem; font-size: 1.08rem; color: #1b5a40; }
+.chr-karte h4 { margin: .8rem 0 .3rem; font-size: .9rem; color: #5f5b51; text-transform: none; }
+.chr-liste { margin: 0; padding-left: 1.3rem; line-height: 1.5; font-size: .93rem; }
+.chr-liste li { margin: .15rem 0; }
+.chr-link { background: none; border: 0; padding: 0; font: inherit; color: #2f5f8a; text-decoration: underline; cursor: pointer; text-align: left; }
+.chr-karte small { color: #8a8474; }
+.chr-sub { font-size: .86rem; color: #6d6a60; margin: .5rem 0 0; }
+.chr-leer { font-size: .88rem; color: #8a8474; }
+.chr-pruef { display: inline-block; padding: 0 .4rem; border-radius: 999px; background: #fbe8d6; color: #9a4f12; font-size: .72rem; }
+.chr-zahlen { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; }
+.chr-zahlen div { background: #f2efe6; border-radius: 12px; padding: .55rem .5rem; text-align: center; }
+.chr-zahlen b { display: block; font-size: 1.25rem; color: #1b5a40; }
+.chr-zahlen span { font-size: .75rem; color: #6d6a60; }
+.chr-zwei { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.chr-tabelle { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.chr-tabelle th, .chr-tabelle td { text-align: left; padding: .3rem .35rem; border-bottom: 1px solid #ece6d8; }
+.chr-tabelle th { color: #6d6a60; font-weight: 600; }
+.chr-balken { display: grid; grid-template-columns: repeat(12, 1fr); gap: .25rem; align-items: end; height: 105px; }
+.chr-balken div { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.chr-balken i { display: block; width: 70%; background: #8fb59d; border-radius: 4px 4px 0 0; min-height: 2px; }
+.chr-balken small { font-size: .66rem; }
+.chr-balken b { font-size: .68rem; color: #5f5b51; font-weight: 500; }
+.chr-zeit { list-style: none; margin: 0; padding: 0; columns: 2 340px; column-gap: 1.5rem; }
+.chr-zeit li { break-inside: avoid; padding: .35rem 0 .35rem .7rem; border-left: 3px solid #cfe0d4; margin-bottom: .3rem; font-size: .92rem; }
+.chr-zeit li small { display: block; margin-top: .1rem; }
+.pv-zeit-liste { list-style: none; margin: 0; padding: 0; }
+.pv-zeit-liste li { padding: .35rem 0 .35rem .7rem; border-left: 3px solid #cfe0d4; margin-bottom: .3rem; font-size: .92rem; color: #5f5b51; }
+.pv-zeit-liste li b { color: #1b5a40; }
+.pv-zeit-liste li span { display: block; color: #2b2a26; }
+.pv-zeit-liste li.pv-zeit-mehr { border: 0; padding-left: 0; }
+@media (max-width: 520px) { .chr-zwei { grid-template-columns: 1fr; } .chr-zahlen { grid-template-columns: repeat(2, 1fr); } }

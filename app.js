@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 380
+// Partezettel Archiv – Version 381
+// v381: Reiter „Chronik & Statistik“ (chronik.js) und „Zeitgeschehen“ in der Personenansicht.
 // v380: Verwandtschaftsweg nennt zu jedem Elternteil auch den zweiten Elternteil (∞) und bei Geschwistern die gemeinsamen Eltern.
 // v379: Ehepartner unter den Kindern – Ehefrauen mit Ledigenname statt Ehenamen.
 // v379: Ehepartner unter den Kindern mit Geburtsnamen (Ledigenname) statt Ehenamen.
@@ -4293,6 +4294,7 @@ async function openPersonDetail(personId, options = {}) {
     document.getElementById("pv-lifetime").textContent = personViewLebenszeile(person);
     zeigeHerkunftsvermerk(person);
     ladeWohnorte(person.id);
+    if (typeof zeigeZeitgeschehen === "function") zeigeZeitgeschehen(person); // v381
 
     const keyphoto = document.getElementById("pv-keyphoto");
     keyphoto.hidden = true; keyphoto.removeAttribute("src");
@@ -11028,7 +11030,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=380");
+      treeModul3D = await import("./tree3d.js?v=381");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
