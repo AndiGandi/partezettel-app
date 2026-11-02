@@ -2004,3 +2004,7 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .pv-zeit-liste li span { display: block; color: #2b2a26; }
 .pv-zeit-liste li.pv-zeit-mehr { border: 0; padding-left: 0; }
 @media (max-width: 520px) { .chr-zwei { grid-template-columns: 1fr; } .chr-zahlen { grid-template-columns: repeat(2, 1fr); } }
+.chr-zeit li.chr-ort { border-left-color: #e3c58f; }
+.chr-ortmarke { display: inline-block; font-size: .72rem; padding: 0 .35rem; border-radius: 999px; background: #f6ecd8; color: #7a5a1c; vertical-align: 1px; }
+/* v383: Verbindung Ausgangsperson → eigene Ehe */
+.tree-classic-svg .tree-classic-self{stroke:#9db9a5;stroke-width:1.6;stroke-dasharray:5 5;fill:none}

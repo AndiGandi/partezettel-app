@@ -3,31 +3,69 @@
 // und nutzt dessen globale Hilfen (sb, alleZeilenLaden, openPersonDetail, debugLog, todesumstandText).
 
 /* ---------- Zeitgeschehen: Jahresliste (Montafon, Vorarlberg, Österreich, Welt) ---------- */
+// [Jahr, Text, Quelle] – Quelle "B" = Dorfchronik Bartholomäberg (Gemeindebuch S. 58–65), sonst allgemein
 const ZEITGESCHEHEN = [
+  [842, "Das Rätische Urbar nennt acht Schmelzöfen im Drusentalgau – wohl die Bergwerke am Bartholomäberg und Kristberg", "B"],
+  [1100, "Um 1100: Bartholomäberg ist nach der Überlieferung bereits Pfarrei", "B"],
+  [1150, "Um 1150: Das romanische Vortragekreuz entsteht, der älteste Schatz der Pfarrkirche", "B"],
+  [1280, "1280–1320: Die Walser wandern ins Silbertal ein und siedeln auch am Rand von Bartholomäberg", "B"],
+  [1319, "Eine Urkunde nennt die Silbergruben am Berg „muntafune“ – der alte Name des Dorfes", "B"],
+  [1350, "Das Bartholomäberger Zinsbuch nennt Bartholomäberg als Pfarre", "B"],
+  [1383, "Erblehensbrief des Hans Tschug nennt den Widum und die angrenzenden Güter", "B"],
+  [1418, "Erste urkundliche Nachricht über die Pfarrkirche (Ablassbrief vom Konstanzer Konzil)", "B"],
+  [1420, "Die Parzelle Gantschier wird als „cuntschir“ genannt", "B"],
+  [1431, "Erster namentlich bekannter Pfarrer von Bartholomäberg: „pfaff baltiser“", "B"],
+  [1432, "Erste urkundliche Nennung des Namens Mangein bzw. Mangeng", "B"],
+  [1450, "Um 1450: Hochblüte des Bergbaus – in rund 50 Stollen wird Kupfer, Eisen und Silber gegraben", "B"],
+  [1503, "Der Churer Bischof Heinrich VI. weiht in der Kirche einen Altar zu Ehren des hl. Georg", "B"],
+  [1517, "Gründung der St.-Anna-Kaplanei", "B"],
+  [1525, "Der Anna- oder Knappenaltar wird geschnitzt – einer der schönsten gotischen Flügelaltäre des Landes", "B"],
+  [1591, "Pest in Bartholomäberg; die Toten sollen am „Totabühel“ in einem Massengrab liegen", "B"],
+  [1597, "Schruns wird abgetrennt und eigene Pfarrei", "B"],
   [1618, "Beginn des Dreißigjährigen Krieges"],
+  [1636, "Beginn der Pfarrmatriken (Tauf-, Trauungs- und Sterbebücher)", "B"],
+  [1642, "Drei Glocken (rund 3.500 kg) werden von der Glockengießerfamilie Rossier aus Lothringen gegossen", "B"],
   [1647, "Schwedische Truppen erobern Bregenz"],
   [1648, "Westfälischer Friede beendet den Dreißigjährigen Krieg"],
+  [1657, "Stiftung der Frühmesspfründe unter Pfarrer Luzius Hauser und Vorsteher Rochus Fritz", "B"],
+  [1659, "Gründung der Rosenkranzbruderschaft (15 Rosenkranzgeheimnisse auf Tragstangen)", "B"],
   [1683, "Zweite Türkenbelagerung Wiens"],
+  [1689, "Lawinenkatastrophe: 58 Menschen verschüttet, 36 Tote", "B"],
   [1703, "Spanischer Erbfolgekrieg: bayerische Truppen fallen in Tirol ein („Bayerischer Rummel“)"],
+  [1719, "Sehr heißer Sommer – kaum ein Viertel der normalen Ernte", "B"],
+  [1728, "Erste Nachricht von der Schule „in dem Mesmerhaus“", "B"],
+  [1729, "Neubau der Barockkirche unter Pfarrer Johann Franz Marent", "B"],
+  [1735, "Große Maikäferplage – über 200 Mäßle Maikäfer müssen abgeliefert werden", "B"],
   [1740, "Maria Theresia übernimmt die Herrschaft in den habsburgischen Ländern"],
+  [1743, "Weihe der neuen Kirche durch Bischof Benedikt von Rost aus Chur", "B"],
+  [1752, "Maria Theresia erlaubt den Montafonern Viehmärkte in Schruns (22. September)", "B"],
+  [1756, "Großer Heu- und Futtermangel – das Vieh muss im April außer Landes gebracht werden", "B"],
   [1756, "Beginn des Siebenjährigen Krieges"],
+  [1759, "Maikäferjahr (wieder 1762): insgesamt 320 Eimer Maikäfer sind abzuliefern", "B"],
+  [1762, "Größte Wasserflut seit Menschengedenken – alle Brücken bis Feldkirch werden mitgerissen", "B"],
   [1770, "Erste Hausnummern: Konskription und Nummerierung der Häuser in den habsburgischen Ländern"],
+  [1771, "Meister Josef Vonier aus Schruns baut den oberen Teil des Turmes und die Turmkuppel; Vorsteher ist Christian Mangeng", "B"],
   [1774, "Allgemeine Schulpflicht durch die Theresianische Schulordnung"],
   [1780, "Tod Maria Theresias – Joseph II. regiert allein"],
   [1781, "Toleranzpatent Josephs II."],
   [1784, "Josephinische Matrikenordnung: Kirchenbücher werden nach staatlichen Vorgaben geführt"],
   [1789, "Französische Revolution"],
+  [1792, "Bau der Barockorgel durch Michael Graß aus Bürserberg", "B"],
   [1799, "Koalitionskrieg: Schlacht bei Feldkirch, die Franzosen werden zurückgeschlagen"],
   [1800, "Französische Truppen besetzen Vorarlberg"],
   [1805, "Friede von Pressburg: Vorarlberg kommt an Bayern"],
   [1806, "Ende des Heiligen Römischen Reiches"],
   [1809, "Aufstand in Tirol und Vorarlberg gegen Bayern und Napoleon (Andreas Hofer, Anton Schneider)"],
   [1810, "Andreas Hofer wird in Mantua hingerichtet"],
+  [1811, "Über zwei Dutzend Männer werden zur Großen Armee Napoleons eingezogen; sechs fallen in Russland", "B"],
   [1813, "Völkerschlacht bei Leipzig"],
+  [1814, "Laut Totenbuch sterben in der Pfarrei 61 Menschen, davon 18 Kinder", "B"],
   [1814, "Vorarlberg kommt wieder zu Österreich"],
   [1815, "Wiener Kongress und Napoleons Niederlage bei Waterloo"],
   [1816, "„Jahr ohne Sommer“ nach dem Ausbruch des Tambora: Missernten und Hunger"],
+  [1817, "Hungerjahr in Bartholomäberg: Die Leute stillen ihren Hunger mit „Stafelblacken“, Nesseln und Gras", "B"],
   [1817, "Hungersnot nach der Missernte des Vorjahres"],
+  [1836, "Geburt von Franz Josef Battlogg, dem späteren Kirchenmusikreformer Vorarlbergs", "B"],
   [1846, "Missernten und Teuerung in ganz Europa (Hungerjahre 1846/47)"],
   [1848, "Revolution in Österreich – Aufhebung der Grundherrschaft"],
   [1859, "Krieg in Italien (Schlacht bei Solferino)"],
@@ -36,24 +74,55 @@ const ZEITGESCHEHEN = [
   [1867, "Ausgleich: Österreich-Ungarn entsteht"],
   [1869, "Reichsvolksschulgesetz: achtjährige Schulpflicht"],
   [1872, "Eröffnung der Vorarlbergbahn bis Bludenz"],
+  [1873, "Furchtbare Viehseuche – viele Ställe müssen geräumt werden", "B"],
+  [1874, "Gründung des Veteranenvereins unter Christian Juen", "B"],
   [1884, "Eröffnung der Arlbergbahn"],
+  [1894, "Gründung der Feuerwehr Bartholomäberg (erster Kommandant Johann Josef Köberle)", "B"],
+  [1903, "Maria Anna Drinkwälder geb. Galehr vermacht dem Armenfonds 27.000 Kronen; 1905/06 wird das Armenhaus gebaut (Zimmermeister Johann Josef Mangeng)", "B"],
   [1905, "Eröffnung der Montafonerbahn Bludenz–Schruns"],
+  [1912, "Gründung des Viehzuchtvereins Bartholomäberg (18. November)", "B"],
+  [1914, "Im Ersten Weltkrieg fallen 31 Männer aus Bartholomäberg (bis 1918)", "B"],
   [1914, "Beginn des Ersten Weltkriegs"],
   [1915, "Italien tritt in den Krieg ein – Front in Südtirol und Tirol"],
   [1916, "Tod Kaiser Franz Josephs"],
   [1918, "Ende des Ersten Weltkriegs, Spanische Grippe, Gründung der Republik"],
   [1919, "Volksabstimmung in Vorarlberg über einen Anschluss an die Schweiz"],
+  [1923, "Neues Geläute mit 4 Glocken (5.422 kg), nachdem die alten Glocken dem Krieg geopfert wurden", "B"],
   [1924, "Gründung der Vorarlberger Illwerke"],
   [1925, "Der Schilling ersetzt die Krone"],
+  [1928, "Gründung der Harmoniemusik Bartholomäberg unter Kapellmeister Dagobert Mathies", "B"],
   [1929, "Weltwirtschaftskrise"],
+  [1932, "Bau der Straße von St. Anton über Bartholomäberg nach Innerberg (bis 1938) und des Schulhauses im Dorfzentrum", "B"],
   [1934, "Bürgerkrieg im Februar, Ständestaat, Ermordung von Kanzler Dollfuß"],
+  [1936, "Bau des Kriegerdenkmals für die Gefallenen des Ersten Weltkriegs", "B"],
   [1938, "„Anschluss“ Österreichs an das Deutsche Reich"],
+  [1939, "Im Zweiten Weltkrieg werden 49 Bartholomäberger Opfer des Krieges (bis 1945)", "B"],
   [1939, "Beginn des Zweiten Weltkriegs"],
   [1945, "Ende des Zweiten Weltkriegs – französische Besatzung in Vorarlberg"],
+  [1949, "Bau des Schulhauses in Innerberg (1949/50)", "B"],
+  [1952, "Josef Gunzinger spendet ein neues Geläute (5.505 kg)", "B"],
+  [1953, "Am Bittmontag erfrieren bei −8 °C alle Maikäfer – Ende der jahrhundertelangen Plage", "B"],
+  [1954, "„Weißer Tod“ in Bartholomäberg: zwei Großlawinen fordern 16 Menschenleben; Sturm wirft 8.000 fm Holz um", "B"],
   [1954, "Lawinenwinter: Katastrophe von Blons; Eröffnung der Silvretta-Hochalpenstraße"],
+  [1955, "Bau des Schulhauses in Jetzmunt", "B"],
   [1955, "Staatsvertrag: Ende der Besatzungszeit"],
+  [1956, "Pfarrer Martin Zudrell, der letzte der elf Priester aus Bartholomäberg, wird begraben", "B"],
+  [1957, "Bau des Schulhauses in Gantschier (1957/58)", "B"],
+  [1959, "Josef Keßler wird Ehrenbürger der Gemeinde", "B"],
+  [1966, "Innenrenovierung der Pfarrkirche", "B"],
+  [1967, "Straße Schruns–Bartholomäberg fertig, Hotel „Bergerhof“, Wintersportverein und Wasserversorgung", "B"],
+  [1968, "Gründung der Trachtenkapelle Gantschier", "B"],
+  [1969, "Bartholomäberg bekommt eine Posthilfsstelle", "B"],
   [1969, "Erste Mondlandung"],
+  [1971, "Beginn des Kanalbaus", "B"],
+  [1973, "Restaurierung der Orgel", "B"],
+  [1978, "Bartholomäberg erhält einen Kindergarten", "B"],
+  [1980, "Besuch von Bundespräsident Rudolf Kirchschläger", "B"],
+  [1982, "29./30. Jänner: gefährliche Lawinenlage durch 1,50 m Pulverschnee", "B"],
+  [1986, "Pfarrhaus und Altersheim werden übergeben; die Gemeinde zählt 2.044 Einwohner", "B"],
+  [1989, "Einweihung der Kapelle im „Valschalang“", "B"],
   [1989, "Fall der Berliner Mauer"],
+  [1990, "1. Sippentreffen der Mangeng im Gemeindesaal Bartholomäberg", "B"],
   [1995, "Österreich tritt der Europäischen Union bei"],
   [2002, "Einführung des Euro"]
 ];
@@ -327,10 +396,10 @@ function chronikAuswerten(d) {
   r.heuteText = heute.toLocaleDateString("de-AT", { day: "numeric", month: "long" });
 
   // 9 · Zeitgeschehen: wie viele Personen lebten damals?
-  r.zeit = ZEITGESCHEHEN.map(([jahr, text]) => {
+  r.zeit = ZEITGESCHEHEN.map(([jahr, text, quelle]) => {
     const lebend = d.personen.filter((p) => { const g = chrGebJahr(p); if (!g || g > jahr) return false; const t = chrTodJahr(p); return t ? t >= jahr : jahr - g <= 90; });
     const geboren = d.personen.filter((p) => chrGebJahr(p) === jahr);
-    return { jahr, text, lebend: lebend.length, geboren };
+    return { jahr, text, quelle, lebend: lebend.length, geboren };
   }).filter((z) => z.lebend || z.geboren.length);
   return r;
 }
@@ -382,8 +451,8 @@ function chronikRendern(r, ziel) {
     karte("🧬 Verwandtschaft", `<p><b>${chrZahl(r.verbund.groesste)} von ${chrZahl(z.personen)}</b> Personen (${chrRund(100 * r.verbund.groesste / Math.max(1, z.personen), 0)} %) sind über Eltern, Kinder und Ehen miteinander verbunden.</p>
       <p class="chr-sub">Daneben gibt es ${r.verbund.inseln} getrennte „Inseln“, davon ${r.verbund.einzeln} einzelne Personen ohne jede Verbindung.</p>
       <h4>Stammeltern mit den meisten Nachkommen im Bestand</h4>${liste(r.stammeltern, (x) => `${chrLink(x.p)} – <b>${chrZahl(x.n)}</b> Nachkommen`)}`),
-    karte("📜 Zeitgeschehen", `<p class="chr-sub">Was zur Zeit deiner Vorfahren geschah – mit der Zahl der Personen aus dem Bestand, die damals lebten.</p>
-      <ol class="chr-zeit">${r.zeit.map((x) => `<li><b>${x.jahr}</b> ${chrEsc(x.text)}<small>${x.lebend === 1 ? "1 Person lebte" : `${x.lebend} Personen lebten`}${x.geboren.length ? ` · geboren: ${x.geboren.slice(0, 4).map(chrLink).join(", ")}${x.geboren.length > 4 ? ` und ${x.geboren.length - 4} weitere` : ""}` : ""}</small></li>`).join("")}</ol>`, "chr-breit")
+    karte("📜 Zeitgeschehen", `<p class="chr-sub">Was zur Zeit deiner Vorfahren geschah – ⛪ markiert Einträge aus der Dorfchronik Bartholomäberg. Dazu die Zahl der Personen aus dem Bestand, die damals lebten.</p>
+      <ol class="chr-zeit">${r.zeit.map((x) => `<li${x.quelle === "B" ? ' class="chr-ort"' : ""}><b>${x.jahr}</b> ${x.quelle === "B" ? '<span class="chr-ortmarke">⛪ Bartholomäberg</span> ' : ""}${chrEsc(x.text)}<small>${x.lebend === 1 ? "1 Person lebte" : `${x.lebend} Personen lebten`}${x.geboren.length ? ` · geboren: ${x.geboren.slice(0, 4).map(chrLink).join(", ")}${x.geboren.length > 4 ? ` und ${x.geboren.length - 4} weitere` : ""}` : ""}</small></li>`).join("")}</ol>`, "chr-breit")
   ];
   ziel.innerHTML = html.join("");
 }
@@ -416,7 +485,7 @@ function zeitgeschehenFuerPerson(p) {
   const g = chrGebJahr(p);
   if (!g) return [];
   const t = chrTodJahr(p) || (g + 90 < new Date().getFullYear() ? g + 80 : new Date().getFullYear());
-  return ZEITGESCHEHEN.filter(([j]) => j >= g && j <= t).map(([j, text]) => ({ jahr: j, text, alter: j - g }));
+  return ZEITGESCHEHEN.filter(([j]) => j >= g && j <= t).map(([j, text, quelle]) => ({ jahr: j, text, quelle, alter: j - g }));
 }
 function zeigeZeitgeschehen(person) {
   const sec = document.getElementById("pv-zeit-section");
@@ -426,7 +495,7 @@ function zeigeZeitgeschehen(person) {
   sec.hidden = !ev.length;
   if (!ev.length) { liste.innerHTML = ""; return; }
   const sichtbar = 6;
-  liste.innerHTML = ev.map((e, i) => `<li${i >= sichtbar ? " hidden" : ""}><b>${e.jahr}</b>${e.alter === 0 ? " · im Geburtsjahr" : ` · mit ${e.alter} Jahren`}<span>${chrEsc(e.text)}</span></li>`).join("") +
+  liste.innerHTML = ev.map((e, i) => `<li${i >= sichtbar ? " hidden" : ""}><b>${e.jahr}</b>${e.alter === 0 ? " · im Geburtsjahr" : ` · mit ${e.alter} Jahren`}<span>${e.quelle === "B" ? "⛪ " : ""}${chrEsc(e.text)}</span></li>`).join("") +
     (ev.length > sichtbar ? `<li class="pv-zeit-mehr"><button type="button" class="btn btn--ghost">Alle ${ev.length} Ereignisse zeigen</button></li>` : "");
   liste.querySelector(".pv-zeit-mehr button")?.addEventListener("click", (e) => {
     liste.querySelectorAll("li[hidden]").forEach((li) => { li.hidden = false; });

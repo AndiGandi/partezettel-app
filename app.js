@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 381
+// Partezettel Archiv – Version 383
+// v383: Stammbaum „Familie“: Linien sitzen bei jedem Zoom richtig; Ehepaar steht nebeneinander, gestrichelt mit der Ausgangsperson verbunden.
+// v382: Zeitgeschehen um die Dorfchronik Bartholomäberg erweitert (68 Einträge, ⛪ markiert).
 // v381: Reiter „Chronik & Statistik“ (chronik.js) und „Zeitgeschehen“ in der Personenansicht.
 // v380: Verwandtschaftsweg nennt zu jedem Elternteil auch den zweiten Elternteil (∞) und bei Geschwistern die gemeinsamen Eltern.
 // v379: Ehepartner unter den Kindern – Ehefrauen mit Ledigenname statt Ehenamen.
@@ -10935,9 +10937,14 @@ function treeClassicLine(svg,x1,y1,x2,y2,cls="tree-classic-family"){
   const e=document.createElementNS("http://www.w3.org/2000/svg","line");
   e.setAttribute("x1",Math.round(x1));e.setAttribute("y1",Math.round(y1));e.setAttribute("x2",Math.round(x2));e.setAttribute("y2",Math.round(y2));e.setAttribute("class",cls);svg.appendChild(e);
 }
+// v383: Positionen in Canvas-Koordinaten (offsetLeft/-Top), unabhängig vom Zoom (CSS scale).
+// Vorher kamen die Bildschirm-Koordinaten (bereits verkleinert) in die SVG – bei 60 % saßen die Linien daneben.
 function treeClassicPositions(canvas){
-  const c=canvas.getBoundingClientRect(),m=new Map();
-  canvas.querySelectorAll("[data-classic-key]").forEach(e=>{const r=e.getBoundingClientRect();m.set(e.dataset.classicKey,{left:r.left-c.left,right:r.right-c.left,top:r.top-c.top,bottom:r.bottom-c.top,centerX:(r.left+r.right)/2-c.left});});
+  const m=new Map();
+  canvas.querySelectorAll("[data-classic-key]").forEach(e=>{
+    const left=e.offsetLeft, top=e.offsetTop, w=e.offsetWidth, h=e.offsetHeight;
+    m.set(e.dataset.classicKey,{left,right:left+w,top,bottom:top+h,centerX:left+w/2});
+  });
   return m;
 }
 function treeClassicConnectParents(svg,pos,family){
@@ -10950,7 +10957,8 @@ function treeClassicConnectParents(svg,pos,family){
   treeClassicLine(svg,j,pb,j,by); const xs=ts.map(p=>p.centerX); if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by); ts.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));
 }
 function treeClassicConnectFamily(svg,pos,f){
-  const r=pos.get(`family:${f.id}:root`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean); if(!r||!s)return;
+  const r=pos.get(`family:${f.id}:root`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean); if(!r)return;
+  if(!s){ if(!cs.length)return; const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42)); treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by); const xs=cs.map(p=>p.centerX); if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by); cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top)); return; }
   const l=r.centerX<s.centerX?r:s, q=l===r?s:r, y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;
   treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse"); if(!cs.length)return;
   const by0=Math.max(r.bottom,s.bottom), ct=Math.min(...cs.map(p=>p.top)), by=by0+Math.max(22,Math.min(46,(ct-by0)*.42)), j=(l.right+q.left)/2;
@@ -10980,23 +10988,26 @@ function renderKlassischerStammbaum(rootId){
   row(parents,yp,"Eltern","parent","tree-classic-nodes--parents");
   row(middle,ym,info.siblingIds.length?"Ausgangsperson und Geschwister":"Ausgangsperson","middle","tree-classic-nodes--middle");
 
-  if(families.length===1){
+  if(false){ // v383: auch bei einer Ehe das Paar nebeneinander zeigen (siehe unten)
     label("Eigener Familienzweig",yf);
     const f=families[0],re=canvas.querySelector(`[data-classic-key="person:${rootId}:middle"]`);
     // Der eigene Familienzweig liegt bewusst unterhalb der Geschwisterzeile.
     if(f.spouseId&&re){const rx=parseFloat(re.style.left),right=rx+card+gap,left=rx-card-gap,sx=right+card<=width-24?right:left;node(f.spouseId,`family:${f.id}:spouse`,sx,yf,"tree-classic-node--spouse");}
     if(f.childIds.length){label("Kinder",ycSingle);const total=rowW(f.childIds);let x=(width-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,x,ycSingle,"tree-classic-node--children");x+=card+gap;});}
-  } else if(families.length>1){
-    label("Partnerschaften",yf);let x=(width-familyW)/2;
+  } else if(families.length>=1){
+    label(families.length===1?"Ehe / Partnerschaft":"Partnerschaften",yf);let x=(width-familyW)/2;
     families.forEach((f,i)=>{const bw=blocks[i],pair=f.spouseId?2*card+gap:card,px=x+(bw-pair)/2;node(rootId,`family:${f.id}:root`,px,yf,"tree-classic-node--family-root");if(f.spouseId)node(f.spouseId,`family:${f.id}:spouse`,px+card+gap,yf,"tree-classic-node--spouse");if(f.childIds.length){const total=rowW(f.childIds);let cx=x+(bw-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,cx,ycMulti,"tree-classic-node--children");cx+=card+gap;});}x+=bw+28;});
-    label("Kinder je Partnerschaft",ycMulti);
+    label(families.length===1?"Kinder":"Kinder je Partnerschaft",ycMulti);
   }
   stage.appendChild(canvas);
   requestAnimationFrame(()=>{
     const pos=treeClassicPositions(canvas);svg.innerHTML="";svg.setAttribute("viewBox",`0 0 ${canvas.clientWidth} ${canvas.clientHeight}`);svg.setAttribute("width",canvas.clientWidth);svg.setAttribute("height",canvas.clientHeight);
     for(const f of info.parentFamilies){f.rootId=rootId;f.targetIds=info.siblingIds;treeClassicConnectParents(svg,pos,f);}
-    if(families.length===1){const f=families[0],r=pos.get(`person:${rootId}:middle`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&s){const l=r.centerX<s.centerX?r:s,q=l===r?s:r,y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse");const j=(r.centerX+s.centerX)/2;treeClassicLine(svg,r.centerX,r.bottom,r.centerX,y);if(cs.length){const pb=Math.max(r.bottom,s.bottom),ct=Math.min(...cs.map(p=>p.top)),by=pb+Math.max(22,Math.min(46,(ct-pb)*.42));treeClassicLine(svg,j,y,j,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}else if(families.length===1&&f.childIds.length){const r=pos.get(`person:${rootId}:middle`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&cs.length){const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42));treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}}
-    if(families.length>1)families.forEach(f=>treeClassicConnectFamily(svg,pos,f));
+    if(false){const f=families[0],r=pos.get(`person:${rootId}:middle`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&s){const l=r.centerX<s.centerX?r:s,q=l===r?s:r,y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse");const j=(r.centerX+s.centerX)/2;treeClassicLine(svg,r.centerX,r.bottom,r.centerX,y);if(cs.length){const pb=Math.max(r.bottom,s.bottom),ct=Math.min(...cs.map(p=>p.top)),by=pb+Math.max(22,Math.min(46,(ct-pb)*.42));treeClassicLine(svg,j,y,j,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}else if(families.length===1&&f.childIds.length){const r=pos.get(`person:${rootId}:middle`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean);if(r&&cs.length){const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42));treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by);const xs=cs.map(p=>p.centerX);if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by);cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));}}}
+    if(families.length>=1)families.forEach(f=>treeClassicConnectFamily(svg,pos,f));
+    // v383: gestrichelte Linie von der Ausgangsperson zu ihrem Platz in jeder Ehe
+    const rm=pos.get(`person:${rootId}:middle`);
+    if(rm)families.forEach(f=>{const fr=pos.get(`family:${f.id}:root`);if(!fr)return;const my=rm.bottom+(fr.top-rm.bottom)/2;treeClassicLine(svg,rm.centerX,rm.bottom,rm.centerX,my,"tree-classic-self");treeClassicLine(svg,rm.centerX,my,fr.centerX,my,"tree-classic-self");treeClassicLine(svg,fr.centerX,my,fr.centerX,fr.top,"tree-classic-self");});
   });
   canvas.querySelectorAll("[data-classic-person]").forEach(el=>{el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;renderStammbaum(id);});el.addEventListener("dblclick",async e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;await openPersonDetail(id,{fromTree:true});});});
 }
@@ -11030,7 +11041,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=381");
+      treeModul3D = await import("./tree3d.js?v=383");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
