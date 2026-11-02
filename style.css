@@ -2008,3 +2008,14 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .chr-ortmarke { display: inline-block; font-size: .72rem; padding: 0 .35rem; border-radius: 999px; background: #f6ecd8; color: #7a5a1c; vertical-align: 1px; }
 /* v383: Verbindung Ausgangsperson → eigene Ehe */
 .tree-classic-svg .tree-classic-self{stroke:#9db9a5;stroke-width:1.6;stroke-dasharray:5 5;fill:none}
+
+/* v384: Ehepaare in der Generationen-Ansicht */
+.tree-gen-zeile{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:1rem 1.4rem}
+.tree-gen-paar{display:flex;flex-direction:column;align-items:center;background:rgba(157,185,165,.13);border:1px solid #d5e2d8;border-radius:16px;padding:.45rem .5rem .35rem}
+.tree-gen-paar__karten{display:flex;align-items:center;gap:.2rem}
+.tree-gen-paar__karten .tree-node{flex:0 0 auto}
+.tree-gen-paar__ehe{display:flex;flex-direction:column;align-items:center;min-width:34px;color:#4d7a5d;line-height:1}
+.tree-gen-paar__ehe span{font-size:1.25rem}
+.tree-gen-paar__ehe small{font-size:.66rem;color:#7a8a7f;margin-top:.15rem}
+.tree-gen-paar__von{font-size:.72rem;color:#6d6a60;margin-top:.3rem;text-align:center;max-width:22rem}
+.tree-gen-einzel{display:flex}

@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 383
+// Partezettel Archiv – Version 384
+// v384: Stammbaum „Generationen“: Ehepaare als Paar (∞ Jahr, Mann links) mit „Eltern von …“.
 // v383: Stammbaum „Familie“: Linien sitzen bei jedem Zoom richtig; Ehepaar steht nebeneinander, gestrichelt mit der Ausgangsperson verbunden.
 // v382: Zeitgeschehen um die Dorfchronik Bartholomäberg erweitert (68 Einträge, ⛪ markiert).
 // v381: Reiter „Chronik & Statistik“ (chronik.js) und „Zeitgeschehen“ in der Personenansicht.
@@ -8799,7 +8800,8 @@ function treeGenerationName(distance, direction) {
   return names[distance] || `${distance}. Generation`;
 }
 
-function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = "") {
+// v384: Ehepaare innerhalb einer Generation nebeneinander als Paar (∞ mit Jahr), dazu „Eltern von …“
+function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = "", naechsteIds = null) {
   const people = treeUniquePeople(personIds);
   if (!people.length) return null;
   const section = document.createElement("div");
@@ -8810,9 +8812,35 @@ function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = ""
   title.textContent = label;
   section.appendChild(title);
 
+  const imRow = new Set(people.map((p) => p.id));
+  const naechste = naechsteIds ? new Set(naechsteIds) : null;
+  const benutzt = new Set();
+  const teile = [];
+  for (const person of people) {
+    if (benutzt.has(person.id)) continue;
+    benutzt.add(person.id);
+    const fam = (treeFamiliesForPerson(person.id) || []).find((f) => {
+      const o = f.partner_a_id === person.id ? f.partner_b_id : f.partner_a_id;
+      return o && imRow.has(o) && !benutzt.has(o);
+    });
+    if (!fam) { teile.push(`<div class="tree-gen-einzel">${treePersonCard(person, rootId, "", stammlinie)}</div>`); continue; }
+    const partnerId = fam.partner_a_id === person.id ? fam.partner_b_id : fam.partner_a_id;
+    benutzt.add(partnerId);
+    const partner = treePerson(partnerId);
+    const jahr = fam.beginn ? String(fam.beginn).slice(0, 4) : (fam.beginn_jahr ? String(fam.beginn_jahr) : "");
+    const kinder = naechste ? treeChildrenForFamily(fam.id).map((k) => k.person?.id || k.kind_id).filter((id) => id && naechste.has(id)) : [];
+    const elternVon = kinder.length ? `<div class="tree-gen-paar__von">Eltern von ${kinder.map((id) => escTree(treePersonLabel(id))).join(" und ")}</div>` : "";
+    // Mann links, Frau rechts – in jeder Zeile gleich
+    const frau = (x) => String(x?.geschlecht || "").toLowerCase().startsWith("w");
+    const [links, rechts] = partner && frau(person) && !frau(partner) ? [partner, person] : [person, partner];
+    teile.push(`<div class="tree-gen-paar">
+      <div class="tree-gen-paar__karten">${treePersonCard(links, rootId, "", stammlinie)}
+        <div class="tree-gen-paar__ehe" aria-label="verheiratet${jahr ? ` ${jahr}` : ""}"><span>∞</span>${jahr ? `<small>${escTree(jahr)}</small>` : ""}</div>
+        ${rechts ? treePersonCard(rechts, rootId, "", stammlinie) : ""}</div>${elternVon}</div>`);
+  }
   const row = document.createElement("div");
-  row.className = "tree-generation tree-deep-generation__row";
-  row.innerHTML = people.map((person) => treePersonCard(person, rootId, "", stammlinie)).join("");
+  row.className = "tree-generation tree-deep-generation__row tree-gen-zeile";
+  row.innerHTML = teile.join("");
   section.appendChild(row);
   return section;
 }
@@ -9159,7 +9187,8 @@ function renderStammbaum(rootId) {
       rootId,
       stammlinie,
       treeGenerationName(distance, "up"),
-      "tree-deep-generation--ancestor"
+      "tree-deep-generation--ancestor",
+      i === 0 ? [rootId] : ancestorLevels[i - 1]
     );
     if (section) stage.appendChild(section);
   }
@@ -11041,7 +11070,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=383");
+      treeModul3D = await import("./tree3d.js?v=384");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
