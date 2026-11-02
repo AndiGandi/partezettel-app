@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 384
+// Partezettel Archiv – Version 385
+// v385: Stammbaum – Doppeltippen auf iPad öffnet die Personenansicht (Zustand übersteht das Neuzeichnen); Tippen auf die Mitte öffnet direkt.
 // v384: Stammbaum „Generationen“: Ehepaare als Paar (∞ Jahr, Mann links) mit „Eltern von …“.
 // v383: Stammbaum „Familie“: Linien sitzen bei jedem Zoom richtig; Ehepaar steht nebeneinander, gestrichelt mit der Ausgangsperson verbunden.
 // v382: Zeitgeschehen um die Dorfchronik Bartholomäberg erweitert (68 Einträge, ⛪ markiert).
@@ -8915,45 +8916,39 @@ function treePedigreeNodeHtml(k, m, y, rootId) {
 }
 
 // Antippen = Person als neue Mitte, Doppelklick/Doppeltippen = Personendaten öffnen (wie in der Kartenansicht).
+// v385: Antippen / Doppelklick im Stammbaum – einheitlich für alle Ansichten.
+// Maus: Klick wählt die Person als Mitte, Doppelklick öffnet die Personenansicht.
+// iPad/iPhone: einmal tippen wählt (kurz verzögert), zweimal schnell tippen öffnet die Personenansicht.
+// Tippen auf die bereits gewählte Mitte öffnet sie sofort. Der Zustand gilt über das Neuzeichnen hinweg.
+let treeTippTimer = null, treeTippId = null, treeLetzteBeruehrung = 0;
+function treeAktuelleMitte() { return document.getElementById("tree-person-select")?.value || ""; }
+function treeWaehlen(id) { const a = document.getElementById("tree-person-select"); if (a) a.value = id; renderStammbaum(id); }
+async function treeOeffnen(id) { const a = document.getElementById("tree-person-select"); if (a) a.value = id; await openPersonDetail(id, { fromTree: true }); }
+function treeTippVerarbeiten(id) {
+  // erster Tipp/Klick: kurz warten, ob ein zweiter folgt; zweiter: Personenansicht öffnen
+  if (treeTippTimer && treeTippId === id) { clearTimeout(treeTippTimer); treeTippTimer = null; treeTippId = null; void treeOeffnen(id); return; }
+  if (treeTippTimer) clearTimeout(treeTippTimer);
+  treeTippId = id;
+  const istMitte = id === treeAktuelleMitte();
+  treeTippTimer = setTimeout(() => { treeTippTimer = null; treeTippId = null; if (istMitte) void treeOeffnen(id); else treeWaehlen(id); }, istMitte ? 260 : 300);
+}
+function treePersonEreignisse(el, id) {
+  el.addEventListener("pointerup", (event) => {
+    if (event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    treeLetzteBeruehrung = Date.now();
+    event.preventDefault();
+    treeTippVerarbeiten(id);
+  });
+  el.addEventListener("click", (event) => {
+    event.preventDefault(); event.stopPropagation();
+    if (Date.now() - treeLetzteBeruehrung < 800) return; // schon über die Berührung behandelt
+    treeTippVerarbeiten(id);
+  });
+}
 function treeBindPersonInteractions(container) {
-  let unterdruecken = false;
-  let letzterTipp = { id: null, zeit: 0 };
   container.querySelectorAll("[data-tree-person]").forEach((el) => {
-    el.addEventListener("click", (event) => {
-      event.preventDefault();
-      if (unterdruecken) { unterdruecken = false; event.stopPropagation(); return; }
-      const id = el.dataset.treePerson;
-      if (!id) return;
-      const auswahl = document.getElementById("tree-person-select");
-      if (auswahl) auswahl.value = id;
-      renderStammbaum(id);
-    });
-    el.addEventListener("dblclick", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const id = el.dataset.treePerson;
-      if (!id) return;
-      const auswahl = document.getElementById("tree-person-select");
-      if (auswahl) auswahl.value = id;
-      await openPersonDetail(id, { fromTree: true });
-    });
-    el.addEventListener("pointerup", async (event) => {
-      if (event.pointerType !== "touch") return;
-      const id = el.dataset.treePerson;
-      if (!id) return;
-      const jetzt = Date.now();
-      if (letzterTipp.id === id && jetzt - letzterTipp.zeit <= 450) {
-        letzterTipp = { id: null, zeit: 0 };
-        unterdruecken = true;
-        event.preventDefault();
-        event.stopPropagation();
-        const auswahl = document.getElementById("tree-person-select");
-        if (auswahl) auswahl.value = id;
-        await openPersonDetail(id, { fromTree: true });
-      } else {
-        letzterTipp = { id, zeit: jetzt };
-      }
-    });
+    const id = el.dataset.treePerson;
+    if (id) treePersonEreignisse(el, id);
   });
 }
 
@@ -9244,60 +9239,7 @@ function renderStammbaum(rootId) {
     if (section) stage.appendChild(section);
   }
 
-  let suppressNextTreeClick = false;
-  let lastTreeTouch = { id: null, time: 0 };
-
-  stage.querySelectorAll("[data-tree-person]").forEach((el) => {
-    const openTreePerson = async (event) => {
-      if (suppressNextTreeClick) {
-        suppressNextTreeClick = false;
-        if (event) {
-          event.preventDefault();
-          event.stopPropagation();
-        }
-        return;
-      }
-      if (event) event.preventDefault();
-      const id = el.dataset.treePerson;
-      if (!id) return;
-      const select = document.getElementById("tree-person-select");
-      if (select) select.value = id;
-      renderStammbaum(id);
-    };
-
-    el.addEventListener("click", openTreePerson);
-
-    // Desktop: Doppelklick.
-    el.addEventListener("dblclick", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const id = el.dataset.treePerson;
-      if (!id) return;
-      const select = document.getElementById("tree-person-select");
-      if (select) select.value = id;
-      await openPersonDetail(id, { fromTree: true });
-    });
-
-    // iPad/iPhone: schneller zweiter Fingertipp = Doppelklick.
-    el.addEventListener("pointerup", async (event) => {
-      if (event.pointerType !== "touch") return;
-      const id = el.dataset.treePerson;
-      if (!id) return;
-      const now = Date.now();
-      const isDoubleTap = lastTreeTouch.id === id && (now - lastTreeTouch.time) <= 450;
-      if (isDoubleTap) {
-        lastTreeTouch = { id: null, time: 0 };
-        suppressNextTreeClick = true;
-        event.preventDefault();
-        event.stopPropagation();
-        const select = document.getElementById("tree-person-select");
-        if (select) select.value = id;
-        await openPersonDetail(id, { fromTree: true });
-      } else {
-        lastTreeTouch = { id, time: now };
-      }
-    });
-  });
+  treeBindPersonInteractions(stage);
   if (message) message.textContent = "";
 }
 
@@ -11038,7 +10980,7 @@ function renderKlassischerStammbaum(rootId){
     const rm=pos.get(`person:${rootId}:middle`);
     if(rm)families.forEach(f=>{const fr=pos.get(`family:${f.id}:root`);if(!fr)return;const my=rm.bottom+(fr.top-rm.bottom)/2;treeClassicLine(svg,rm.centerX,rm.bottom,rm.centerX,my,"tree-classic-self");treeClassicLine(svg,rm.centerX,my,fr.centerX,my,"tree-classic-self");treeClassicLine(svg,fr.centerX,my,fr.centerX,fr.top,"tree-classic-self");});
   });
-  canvas.querySelectorAll("[data-classic-person]").forEach(el=>{el.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;renderStammbaum(id);});el.addEventListener("dblclick",async e=>{e.preventDefault();e.stopPropagation();const id=el.dataset.classicPerson;if(!id)return;const s=document.getElementById("tree-person-select");if(s)s.value=id;await openPersonDetail(id,{fromTree:true});});});
+  canvas.querySelectorAll("[data-classic-person]").forEach(el=>{const id=el.dataset.classicPerson;if(id)treePersonEreignisse(el,id);}); // v385
 }
 
 // ---------- v342: 3D-Wurzelbaum (Prototyp) ----------
@@ -11070,7 +11012,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=384");
+      treeModul3D = await import("./tree3d.js?v=385");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
