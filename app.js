@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 385
+// Partezettel Archiv – Version 386
+// v386: Verwandtschaft ermitteln – neue Darstellung „Gebirge“ (Höhe = Generation, Gipfel = gemeinsame Vorfahren, ∞-Brücke = Ehe), umschaltbar auf Liste.
 // v385: Stammbaum – Doppeltippen auf iPad öffnet die Personenansicht (Zustand übersteht das Neuzeichnen); Tippen auf die Mitte öffnet direkt.
 // v384: Stammbaum „Generationen“: Ehepaare als Paar (∞ Jahr, Mann links) mit „Eltern von …“.
 // v383: Stammbaum „Familie“: Linien sitzen bei jedem Zoom richtig; Ehepaar steht nebeneinander, gestrichelt mit der Ausgangsperson verbunden.
@@ -9698,6 +9699,84 @@ function treeHumanRelationshipPath(aId, path) {
   return steps.join(" → ");
 }
 
+// v386: Verwandtschaftsweg als „Gebirge“: Höhe = Generation, links Person 1, rechts Person 2,
+// Gipfel = gemeinsame Vorfahren, waagrechte ∞-Brücke = Ehe, gestrichelt = Geschwister.
+function treeRelationshipMountain(aId, path) {
+  if (!path?.length) return "";
+  const partner = treeWegPartner(aId, path);
+  // Geschwister-Schritt: die gemeinsamen Eltern als Gipfel dazwischen einfügen (klassisches „V“)
+  const weg = [];
+  let vorher = aId;
+  for (const e of path) {
+    if (e.type === "sibling") {
+      const ge = treeGemeinsameEltern(vorher, e.to);
+      if (ge.length) {
+        weg.push({ from: vorher, to: ge[0], type: "parent" }, { from: ge[0], to: e.to, type: "child" });
+        if (ge[1]) partner.set(ge[0], ge[1]);
+        vorher = e.to; continue;
+      }
+    }
+    weg.push(e); vorher = e.to;
+  }
+  path = weg;
+  const ids = [aId, ...path.map((e) => e.to)];
+  const stufe = [0];
+  path.forEach((e, i) => stufe.push(stufe[i] + (e.type === "parent" ? 1 : e.type === "child" ? -1 : 0)));
+  const maxL = Math.max(...stufe), minL = Math.min(...stufe);
+  const W = 134, CW = 118, CH = 66, VS = 96, PAD = 14;
+  const breite = ids.length * W + PAD * 2 - (W - CW), hoehe = (maxL - minL) * VS + CH + PAD * 2 + 18;
+  const pos = ids.map((id, i) => ({ id, x: PAD + i * W, y: PAD + (maxL - stufe[i]) * VS, l: stufe[i] }));
+  const gipfel = new Set(pos.filter((p, i) => i > 0 && i < pos.length - 1 && stufe[i] > stufe[i - 1] && stufe[i] > stufe[i + 1]).map((p) => p.id));
+  const linien = path.map((e, i) => {
+    const a = pos[i], b = pos[i + 1];
+    if (a.l === b.l) {
+      const y = a.y + CH / 2;
+      const cls = e.type === "spouse" ? "tree-mtn-ehe" : "tree-mtn-geschw";
+      const zeichen = e.type === "spouse" ? `<text x="${(a.x + CW + b.x) / 2}" y="${y - 7}" class="tree-mtn-zeichen">∞</text>` : `<text x="${(a.x + CW + b.x) / 2}" y="${y - 7}" class="tree-mtn-zeichen tree-mtn-zeichen--klein">Geschw.</text>`;
+      return `<line x1="${a.x + CW}" y1="${y}" x2="${b.x}" y2="${y}" class="${cls}"/>${zeichen}`;
+    }
+    const oben = a.l > b.l ? a : b, unten = a.l > b.l ? b : a;
+    return `<line x1="${oben.x + CW / 2}" y1="${oben.y + CH}" x2="${unten.x + CW / 2}" y2="${unten.y}" class="tree-mtn-linie"/>`;
+  }).join("");
+  const basisY = pos[0].y + CH + 9;
+  const karten = pos.map((p, i) => {
+    const person = treePerson(p.id);
+    const jj = (d, j) => j || (d ? String(d).slice(0, 4) : "");
+    const jahre = person ? [jj(person.geburtsdatum, person.geburtsjahr), jj(person.sterbedatum, person.sterbejahr)].filter(Boolean).join("–") : "";
+    const p2 = partner.get(p.id);
+    const rolle = i === 0 ? "Person 1" : i === pos.length - 1 ? "Person 2" : gipfel.has(p.id) ? "gemeinsam" : "";
+    const klasse = i === 0 || i === pos.length - 1 ? " tree-mtn-karte--person" : gipfel.has(p.id) ? " tree-mtn-karte--gipfel" : "";
+    return `<button type="button" class="tree-mtn-karte${klasse}" data-rel-person="${escTree(p.id)}" style="left:${p.x}px;top:${p.y}px;width:${CW}px;height:${CH}px" title="${escTree(treePersonLabel(p.id))}${p2 ? ` ∞ ${escTree(treePersonLabel(p2))}` : ""}">
+      ${rolle ? `<span class="tree-mtn-rolle">${rolle}</span>` : ""}<strong>${escTree(person ? [person.vorname, person.nachname].filter(Boolean).join(" ") : treePersonLabel(p.id))}</strong>
+      <small>${gipfel.has(p.id) && p2 ? `& ${escTree(String(treePerson(p2)?.vorname || "").split(/\s+/)[0])}` : escTree(String(jahre))}</small></button>`;
+  }).join("");
+  return `<div class="tree-mtn-rahmen"><div class="tree-mtn" style="width:${breite}px;height:${hoehe}px">
+    <svg class="tree-mtn-svg" width="${breite}" height="${hoehe}" aria-hidden="true">
+      <line x1="${PAD - 6}" y1="${basisY}" x2="${breite - PAD + 6}" y2="${basisY}" class="tree-mtn-basis"/>${linien}</svg>${karten}</div>
+    <div class="tree-mtn-legende"><span><i class="tree-mtn-l tree-mtn-l--gipfel"></i>gemeinsame Vorfahren</span><span><i class="tree-mtn-l tree-mtn-l--ehe"></i>∞ Ehe</span><span>Höhe = Generation · gestrichelt = Generation von Person 1</span></div></div>`;
+}
+document.addEventListener("click", (e) => {
+  const k = e.target.closest?.("[data-rel-person]");
+  if (k) { e.preventDefault(); openPersonDetail(k.dataset.relPerson, { fromTree: true }); return; }
+  const t = e.target.closest?.("[data-rel-ansicht]");
+  if (t) {
+    const wahl = t.dataset.relAnsicht;
+    try { localStorage.setItem("fs-rel-ansicht", wahl); } catch {}
+    const box = t.closest(".tree-rel-ergebnis");
+    box?.querySelectorAll("[data-rel-ansicht]").forEach((b) => b.classList.toggle("is-active", b.dataset.relAnsicht === wahl));
+    box?.querySelector(".tree-mtn-rahmen")?.toggleAttribute("hidden", wahl !== "gebirge");
+    box?.querySelector(".tree-relationship-graphic")?.toggleAttribute("hidden", wahl !== "liste");
+  }
+});
+function treeRelationshipDarstellung(aId, path) {
+  if (!path?.length) return "";
+  let wahl = "gebirge";
+  try { wahl = localStorage.getItem("fs-rel-ansicht") || "gebirge"; } catch {}
+  const liste = treeRelationshipPathGraphic(aId, path).replace('<div class="tree-relationship-graphic"', `<div class="tree-relationship-graphic"${wahl === "liste" ? "" : " hidden"}`);
+  const gebirge = treeRelationshipMountain(aId, path).replace('<div class="tree-mtn-rahmen">', `<div class="tree-mtn-rahmen"${wahl === "gebirge" ? "" : " hidden"}>`);
+  return `<div class="tree-rel-ergebnis"><div class="tree-rel-umschalter" role="group" aria-label="Darstellung"><button type="button" data-rel-ansicht="gebirge" class="${wahl === "gebirge" ? "is-active" : ""}">Gebirge</button><button type="button" data-rel-ansicht="liste" class="${wahl === "liste" ? "is-active" : ""}">Liste</button></div>${gebirge}${liste}</div>`;
+}
+
 function treeRelationshipPathGraphic(aId, path) {
   if (!path || !path.length) return "";
   const items = [{ id: aId, label: treePersonLabel(aId) }];
@@ -10763,7 +10842,7 @@ function initTreeRelationshipUI() {
       renderStammbaum(personAId);
     }
     if (found.path === null) { result.innerHTML = `<strong>${escTree(found.relation)}</strong>`; return; }
-    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}${found.path?.length ? treeRelationshipPathGraphic(a.value, found.path) : ""}`;
+    result.innerHTML = `<strong>${escTree(found.relation)}</strong>${found.sentence ? `<div class="tree-relationship-sentence">${escTree(found.sentence)}</div>` : ""}${found.pathText ? `<div class="tree-relationship-path"><span class="tree-relationship-path-title">So ergibt sich die Beziehung:</span>${escTree(found.pathText)}</div>` : ""}${found.path?.length ? treeRelationshipDarstellung(a.value, found.path) : ""}`;
   });
 }
 
@@ -11012,7 +11091,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=385");
+      treeModul3D = await import("./tree3d.js?v=386");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
