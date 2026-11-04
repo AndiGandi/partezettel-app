@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 386
+// Partezettel Archiv – Version 387
+// v387: Kirchenbücher – Fundstelle (Pfarre · Buch · Bild) wird aus dem Matricula-Link gelesen und angezeigt.
 // v386: Verwandtschaft ermitteln – neue Darstellung „Gebirge“ (Höhe = Generation, Gipfel = gemeinsame Vorfahren, ∞-Brücke = Ehe), umschaltbar auf Liste.
 // v385: Stammbaum – Doppeltippen auf iPad öffnet die Personenansicht (Zustand übersteht das Neuzeichnen); Tippen auf die Mitte öffnet direkt.
 // v384: Stammbaum „Generationen“: Ehepaare als Paar (∞ Jahr, Mann links) mit „Eltern von …“.
@@ -2956,6 +2957,44 @@ async function mitKbSeite(bau) {
   return r;
 }
 const kbSeiteWert = (id) => { const v = document.getElementById(id)?.value || ""; return v === "links" || v === "rechts" ? v : null; };
+// v387: Fundstelle aus einem Matricula-Link lesbar machen, damit sie auch ohne funktionierenden Link
+// erhalten bleibt (Matricula garantiert keine dauerhaften Links).
+// …/de/oesterreich/vorarlberg/bartholomaeberg/429%252F3/?pg=61 → „Bartholomäberg · Buch 429/3 · Bild 61“
+function matriculaFundstelle(url) {
+  try {
+    const u = new URL(String(url || "").trim());
+    if (!/matricula-online\.eu$/i.test(u.hostname)) return null;
+    const teile = u.pathname.split("/").filter(Boolean);
+    const start = /^[a-z]{2}$/i.test(teile[0] || "") ? 1 : 0; // Sprache (de/en/…)
+    const [land, dioezese, pfarre, buchRoh] = teile.slice(start);
+    if (!pfarre) return null;
+    let buch = buchRoh || "";
+    for (let i = 0; i < 3 && /%/.test(buch); i++) { try { buch = decodeURIComponent(buch); } catch { break; } }
+    buch = buch.replace(/\+/g, " ").trim();
+    const kurz = buch.match(/(Tauf|Trauungs|Sterbe|Firm|Tot|Ehe)[a-zäöü]*buch\s*\d+[a-z]?/i); // „AT-ADF PA Bartholomaeberg Taufbuch 5“ → „Taufbuch 5“
+    if (kurz) buch = kurz[0];
+    const umlaute = (t) => t.replace(/ae/g, "ä").replace(/oe/g, "ö").replace(/ue/g, "ü");
+    const gross = (w) => w ? w[0].toUpperCase() + w.slice(1) : w;
+    const klein = new Set(["mit", "und", "am", "an", "im", "in", "bei", "ob", "auf"]);
+    const schoen = (t) => {
+      const teile = umlaute(decodeURIComponent(String(t || ""))).split("-").filter(Boolean);
+      const mitLeer = teile.some((w) => w === "st" || klein.has(w));
+      return teile.map((w) => w === "st" ? "St." : klein.has(w) ? w : gross(w)).join(mitLeer ? " " : "-");
+    };
+    const bild = u.searchParams.get("pg");
+    return { land: schoen(land), dioezese: schoen(dioezese), pfarre: schoen(pfarre), buch, bild,
+      text: [schoen(pfarre), buch ? (/buch/i.test(buch) ? buch : `Buch ${buch}`) : "", bild ? `Bild ${bild}` : ""].filter(Boolean).join(" · ") };
+  } catch { return null; }
+}
+function matriculaFundstelleSpan(url) {
+  const f = matriculaFundstelle(url);
+  if (!f) return null;
+  const sp = document.createElement("span");
+  sp.className = "person-view-book-quelle";
+  sp.textContent = f.text;
+  sp.title = `Matricula: ${[f.land, f.dioezese, f.pfarre].filter(Boolean).join(" → ")}${f.buch ? ` → ${f.buch}` : ""}${f.bild ? ` → Bild ${f.bild}` : ""}`;
+  return sp;
+}
 function kbFundstelleText(seite, zeile) {
   const teile = [];
   if (seite === "links" || seite === "rechts") teile.push(`${seite === "links" ? "linke" : "rechte"} Seite`);
@@ -4348,6 +4387,7 @@ async function openPersonDetail(personId, options = {}) {
       if (fundstelle) {
         const lineText = document.createElement("span"); lineText.className = "person-view-book-line"; lineText.textContent = fundstelle; row.appendChild(lineText);
       }
+      { const q = matriculaFundstelleSpan(url); if (q) row.appendChild(q); }
       booksList.appendChild(row);
     });
     booksSection.hidden = booksList.children.length === 0;
@@ -4414,6 +4454,7 @@ async function openPersonDetail(personId, options = {}) {
             lineText.textContent = lineLabel;
             row.appendChild(lineText);
           }
+          { const q = matriculaFundstelleSpan(url); if (q) row.appendChild(q); }
           booksList.appendChild(row);
           bereitsAngezeigt.add(key);
         }
@@ -7031,7 +7072,7 @@ async function loadDetailFamilie(personId) {
         familienQuelleLink.hidden = false;
         familienQuelleLink.classList.add("btn--link-present");
         familienQuelleLink.removeAttribute("aria-disabled");
-        familienQuelleZeile.textContent = kbFundstelleText(eheQuelle.trauungsbuch_seite, eheQuelle.trauungsbuch_zeile) || "Zeile –";
+        familienQuelleZeile.textContent = [kbFundstelleText(eheQuelle.trauungsbuch_seite, eheQuelle.trauungsbuch_zeile) || "Zeile –", matriculaFundstelle(eheQuelle.trauungsbuch_link)?.text].filter(Boolean).join(" · ");
       } else {
         familienQuelleLink.hidden = false;
         familienQuelleLink.href = "#";
@@ -11091,7 +11132,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=386");
+      treeModul3D = await import("./tree3d.js?v=387");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

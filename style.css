@@ -2045,3 +2045,6 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .tree-mtn-l{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:.3rem;vertical-align:-2px}
 .tree-mtn-l--gipfel{border:2px solid #c8643b;background:#fbf0ea}
 .tree-mtn-l--ehe{height:3px;border-radius:0;background:#c8643b;vertical-align:3px}
+
+/* v387: Fundstelle aus dem Matricula-Link */
+.person-view-book-quelle{display:block;width:100%;font-size:.8rem;color:#7a766a;margin-top:.1rem}
