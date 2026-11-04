@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 387
+// Partezettel Archiv – Version 388
+// v388: Import-Assistent übernimmt einen eigenen Herkunftstext je Person (Feld „quelle“), z. B. für das Mangeng-Sippenbuch.
 // v387: Kirchenbücher – Fundstelle (Pfarre · Buch · Bild) wird aus dem Matricula-Link gelesen und angezeigt.
 // v386: Verwandtschaft ermitteln – neue Darstellung „Gebirge“ (Höhe = Generation, Gipfel = gemeinsame Vorfahren, ∞-Brücke = Ehe), umschaltbar auf Liste.
 // v385: Stammbaum – Doppeltippen auf iPad öffnet die Personenansicht (Zustand übersteht das Neuzeichnen); Tippen auf die Mitte öffnet direkt.
@@ -11132,7 +11133,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=387");
+      treeModul3D = await import("./tree3d.js?v=388");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11716,7 +11717,7 @@ const ImportAssistent = (() => {
     const kopf = `<div class="imp-karte__kopf"><strong>${escapeHtml(`${hp.vorname} ${hp.nachname}`.trim())}</strong>
       <span class="imp-klein">${escapeHtml(lebensdaten(hp.geburt, hp.tod))}</span>
       <span class="imp-badge">${hp.abgleich === "wahrscheinlich" ? "Bitte bestätigen" : "Gleiche Person?"}</span></div>
-      <p class="imp-klein">Hausblatt Innerberg Nr. ${escapeHtml((hp.haeuser || []).join(", "))}${(hp.kontext || []).length ? ` · ${escapeHtml(hp.kontext.slice(0, 3).join(" · "))}` : ""}</p>
+      <p class="imp-klein">${escapeHtml(hp.quelle || `Hausblatt Innerberg Nr. ${(hp.haeuser || []).join(", ")}`)}${(hp.kontext || []).length ? ` · ${escapeHtml(hp.kontext.slice(0, 3).join(" · "))}` : ""}</p>
       ${hp.unsicher ? `<p class="imp-klein imp-unsicher">Unsicher gelesen: ${escapeHtml(hp.unsicher)}</p>` : ""}`;
     const kandHtml = kand.map((p) => {
       const gewaehlt = z?.wahl === p.id;
@@ -11843,7 +11844,8 @@ const ImportAssistent = (() => {
 
   function neuePersonZeile(hp) {
     const g = datumFelder(hp.geburt, "geburt"), t = datumFelder(hp.tod, "tod");
-    const haeuserText = `Hausblatt Innerberg Nr. ${(hp.haeuser || []).join(", ")}`;
+    // v388: andere Quellen (z. B. Sippenbuch) bringen ihren Herkunftstext selbst mit
+    const haeuserText = hp.quelle || `Hausblatt Innerberg Nr. ${(hp.haeuser || []).join(", ")}`;
     const notiz = [hp.notiz ? `${haeuserText}: ${hp.notiz}` : "", g.hinweis, t.hinweis, hp.unsicher ? `Unsicher gelesen: ${hp.unsicher}` : ""].filter(Boolean).join("\n");
     const nachname = hp.import_nachname !== undefined ? (hp.import_nachname || "") : (hp.nachname || "");
     return {
