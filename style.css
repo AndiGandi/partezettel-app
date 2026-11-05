@@ -2049,3 +2049,9 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 /* v387: Fundstelle aus dem Matricula-Link */
 .person-view-book-quelle{display:block;width:100%;font-size:.8rem;color:#7a766a;margin-top:.1rem}
 .tree-mtn-geb{font-style:normal;font-size:.66rem;color:#7a766a;line-height:1.1}
+
+/* v390: Kinder-Spalte in der Ahnentafel */
+.tree-ped-kind{position:absolute;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;gap:1px;padding:.3rem .55rem;border:1px dashed #9db9a5;border-radius:10px;background:#f7faf7;font:inherit;text-align:left;cursor:pointer;overflow:hidden}
+.tree-ped-kind strong{font-size:.8rem;color:#1f2b25;font-family:Georgia,"Times New Roman",serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tree-ped-kind small{font-size:.7rem;color:#7a766a}
+.tree-ped-kind:hover{background:#eef5f0;border-style:solid}

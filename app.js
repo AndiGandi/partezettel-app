@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 389
+// Partezettel Archiv – Version 390
+// v390: Ahnentafel – Spalte „Kinder“ links neben der Ausgangsperson (antippen = eine Generation nach links).
 // v389: Gebirge-Darstellung zeigt den Geburtsnamen („geb. …“), auch beim Partner am Gipfel.
 // v388: Import-Assistent übernimmt einen eigenen Herkunftstext je Person (Feld „quelle“), z. B. für das Mangeng-Sippenbuch.
 // v387: Kirchenbücher – Fundstelle (Pfarre · Buch · Bild) wird aus dem Matricula-Link gelesen und angezeigt.
@@ -9039,12 +9040,37 @@ function renderAhnentafel(rootId) {
     `<div class="tree-ped-colhead" style="left:${g * (m.cardW + m.gap)}px;top:${m.head - 26}px;width:${m.cardW}px">${g === 0 ? "Ausgangsperson" : escTree(treeGenerationName(g, "up"))}</div>`).join("");
   const karten = knoten.map((k) => treePedigreeNodeHtml(k, m, mitteY(k), rootId)).join("");
 
-  stage.style.width = `${breite}px`;
-  stage.style.height = `${hoehe}px`;
-  stage.innerHTML = `<div class="tree-ped-caption" style="max-width:${Math.min(breite, 380)}px">Ahnentafel von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${bekannt} von ${moeglich} Vorfahren in ${gens} Generationen erfasst${treeActivePreset?.label ? ` · Linie: ${escTree(treeActivePreset.label)}` : ""}</div>`
+  // v390: links neben der Ausgangsperson eine Spalte „Kinder“ – antippen macht das Kind zur Mitte (eine Generation nach links)
+  const kinderIds = [];
+  for (const f of treeFamiliesForPerson(rootId) || []) for (const k of treeChildrenForFamily(f.id) || []) if (k.kind_id && !kinderIds.includes(k.kind_id) && treePerson(k.kind_id)) kinderIds.push(k.kind_id);
+  kinderIds.sort((a, b) => String(treePerson(a)?.geburtsdatum || treePerson(a)?.geburtsjahr || "9999").localeCompare(String(treePerson(b)?.geburtsdatum || treePerson(b)?.geburtsjahr || "9999")));
+  const kw = Math.round(m.cardW * 0.8), kh = 52, kAbstand = 60;
+  const ox = kinderIds.length ? kw + m.gap : 0;
+  const wurzelY = mitteY(knoten.find((k) => k.gen === 0) || { idx: 0, gen: 0 });
+  let kinderTop = Math.max(m.head, wurzelY - (kinderIds.length * kAbstand - (kAbstand - kh)) / 2);
+  const gesamtHoehe = Math.max(hoehe, kinderTop + kinderIds.length * kAbstand + 10);
+  const kinderHtml = kinderIds.map((id, i) => {
+    const p = treePerson(id); const y = kinderTop + i * kAbstand;
+    const jahre = treeYearsText(p);
+    return `<button type="button" class="tree-ped-kind" data-tree-person="${escTree(id)}" style="left:0;top:${y}px;width:${kw}px;height:${kh}px" title="${escTree(treePersonLabel(id))} – antippen: zur Mitte machen, zweimal: Personenansicht">`
+      + `<strong>${escTree(treeAnzeigeName(p).name)}</strong>${jahre ? `<small>${escTree(jahre)}</small>` : ""}</button>`;
+  }).join("");
+  const kinderLinien = kinderIds.map((id, i) => {
+    const y = kinderTop + i * kAbstand + kh / 2, xm = kw + m.gap / 2;
+    return `M${kw} ${y}H${xm}V${wurzelY}H${ox}`;
+  }).join("");
+  const kinderKopf = kinderIds.length ? `<div class="tree-ped-colhead" style="left:0;top:${m.head - 26}px;width:${kw}px">Kinder</div>` : "";
+
+  stage.style.width = `${breite + ox}px`;
+  stage.style.height = `${gesamtHoehe}px`;
+  stage.innerHTML = `<div class="tree-ped-caption" style="max-width:${Math.max(380, Math.min(breite + ox, 640))}px">Ahnentafel von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${bekannt} von ${moeglich} Vorfahren in ${gens} Generationen erfasst${treeActivePreset?.label ? ` · Linie: ${escTree(treeActivePreset.label)}` : ""}</div>`
+    + kinderKopf
+    + (kinderIds.length ? `<svg class="tree-ped-lines" width="${ox}" height="${gesamtHoehe}" viewBox="0 0 ${ox} ${gesamtHoehe}" aria-hidden="true" style="left:0"><path d="${kinderLinien}"/></svg>` : "")
+    + kinderHtml
+    + `<div class="tree-ped-ahnen" style="position:absolute;left:${ox}px;top:0;width:${breite}px;height:${hoehe}px">`
     + spaltenKopf
     + `<svg class="tree-ped-lines" width="${breite}" height="${hoehe}" viewBox="0 0 ${breite} ${hoehe}" aria-hidden="true"><path d="${pfade.join("")}"/></svg>`
-    + karten;
+    + karten + `</div>`;
   treeBindPersonInteractions(stage);
   updateTreeZoom();
   if (message) message.textContent = bekannt === 0 ? "Für diese Person sind keine Eltern erfasst." : "";
@@ -11135,7 +11161,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=389");
+      treeModul3D = await import("./tree3d.js?v=390");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
