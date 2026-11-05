@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 388
+// Partezettel Archiv – Version 389
+// v389: Gebirge-Darstellung zeigt den Geburtsnamen („geb. …“), auch beim Partner am Gipfel.
 // v388: Import-Assistent übernimmt einen eigenen Herkunftstext je Person (Feld „quelle“), z. B. für das Mangeng-Sippenbuch.
 // v387: Kirchenbücher – Fundstelle (Pfarre · Buch · Bild) wird aus dem Matricula-Link gelesen und angezeigt.
 // v386: Verwandtschaft ermitteln – neue Darstellung „Gebirge“ (Höhe = Generation, Gipfel = gemeinsame Vorfahren, ∞-Brücke = Ehe), umschaltbar auf Liste.
@@ -9765,7 +9766,7 @@ function treeRelationshipMountain(aId, path) {
   const stufe = [0];
   path.forEach((e, i) => stufe.push(stufe[i] + (e.type === "parent" ? 1 : e.type === "child" ? -1 : 0)));
   const maxL = Math.max(...stufe), minL = Math.min(...stufe);
-  const W = 134, CW = 118, CH = 66, VS = 96, PAD = 14;
+  const W = 134, CW = 118, CH = 78, VS = 104, PAD = 14; // v389: Platz für „geb. …“
   const breite = ids.length * W + PAD * 2 - (W - CW), hoehe = (maxL - minL) * VS + CH + PAD * 2 + 18;
   const pos = ids.map((id, i) => ({ id, x: PAD + i * W, y: PAD + (maxL - stufe[i]) * VS, l: stufe[i] }));
   const gipfel = new Set(pos.filter((p, i) => i > 0 && i < pos.length - 1 && stufe[i] > stufe[i - 1] && stufe[i] > stufe[i + 1]).map((p) => p.id));
@@ -9790,7 +9791,8 @@ function treeRelationshipMountain(aId, path) {
     const klasse = i === 0 || i === pos.length - 1 ? " tree-mtn-karte--person" : gipfel.has(p.id) ? " tree-mtn-karte--gipfel" : "";
     return `<button type="button" class="tree-mtn-karte${klasse}" data-rel-person="${escTree(p.id)}" style="left:${p.x}px;top:${p.y}px;width:${CW}px;height:${CH}px" title="${escTree(treePersonLabel(p.id))}${p2 ? ` ∞ ${escTree(treePersonLabel(p2))}` : ""}">
       ${rolle ? `<span class="tree-mtn-rolle">${rolle}</span>` : ""}<strong>${escTree(person ? [person.vorname, person.nachname].filter(Boolean).join(" ") : treePersonLabel(p.id))}</strong>
-      <small>${gipfel.has(p.id) && p2 ? `& ${escTree(String(treePerson(p2)?.vorname || "").split(/\s+/)[0])}` : escTree(String(jahre))}</small></button>`;
+      ${person?.Ledigenname ? `<em class="tree-mtn-geb">geb. ${escTree(person.Ledigenname)}</em>` : ""}
+      <small>${gipfel.has(p.id) && p2 ? `& ${escTree(String(treePerson(p2)?.vorname || "").split(/\s+/)[0])}${treePerson(p2)?.Ledigenname ? ` geb. ${escTree(treePerson(p2).Ledigenname)}` : ""}` : escTree(String(jahre))}</small></button>`;
   }).join("");
   return `<div class="tree-mtn-rahmen"><div class="tree-mtn" style="width:${breite}px;height:${hoehe}px">
     <svg class="tree-mtn-svg" width="${breite}" height="${hoehe}" aria-hidden="true">
@@ -11133,7 +11135,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=388");
+      treeModul3D = await import("./tree3d.js?v=389");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
