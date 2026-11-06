@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 390
+// Partezettel Archiv – Version 391
+// v391: Gebirge – Zoom +/−, Ehepartner ein-/ausblendbar, Geschwister immer mit gemeinsamen Eltern als Gipfel (auch „nicht erfasst“).
 // v390: Ahnentafel – Spalte „Kinder“ links neben der Ausgangsperson (antippen = eine Generation nach links).
 // v389: Gebirge-Darstellung zeigt den Geburtsnamen („geb. …“), auch beim Partner am Gipfel.
 // v388: Import-Assistent übernimmt einen eigenen Herkunftstext je Person (Feld „quelle“), z. B. für das Mangeng-Sippenbuch.
@@ -9773,17 +9774,26 @@ function treeHumanRelationshipPath(aId, path) {
 function treeRelationshipMountain(aId, path) {
   if (!path?.length) return "";
   const partner = treeWegPartner(aId, path);
-  // Geschwister-Schritt: die gemeinsamen Eltern als Gipfel dazwischen einfügen (klassisches „V“)
+  // Geschwister-Schritt: die gemeinsamen Eltern als Gipfel dazwischen einfügen (klassisches „V“).
+  // v391: Sind die Eltern nicht erfasst, steht dort eine gestrichelte Karte „Eltern nicht erfasst“.
   const weg = [];
-  let vorher = aId;
+  let vorher = aId, platzhalter = 0;
+  const halbGipfel = new Set();
   for (const e of path) {
     if (e.type === "sibling") {
-      const ge = treeGemeinsameEltern(vorher, e.to);
-      if (ge.length) {
-        weg.push({ from: vorher, to: ge[0], type: "parent" }, { from: ge[0], to: e.to, type: "child" });
-        if (ge[1]) partner.set(ge[0], ge[1]);
-        vorher = e.to; continue;
+      let ge = treeGemeinsameEltern(vorher, e.to);
+      let halb = false;
+      if (!ge.length) { // Halbgeschwister: gemeinsamer Elternteil aus verschiedenen Ehen
+        const elternVon = (id) => new Set((treeData.kinder || []).filter((k) => k.kind_id === id).flatMap((k) => { const f = (treeData.familien || []).find((x) => x.id === k.familie_id); return f ? [f.partner_a_id, f.partner_b_id].filter(Boolean) : []; }));
+        const ea = elternVon(vorher), eb = elternVon(e.to);
+        const gemeinsam = [...ea].filter((x) => eb.has(x) && treePerson(x));
+        if (gemeinsam.length) { ge = [gemeinsam[0]]; halb = true; }
       }
+      const gipfelId = ge.length ? ge[0] : `__eltern_${platzhalter++}`;
+      weg.push({ from: vorher, to: gipfelId, type: "parent" }, { from: gipfelId, to: e.to, type: "child" });
+      if (ge[1]) partner.set(ge[0], ge[1]);
+      if (halb) { halbGipfel.add(gipfelId); partner.delete(gipfelId); }
+      vorher = e.to; continue;
     }
     weg.push(e); vorher = e.to;
   }
@@ -9792,7 +9802,7 @@ function treeRelationshipMountain(aId, path) {
   const stufe = [0];
   path.forEach((e, i) => stufe.push(stufe[i] + (e.type === "parent" ? 1 : e.type === "child" ? -1 : 0)));
   const maxL = Math.max(...stufe), minL = Math.min(...stufe);
-  const W = 134, CW = 118, CH = 78, VS = 104, PAD = 14; // v389: Platz für „geb. …“
+  const W = 134, CW = 118, CH = 92, VS = 116, PAD = 14;
   const breite = ids.length * W + PAD * 2 - (W - CW), hoehe = (maxL - minL) * VS + CH + PAD * 2 + 18;
   const pos = ids.map((id, i) => ({ id, x: PAD + i * W, y: PAD + (maxL - stufe[i]) * VS, l: stufe[i] }));
   const gipfel = new Set(pos.filter((p, i) => i > 0 && i < pos.length - 1 && stufe[i] > stufe[i - 1] && stufe[i] > stufe[i + 1]).map((p) => p.id));
@@ -9800,34 +9810,63 @@ function treeRelationshipMountain(aId, path) {
     const a = pos[i], b = pos[i + 1];
     if (a.l === b.l) {
       const y = a.y + CH / 2;
-      const cls = e.type === "spouse" ? "tree-mtn-ehe" : "tree-mtn-geschw";
-      const zeichen = e.type === "spouse" ? `<text x="${(a.x + CW + b.x) / 2}" y="${y - 7}" class="tree-mtn-zeichen">∞</text>` : `<text x="${(a.x + CW + b.x) / 2}" y="${y - 7}" class="tree-mtn-zeichen tree-mtn-zeichen--klein">Geschw.</text>`;
-      return `<line x1="${a.x + CW}" y1="${y}" x2="${b.x}" y2="${y}" class="${cls}"/>${zeichen}`;
+      return `<line x1="${a.x + CW}" y1="${y}" x2="${b.x}" y2="${y}" class="tree-mtn-ehe"/><text x="${(a.x + CW + b.x) / 2}" y="${y - 7}" class="tree-mtn-zeichen">∞</text>`;
     }
     const oben = a.l > b.l ? a : b, unten = a.l > b.l ? b : a;
     return `<line x1="${oben.x + CW / 2}" y1="${oben.y + CH}" x2="${unten.x + CW / 2}" y2="${unten.y}" class="tree-mtn-linie"/>`;
   }).join("");
   const basisY = pos[0].y + CH + 9;
+  const jj = (d, j) => j || (d ? String(d).slice(0, 4) : "");
   const karten = pos.map((p, i) => {
+    if (String(p.id).startsWith("__eltern_")) {
+      return `<div class="tree-mtn-karte tree-mtn-karte--gipfel tree-mtn-karte--leer" style="left:${p.x}px;top:${p.y}px;width:${CW}px;height:${CH}px"><span class="tree-mtn-rolle">gemeinsam</span><strong>Eltern</strong><small>nicht erfasst</small></div>`;
+    }
     const person = treePerson(p.id);
-    const jj = (d, j) => j || (d ? String(d).slice(0, 4) : "");
     const jahre = person ? [jj(person.geburtsdatum, person.geburtsjahr), jj(person.sterbedatum, person.sterbejahr)].filter(Boolean).join("–") : "";
     const p2 = partner.get(p.id);
-    const rolle = i === 0 ? "Person 1" : i === pos.length - 1 ? "Person 2" : gipfel.has(p.id) ? "gemeinsam" : "";
+    const p2p = p2 ? treePerson(p2) : null;
+    const rolle = i === 0 ? "Person 1" : i === pos.length - 1 ? "Person 2" : gipfel.has(p.id) ? (halbGipfel.has(p.id) ? "gemeinsam · Halbgeschw." : "gemeinsam") : "";
     const klasse = i === 0 || i === pos.length - 1 ? " tree-mtn-karte--person" : gipfel.has(p.id) ? " tree-mtn-karte--gipfel" : "";
+    const geb = (x) => x?.Ledigenname ? ` geb. ${escTree(x.Ledigenname)}` : "";
+    const partnerZeile = p2p ? (gipfel.has(p.id)
+      ? `<em class="tree-mtn-gipfelpartner">& ${escTree(String(p2p.vorname || "").split(/\s+/)[0])}${geb(p2p)}</em>`
+      : `<em class="tree-mtn-partner">∞ ${escTree([String(p2p.vorname || "").split(/\s+/)[0], p2p.nachname].filter(Boolean).join(" "))}${p2p.Ledigenname && p2p.Ledigenname !== p2p.nachname ? geb(p2p) : ""}</em>`) : "";
     return `<button type="button" class="tree-mtn-karte${klasse}" data-rel-person="${escTree(p.id)}" style="left:${p.x}px;top:${p.y}px;width:${CW}px;height:${CH}px" title="${escTree(treePersonLabel(p.id))}${p2 ? ` ∞ ${escTree(treePersonLabel(p2))}` : ""}">
       ${rolle ? `<span class="tree-mtn-rolle">${rolle}</span>` : ""}<strong>${escTree(person ? [person.vorname, person.nachname].filter(Boolean).join(" ") : treePersonLabel(p.id))}</strong>
       ${person?.Ledigenname ? `<em class="tree-mtn-geb">geb. ${escTree(person.Ledigenname)}</em>` : ""}
-      <small>${gipfel.has(p.id) && p2 ? `& ${escTree(String(treePerson(p2)?.vorname || "").split(/\s+/)[0])}${treePerson(p2)?.Ledigenname ? ` geb. ${escTree(treePerson(p2).Ledigenname)}` : ""}` : escTree(String(jahre))}</small></button>`;
+      <small>${escTree(String(jahre))}</small>${partnerZeile}</button>`;
   }).join("");
-  return `<div class="tree-mtn-rahmen"><div class="tree-mtn" style="width:${breite}px;height:${hoehe}px">
+  let zoom = 1, mitPartner = true;
+  try { zoom = Number(localStorage.getItem("fs-mtn-zoom")) || 1; mitPartner = localStorage.getItem("fs-mtn-partner") !== "0"; } catch {}
+  return `<div class="tree-mtn-rahmen${mitPartner ? "" : " ohne-partner"}">
+    <div class="tree-mtn-werkzeug"><button type="button" data-mtn-zoom="-" aria-label="Verkleinern">−</button><span class="tree-mtn-zoomwert">${Math.round(zoom * 100)} %</span><button type="button" data-mtn-zoom="+" aria-label="Vergrößern">+</button>
+      <button type="button" data-mtn-partner class="tree-mtn-partnerknopf${mitPartner ? " is-active" : ""}" aria-pressed="${mitPartner}">∞ Ehepartner</button></div>
+    <div class="tree-mtn-scroll"><div class="tree-mtn-skala" data-b="${breite}" data-h="${hoehe}" style="width:${breite * zoom}px;height:${hoehe * zoom}px">
+    <div class="tree-mtn" style="width:${breite}px;height:${hoehe}px;transform:scale(${zoom})">
     <svg class="tree-mtn-svg" width="${breite}" height="${hoehe}" aria-hidden="true">
-      <line x1="${PAD - 6}" y1="${basisY}" x2="${breite - PAD + 6}" y2="${basisY}" class="tree-mtn-basis"/>${linien}</svg>${karten}</div>
+      <line x1="${PAD - 6}" y1="${basisY}" x2="${breite - PAD + 6}" y2="${basisY}" class="tree-mtn-basis"/>${linien}</svg>${karten}</div></div></div>
     <div class="tree-mtn-legende"><span><i class="tree-mtn-l tree-mtn-l--gipfel"></i>gemeinsame Vorfahren</span><span><i class="tree-mtn-l tree-mtn-l--ehe"></i>∞ Ehe</span><span>Höhe = Generation · gestrichelt = Generation von Person 1</span></div></div>`;
 }
 document.addEventListener("click", (e) => {
   const k = e.target.closest?.("[data-rel-person]");
   if (k) { e.preventDefault(); openPersonDetail(k.dataset.relPerson, { fromTree: true }); return; }
+  const z = e.target.closest?.("[data-mtn-zoom]");
+  if (z) {
+    const rahmen = z.closest(".tree-mtn-rahmen"), skala = rahmen?.querySelector(".tree-mtn-skala"), mtn = rahmen?.querySelector(".tree-mtn");
+    let zoom = 1; try { zoom = Number(localStorage.getItem("fs-mtn-zoom")) || 1; } catch {}
+    zoom = Math.min(1.6, Math.max(0.4, Math.round((zoom + (z.dataset.mtnZoom === "+" ? 0.1 : -0.1)) * 10) / 10));
+    try { localStorage.setItem("fs-mtn-zoom", String(zoom)); } catch {}
+    if (skala && mtn) { mtn.style.transform = `scale(${zoom})`; skala.style.width = `${skala.dataset.b * zoom}px`; skala.style.height = `${skala.dataset.h * zoom}px`; }
+    const w = rahmen?.querySelector(".tree-mtn-zoomwert"); if (w) w.textContent = `${Math.round(zoom * 100)} %`;
+    return;
+  }
+  const pk = e.target.closest?.("[data-mtn-partner]");
+  if (pk) {
+    const rahmen = pk.closest(".tree-mtn-rahmen"); const an = rahmen.classList.toggle("ohne-partner") === false;
+    pk.classList.toggle("is-active", an); pk.setAttribute("aria-pressed", String(an));
+    try { localStorage.setItem("fs-mtn-partner", an ? "1" : "0"); } catch {}
+    return;
+  }
   const t = e.target.closest?.("[data-rel-ansicht]");
   if (t) {
     const wahl = t.dataset.relAnsicht;
@@ -9843,7 +9882,7 @@ function treeRelationshipDarstellung(aId, path) {
   let wahl = "gebirge";
   try { wahl = localStorage.getItem("fs-rel-ansicht") || "gebirge"; } catch {}
   const liste = treeRelationshipPathGraphic(aId, path).replace('<div class="tree-relationship-graphic"', `<div class="tree-relationship-graphic"${wahl === "liste" ? "" : " hidden"}`);
-  const gebirge = treeRelationshipMountain(aId, path).replace('<div class="tree-mtn-rahmen">', `<div class="tree-mtn-rahmen"${wahl === "gebirge" ? "" : " hidden"}>`);
+  const gebirge = treeRelationshipMountain(aId, path).replace(/<div class="tree-mtn-rahmen([^"]*)">/, (m0, k) => `<div class="tree-mtn-rahmen${k}"${wahl === "gebirge" ? "" : " hidden"}>`);
   return `<div class="tree-rel-ergebnis"><div class="tree-rel-umschalter" role="group" aria-label="Darstellung"><button type="button" data-rel-ansicht="gebirge" class="${wahl === "gebirge" ? "is-active" : ""}">Gebirge</button><button type="button" data-rel-ansicht="liste" class="${wahl === "liste" ? "is-active" : ""}">Liste</button></div>${gebirge}${liste}</div>`;
 }
 
@@ -11161,7 +11200,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=390");
+      treeModul3D = await import("./tree3d.js?v=391");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
