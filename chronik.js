@@ -395,6 +395,57 @@ function chronikAuswerten(d) {
   r.heute.sort((a, b) => a.jahr - b.jahr);
   r.heuteText = heute.toLocaleDateString("de-AT", { day: "numeric", month: "long" });
 
+  // 10 · Schicksalsschläge (v394): Familien mit vielen Todesfällen in kurzer Zeit – wird bei jeder Berechnung neu ermittelt
+  {
+    const datumOderJahr = (v, j) => chrDatum(v) || (j ? new Date(`${j}-07-01T00:00:00`) : null);
+    const tod = (p) => datumOderJahr(p?.sterbedatum, p?.sterbejahr);
+    const geb = (p) => datumOderJahr(p?.geburtsdatum, p?.geburtsjahr);
+    const kandidaten = [];
+    for (const f of d.familien) {
+      const ks = (kinderVon.get(f.id) || []).map((id) => P.get(id)).filter(Boolean);
+      if (ks.length < 2) continue;
+      const vater = [P.get(f.partner_a_id), P.get(f.partner_b_id)].find((x) => x && chrMann(x));
+      const mutter = [P.get(f.partner_a_id), P.get(f.partner_b_id)].find((x) => x && chrFrau(x));
+      const ereignisse = [];
+      let punkte = 0, kinderTot = 0;
+      for (const k of ks) {
+        const g = geb(k), t = tod(k);
+        if (!g || !t || t < g) continue;
+        const alter = chrJahre(g, t);
+        if (alter < 15) {
+          kinderTot++;
+          punkte += alter < 1 ? 2 : 3;
+          ereignisse.push({ t, art: "kind", p: k, alter });
+        }
+      }
+      const kleineBeiTod = (eltern) => {
+        const te = tod(eltern); if (!te) return [];
+        return ks.filter((k) => { const g = geb(k); const tk = tod(k); return g && g <= te && chrJahre(g, te) < 15 && (!tk || tk > te); });
+      };
+      for (const [eltern, rolle] of [[vater, "vater"], [mutter, "mutter"]]) {
+        if (!eltern) continue;
+        const kleine = kleineBeiTod(eltern);
+        const te = tod(eltern);
+        if (te && kleine.length) { punkte += 4 + kleine.length; ereignisse.push({ t: te, art: rolle, p: eltern, kleine: kleine.length }); }
+        else if (te && ereignisse.length) { ereignisse.push({ t: te, art: rolle, p: eltern, kleine: 0 }); }
+      }
+      if (kinderTot < 2 && !ereignisse.some((e) => e.art !== "kind")) continue;
+      ereignisse.sort((a, b) => a.t - b.t);
+      // Häufung: mindestens drei Todesfälle innerhalb von zwei Jahren
+      for (let i = 0; i + 2 < ereignisse.length; i++) if ((ereignisse[i + 2].t - ereignisse[i].t) / (365.25 * 864e5) <= 2) { punkte += 4; break; }
+      if (punkte >= 8 && ereignisse.length >= 3) kandidaten.push({ f, vater, mutter, ks, kinderTot, ereignisse, punkte });
+    }
+    kandidaten.sort((a, b) => b.punkte - a.punkte);
+    const gesehen = new Set(), auswahl = [];
+    for (const k of kandidaten) { // jede Person nur in einer Geschichte
+      const ids = [k.vater?.id, k.mutter?.id].filter(Boolean);
+      if (ids.some((id) => gesehen.has(id))) continue;
+      ids.forEach((id) => gesehen.add(id)); auswahl.push(k);
+      if (auswahl.length >= 4) break;
+    }
+    r.schicksal = auswahl;
+  }
+
   // 9 · Zeitgeschehen: wie viele Personen lebten damals?
   r.zeit = ZEITGESCHEHEN.map(([jahr, text, quelle]) => {
     const lebend = d.personen.filter((p) => { const g = chrGebJahr(p); if (!g || g > jahr) return false; const t = chrTodJahr(p); return t ? t >= jahr : jahr - g <= 90; });
@@ -448,6 +499,16 @@ function chronikRendern(r, ziel) {
     karte("🏠 Häuser", `<h4>Meiste Bewohner</h4>${liste(r.haeuser.slice(0, 8), (x) => `Nr. ${chrEsc(x.h.nummer)}${x.h.name ? ` „${chrEsc(x.h.name)}“` : ""} – <b>${x.n}</b> Personen, ${x.namen} Familiennamen${x.von ? `, ab ${x.von}` : ""}`)}
       <h4>Längste Familienfolge im selben Haus</h4>${liste(r.hausFolge, (x) => `Nr. ${chrEsc(x.h.nummer)}${x.h.name ? ` „${chrEsc(x.h.name)}“` : ""} – <b>${x.gen} Generationen</b>, beginnend mit ${chrLink(x.start)}`)}
       ${r.abgebrochen.length ? `<p class="chr-sub">Abgebrochene Häuser: ${r.abgebrochen.map((h) => `Nr. ${chrEsc(h.nummer)}${h.name ? ` „${chrEsc(h.name)}“` : ""}`).join(", ")}</p>` : ""}`),
+    karte("💔 Schicksalsschläge", r.schicksal.length ? `<p class="chr-sub">Familien, die besonders viele Verluste in kurzer Zeit erlebten – automatisch aus den Lebensdaten ermittelt (Kinder unter 15 Jahren, früher Tod eines Elternteils, Häufung von Todesfällen).</p>
+      ${r.schicksal.map((g) => {
+        const jahr = (t) => t.getFullYear();
+        const alterTxt = (a) => a < 1 ? (a * 12 < 1 ? "wenige Tage alt" : `${Math.max(1, Math.round(a * 12))} Monate alt`) : (Math.floor(a) === 1 ? "1 Jahr alt" : `${Math.floor(a)} Jahre alt`);
+        const zeilen = g.ereignisse.map((e) => e.art === "kind"
+          ? `<li><b>${jahr(e.t)}</b> stirbt ${chrFrau(e.p) ? "Tochter" : "Sohn"} ${chrLink(e.p)}, ${alterTxt(e.alter)}</li>`
+          : `<li><b>${jahr(e.t)}</b> stirbt ${e.art === "vater" ? "der Vater" : "die Mutter"} ${chrLink(e.p)}${e.kleine ? ` – ${e.kleine === 1 ? "ein Kind ist" : `${e.kleine} Kinder sind`} noch unter 15` : ""}</li>`).join("");
+        return `<div class="chr-schicksal"><h4>${g.vater ? chrLink(g.vater) : "?"} ∞ ${g.mutter ? chrLink(g.mutter) : "?"}</h4>
+          <p class="chr-sub">${g.ks.length} Kinder, davon ${g.kinderTot} vor dem 15. Geburtstag gestorben</p><ol class="chr-liste chr-zeitlinie">${zeilen}</ol></div>`;
+      }).join("")}` : `<p class="chr-leer">Keine auffälligen Häufungen gefunden.</p>`, "chr-breit"),
     karte("🧬 Verwandtschaft", `<p><b>${chrZahl(r.verbund.groesste)} von ${chrZahl(z.personen)}</b> Personen (${chrRund(100 * r.verbund.groesste / Math.max(1, z.personen), 0)} %) sind über Eltern, Kinder und Ehen miteinander verbunden.</p>
       <p class="chr-sub">Daneben gibt es ${r.verbund.inseln} getrennte „Inseln“, davon ${r.verbund.einzeln} einzelne Personen ohne jede Verbindung.</p>
       <h4>Stammeltern mit den meisten Nachkommen im Bestand</h4>${liste(r.stammeltern, (x) => `${chrLink(x.p)} – <b>${chrZahl(x.n)}</b> Nachkommen`)}`),

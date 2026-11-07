@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 393
+// Partezettel Archiv – Version 394
+// v394: Chronik – neuer Abschnitt „Schicksalsschläge“ (automatisch aus den Lebensdaten).
 // v393: Wohnorte – Geburtshaus, Elternhaus, dann nach Jahr; Stammbaum – Schlüsselfotos ein-/ausblendbar (📷).
 // v392: Ehedauer – gleiches Hochzeitsdatum zweier Ehen ergibt nicht mehr „unter 1 Tag“; Hinweis, wenn ein Partner vor der Hochzeit starb.
 // v391: Gebirge – Zoom +/−, Ehepartner ein-/ausblendbar, Geschwister immer mit gemeinsamen Eltern als Gipfel (auch „nicht erfasst“).
@@ -11210,7 +11211,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=393");
+      treeModul3D = await import("./tree3d.js?v=394");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
