@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 394
+// Partezettel Archiv – Version 395
+// v395: Stammbaum – Schlüsselfotos werden wieder angezeigt (Abfrage war bei vielen Personen zu lang).
 // v394: Chronik – neuer Abschnitt „Schicksalsschläge“ (automatisch aus den Lebensdaten).
 // v393: Wohnorte – Geburtshaus, Elternhaus, dann nach Jahr; Stammbaum – Schlüsselfotos ein-/ausblendbar (📷).
 // v392: Ehedauer – gleiches Hochzeitsdatum zweier Ehen ergibt nicht mehr „unter 1 Tag“; Hinweis, wenn ein Partner vor der Hochzeit starb.
@@ -8802,11 +8803,15 @@ async function loadStammbaumData(optionen = {}) {
 
   const ids = treeData.personen.map((p) => p.id);
   if (ids.length) {
-    const { data: fotos, error: fotoError } = await sb.from("fotos")
-      .select("personen_id, dateipfad, ist_schluesselfoto")
-      .in("personen_id", ids)
-      .eq("ist_schluesselfoto", true);
+    // v395: Früher wurden alle Personen-IDs in die Abfrage gepackt (.in mit ~1500 IDs) – die Adresse wurde zu lang
+    // und die Abfrage schlug still fehl, deshalb fehlten die Fotos. Jetzt: alle Schlüsselfotos seitenweise laden und lokal filtern.
+    const idSet = new Set(ids);
+    const { data: alleFotos, error: fotoError } = await alleZeilenLaden(() => sb.from("fotos")
+      .select("id, personen_id, dateipfad, ist_schluesselfoto")
+      .eq("ist_schluesselfoto", true)
+      .order("id"));
     if (fotoError) debugLog(`❌ Stammbaum-Schlüsselfotos: ${fotoError.message}`);
+    const fotos = (alleFotos || []).filter((f) => f.personen_id && idSet.has(f.personen_id));
     const fotoUrls = await ladeFotoBilder((fotos || []).map(f => f.dateipfad));
     for (const foto of fotos || []) {
       const fotoUrl = fotoUrls.get(foto.dateipfad);
@@ -11211,7 +11216,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=394");
+      treeModul3D = await import("./tree3d.js?v=395");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
