@@ -2068,3 +2068,10 @@ h4.tree-cousins__group.tree-cousins__group--ende{margin-top:.2rem !important}
 .tree-mtn-gipfelpartner{font-style:normal;font-size:.68rem;color:#8a5a3f;line-height:1.1}
 .tree-mtn-rahmen.ohne-partner .tree-mtn-partner{display:none}
 .tree-mtn-karte--leer{border-style:dashed !important;background:#fdf7f3 !important;cursor:default}
+
+/* v393: Schlüsselfotos im Stammbaum ausblenden */
+.tree-fotos-toggle{opacity:.55}
+.tree-fotos-toggle.is-active{opacity:1;background:#e7f0ea}
+body.tree-ohne-fotos .tree-node__photo{display:none}
+body.tree-ohne-fotos .tree-node__placeholder{display:none}
+body.tree-ohne-fotos .tree-node{padding-top:.55rem}

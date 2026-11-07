@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 391
+// Partezettel Archiv – Version 393
+// v393: Wohnorte – Geburtshaus, Elternhaus, dann nach Jahr; Stammbaum – Schlüsselfotos ein-/ausblendbar (📷).
+// v392: Ehedauer – gleiches Hochzeitsdatum zweier Ehen ergibt nicht mehr „unter 1 Tag“; Hinweis, wenn ein Partner vor der Hochzeit starb.
 // v391: Gebirge – Zoom +/−, Ehepartner ein-/ausblendbar, Geschwister immer mit gemeinsamen Eltern als Gipfel (auch „nicht erfasst“).
 // v390: Ahnentafel – Spalte „Kinder“ links neben der Ausgangsperson (antippen = eine Generation nach links).
 // v389: Gebirge-Darstellung zeigt den Geburtsnamen („geb. …“), auch beim Partner am Gipfel.
@@ -4605,12 +4607,20 @@ async function openPersonDetail(personId, options = {}) {
           if (!otherFamily || otherFamily.id === family.id || String(otherFamily.familientyp || "").trim().toLocaleLowerCase("de") !== "ehe") return;
           if (![otherFamily.partner_a_id, otherFamily.partner_b_id].some(id => coupleIds.has(id))) return;
           const laterStart = String(otherFamily.beginn || "").slice(0, 10);
-          if (/^\d{4}-\d{2}-\d{2}$/.test(laterStart) && laterStart >= currentStart) addEndCandidate(laterStart, false);
+          // v392: nur eine wirklich SPÄTERE Ehe beendet diese (gleiches Datum = Datenfehler, nicht „unter 1 Tag“)
+          if (/^\d{4}-\d{2}-\d{2}$/.test(laterStart) && laterStart > currentStart) addEndCandidate(laterStart, false);
         });
         endCandidates.sort((a, b) => a.date - b.date);
         const earliest = endCandidates[0] || null;
         const endDate = earliest?.date || null;
-        if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
+        // v392: Ist ein Ehepartner schon VOR der Hochzeit gestorben, stimmt das Datum nicht – Hinweis statt Dauer
+        const vorherGestorben = couple.find((p) => { const t = p.sterbedatum ? new Date(`${String(p.sterbedatum).slice(0, 10)}T00:00:00`) : (p.sterbejahr ? new Date(`${p.sterbejahr}-12-31T00:00:00`) : null); return t && !Number.isNaN(startDate.getTime()) && t < startDate; });
+        const gleichesDatum = beginnExakt && (partnerFamilies || []).some((o) => o && o.id !== family.id && String(o.beginn || "").slice(0, 10) === String(family.beginn).slice(0, 10));
+        if (vorherGestorben) {
+          duration = ` · ⚠ bitte prüfen: ${vorherGestorben.vorname || "Ehepartner"} ist vor diesem Datum gestorben`;
+        } else if (gleichesDatum) {
+          duration = " · ⚠ bitte prüfen: gleiches Datum wie eine andere Ehe";
+        } else if (endDate && !Number.isNaN(startDate.getTime()) && !Number.isNaN(endDate.getTime()) && endDate >= startDate) {
           let years = endDate.getFullYear() - startDate.getFullYear();
           if (endDate.getMonth() < startDate.getMonth() || (endDate.getMonth() === startDate.getMonth() && endDate.getDate() < startDate.getDate())) years--;
           if (years >= 0) duration = ` · ${dauerText(startDate, endDate, !earliest.approximate && beginnExakt)}`;
@@ -11200,7 +11210,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=391");
+      treeModul3D = await import("./tree3d.js?v=393");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11581,6 +11591,18 @@ if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
     treePersonConfirm.disabled = true;
   }
 });
+// v393: Schlüsselfotos im Stammbaum ein-/ausblenden (Einstellung bleibt gespeichert)
+(function treeFotoSchalter() {
+  const btn = document.getElementById("tree-fotos-toggle");
+  const anwenden = (an) => {
+    document.body.classList.toggle("tree-ohne-fotos", !an);
+    if (btn) { btn.classList.toggle("is-active", an); btn.setAttribute("aria-pressed", String(an)); btn.title = an ? "Schlüsselfotos ausblenden" : "Schlüsselfotos einblenden"; }
+  };
+  let an = true;
+  try { an = localStorage.getItem("fs-tree-fotos") !== "0"; } catch {}
+  anwenden(an);
+  btn?.addEventListener("click", () => { an = !an; try { localStorage.setItem("fs-tree-fotos", an ? "1" : "0"); } catch {} anwenden(an); });
+})();
 const treeZoomIn = document.getElementById("tree-zoom-in");
 const treeZoomOut = document.getElementById("tree-zoom-out");
 const treeReset = document.getElementById("tree-reset");
@@ -12343,7 +12365,15 @@ async function ladeWohnorte(personId) {
     }
     if (lauf !== wohnorteLauf) return;
     const jahrVon = (x) => x.jahr || (x.datum ? Number(String(x.datum).slice(0, 4)) : null);
-    const sortiert = [...stationen].sort((a, b) => (a.sortierung || 0) - (b.sortierung || 0) || (jahrVon(a) || 0) - (jahrVon(b) || 0));
+    // v393: zuerst Geburtshaus, dann Elternhaus, danach die übrigen – Einträge mit Jahr in zeitlicher Reihenfolge
+    // (Einträge ohne Jahr behalten ihren Platz, nur die datierten werden untereinander nach Jahr geordnet)
+    const rang = (x) => x.art === "geboren" ? 0 : x.art === "elternhaus" ? 1 : 2;
+    const sortiert = [...stationen].sort((a, b) => rang(a) - rang(b) || (a.sortierung || 0) - (b.sortierung || 0));
+    {
+      const plaetze = sortiert.map((x, i) => (rang(x) === 2 && jahrVon(x) ? i : -1)).filter((i) => i >= 0);
+      const datiert = plaetze.map((i) => sortiert[i]).sort((a, b) => jahrVon(a) - jahrVon(b) || (a.sortierung || 0) - (b.sortierung || 0));
+      plaetze.forEach((i, k) => { sortiert[i] = datiert[k]; });
+    }
     for (const x of sortiert) {
       const h = hausNach.get(x.haus_id);
       if (!h) continue;
