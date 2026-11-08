@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 397
+// Partezettel Archiv – Version 398
+// v398: Kinder ohne eigenes Datenblatt; „↗ Datenblatt“ macht aus einem Nur-Namen-Eintrag eine richtige Person samt Verbindung.
 // v397: Ehepartner ohne eigenes Datenblatt (nur Name) – Eingabe in Bearbeiten, Anzeige bei der Person und unter den Kindern (Paket 8).
 // v396: Eigentümer kann im Konto die Ansicht als Bearbeiter oder Leser ausprobieren (Vorschau-Leiste oben).
 // v395: Stammbaum – Schlüsselfotos werden wieder angezeigt (Abfrage war bei vielen Personen zu lang).
@@ -2996,9 +2997,9 @@ function pruefPunktHtml(p) {
 // wird ohne sie gespeichert, damit nichts verloren geht.
 let kbSeiteVorhanden = true;
 function istKbSeitenFehler(error) {
-  return kbSeiteVorhanden && /_seite|todesumstand|partner_ohne/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
+  return kbSeiteVorhanden && /_seite|todesumstand|partner_ohne|kinder_ohne/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
 }
-const ohneKbSeite = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !k.endsWith("_seite") && !k.startsWith("todesumstand") && k !== "partner_ohne_datenblatt"));
+const ohneKbSeite = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !k.endsWith("_seite") && !k.startsWith("todesumstand") && k !== "partner_ohne_datenblatt" && k !== "kinder_ohne_datenblatt"));
 async function mitKbSeite(bau) {
   let r = await bau(kbSeiteVorhanden);
   if (r?.error && istKbSeitenFehler(r.error)) {
@@ -4705,6 +4706,13 @@ async function openPersonDetail(personId, options = {}) {
     const childrenList = document.getElementById("pv-children-list"); childrenList.replaceChildren();
     const uniqueChildIds = [...new Set(childrenLinks.map(x => x.kind_id).filter(id => id && id !== personId))];
     uniqueChildIds.map(id => relatedMap.get(id)).filter(Boolean).sort((a,b) => String(a.geburtsdatum || a.geburtsjahr || "9999").localeCompare(String(b.geburtsdatum || b.geburtsjahr || "9999")) || `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de")).forEach(child => addPersonLink(childrenList, child));
+    for (const eintrag of partnerOhneListe(person.kinder_ohne_datenblatt)) { // v398
+      const row = document.createElement("div"); row.className = "person-view-relation-row person-view-relation-row--ohne";
+      const name = document.createElement("span"); name.className = "person-view-ohne-name"; name.textContent = eintrag.name; name.title = "ohne eigenes Datenblatt";
+      row.appendChild(name);
+      if (eintrag.geburt) { const dt = document.createElement("span"); dt.className = "person-view-relation-date"; dt.textContent = `* ${eintrag.geburt}`; row.appendChild(dt); }
+      childrenList.appendChild(row);
+    }
     childrenSection.hidden = !childrenList.children.length;
     void zeigeEhepartnerDerKinder(uniqueChildIds, childrenList, personId, relatedMap);
 
@@ -5058,7 +5066,8 @@ async function openPersonEdit(personId, options = {}) {
   { const tu = document.getElementById("d-todesumstand"), tt = document.getElementById("d-todesumstand-text");
     if (tu) tu.value = person.todesumstand && TODESUMSTAND.hasOwnProperty(person.todesumstand) ? person.todesumstand : "";
     if (tt) tt.value = person.todesumstand_text || ""; }
-  zeichnePartnerOhneDatenblatt(person.partner_ohne_datenblatt);
+  zeichnePartnerOhneDatenblatt(person.partner_ohne_datenblatt, "partner");
+  zeichnePartnerOhneDatenblatt(person.kinder_ohne_datenblatt, "kind");
   aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
   aktualisiereLinkButton("d-trauungsbuch-open", person.trauungsbuch_link);
   aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
@@ -5225,7 +5234,8 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     sterbebuch_seite: kbSeiteWert("d-sterbebuch-seite"),
     todesumstand: document.getElementById("d-todesumstand")?.value || null,
     todesumstand_text: (document.getElementById("d-todesumstand")?.value && document.getElementById("d-todesumstand-text")?.value.trim()) || null,
-    partner_ohne_datenblatt: lesePartnerOhneDatenblatt(),
+    partner_ohne_datenblatt: lesePartnerOhneDatenblatt("partner"),
+    kinder_ohne_datenblatt: lesePartnerOhneDatenblatt("kind"),
     Notiz: document.getElementById("d-notiz").value.trim() || null,
     weiterfuehrende_links: leseWeiterfuehrendeLinksEditor(),
   };
@@ -6697,38 +6707,111 @@ function partnerOhneListe(wert) {
   if (typeof liste === "string") { try { liste = JSON.parse(liste); } catch { liste = []; } }
   return Array.isArray(liste) ? liste.filter((x) => x && String(x.name || "").trim()) : [];
 }
-function partnerOhneZeile(eintrag = {}) {
+function partnerOhneZeile(eintrag = {}, art = "partner") {
   const z = document.createElement("div");
   z.className = "partner-ohne-zeile";
-  z.innerHTML = `<input type="text" class="partner-ohne-name" maxlength="120" placeholder="Name, z. B. … geb. Hohenfelder" aria-label="Name des Ehepartners">
-    <input type="text" class="partner-ohne-heirat" maxlength="20" placeholder="Heirat (Jahr oder Datum)" aria-label="Heirat">
+  const kind = art === "kind";
+  z.innerHTML = `<input type="text" class="partner-ohne-name" maxlength="120" placeholder="${kind ? "Name, z. B. Maria" : "Name, z. B. … geb. Hohenfelder"}" aria-label="Name">
+    <input type="text" class="partner-ohne-heirat" maxlength="20" placeholder="${kind ? "Geburt (Jahr oder Datum)" : "Heirat (Jahr oder Datum)"}" aria-label="${kind ? "Geburt" : "Heirat"}">
+    <button type="button" class="btn btn--ghost partner-ohne-umwandeln" title="Aus diesem Namen eine richtige Person (Datenblatt) machen">↗ Datenblatt</button>
     <button type="button" class="btn btn--ghost partner-ohne-weg" aria-label="Entfernen">✕</button>`;
   z.querySelector(".partner-ohne-name").value = eintrag.name || "";
-  z.querySelector(".partner-ohne-heirat").value = eintrag.heirat || "";
+  z.querySelector(".partner-ohne-heirat").value = (kind ? eintrag.geburt : eintrag.heirat) || "";
+  z.querySelector(".partner-ohne-umwandeln").addEventListener("click", () => ohneZuDatenblatt(z, art));
   z.addEventListener("input", () => setzeDetailGeaendert(true));
   z.querySelector(".partner-ohne-weg").addEventListener("click", () => { z.remove(); setzeDetailGeaendert(true); });
   return z;
 }
-function zeichnePartnerOhneDatenblatt(wert) {
-  const box = document.getElementById("d-partner-ohne-liste");
+function zeichnePartnerOhneDatenblatt(wert, art = "partner") {
+  const box = document.getElementById(`d-${art}-ohne-liste`);
   if (!box) return;
   const liste = partnerOhneListe(wert);
-  box.replaceChildren(...liste.map(partnerOhneZeile));
-  const det = document.getElementById("d-partner-ohne");
+  box.replaceChildren(...liste.map((e) => partnerOhneZeile(e, art)));
+  const det = document.getElementById(`d-${art}-ohne`);
   if (det) det.open = liste.length > 0;
 }
-function lesePartnerOhneDatenblatt() {
-  return [...document.querySelectorAll("#d-partner-ohne-liste .partner-ohne-zeile")]
-    .map((z) => ({ name: z.querySelector(".partner-ohne-name").value.trim(), heirat: z.querySelector(".partner-ohne-heirat").value.trim() }))
+function lesePartnerOhneDatenblatt(art = "partner") {
+  const feld = art === "kind" ? "geburt" : "heirat";
+  return [...document.querySelectorAll(`#d-${art}-ohne-liste .partner-ohne-zeile`)]
+    .map((z) => ({ name: z.querySelector(".partner-ohne-name").value.trim(), [feld]: z.querySelector(".partner-ohne-heirat").value.trim() }))
     .filter((x) => x.name)
-    .map((x) => (x.heirat ? x : { name: x.name }));
+    .map((x) => (x[feld] ? x : { name: x.name }));
 }
-document.getElementById("d-partner-ohne-plus")?.addEventListener("click", () => {
-  const box = document.getElementById("d-partner-ohne-liste");
-  const z = partnerOhneZeile();
-  box?.appendChild(z);
-  z.querySelector(".partner-ohne-name")?.focus();
-});
+// „Nur Name“ → richtige Person: Namen zerlegen, Person anlegen, verbinden, Eintrag aus der Liste nehmen
+function ohneNameZerlegen(text) {
+  const [links, geb] = String(text || "").split(/\s+geb\.\s+/);
+  const teile = String(links || "").replace(/^[….?\s]+/, "").trim().split(/\s+/).filter(Boolean);
+  let vorname = "", nachname = "";
+  if (teile.length >= 2) { nachname = teile.pop(); vorname = teile.join(" "); } else if (teile.length === 1) vorname = teile[0];
+  return { vorname: vorname || "unbekannt", nachname: nachname || null, ledig: geb ? geb.trim() : null };
+}
+function ohneDatum(text) {
+  const t = String(text || "").trim();
+  const m = t.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+  if (m) return { datum: `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`, jahr: Number(m[3]) };
+  const j = t.match(/\b(\d{4})\b/);
+  return j ? { datum: null, jahr: Number(j[1]) } : { datum: null, jahr: null };
+}
+async function ohneZuDatenblatt(zeile, art) {
+  const personId = currentDetailPersonId;
+  if (!personId) return;
+  if (detailGeaendert) { alert("Bitte zuerst die übrigen Änderungen mit „Speichern“ sichern, dann „↗ Datenblatt“ erneut antippen."); return; }
+  const name = zeile.querySelector(".partner-ohne-name").value.trim();
+  if (!name) return;
+  const zusatz = ohneDatum(zeile.querySelector(".partner-ohne-heirat").value);
+  if (!confirm(`Für „${name}“ ein eigenes Datenblatt anlegen und mit dieser Person verbinden?\nDanach öffnet sich das neue Datenblatt zum Ergänzen.`)) return;
+  try {
+    const { data: ich } = await sb.from("personen").select("*").eq("id", personId).single();
+    const n = ohneNameZerlegen(name);
+    const ichMann = String(ich?.geschlecht || "").toLowerCase().startsWith("m");
+    const neu = { vorname: n.vorname, nachname: n.nachname, Ledigenname: n.ledig };
+    let familieFuerKind = null;
+    if (art === "partner") {
+      neu.geschlecht = ich?.geschlecht ? (ichMann ? "weiblich" : "männlich") : null;
+      if (!neu.nachname && ichMann) neu.nachname = ich?.nachname || null;
+    } else {
+      neu.geburtsdatum = zusatz.datum; neu.geburtsjahr = zusatz.datum ? null : zusatz.jahr;
+      // Familie für das Kind: die einzige Ehe der Person, sonst eine Eltern-Familie nur mit ihr
+      const { data: fams } = await sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`);
+      const ehen = (fams || []).filter((f) => f.partner_a_id && f.partner_b_id && String(f.familientyp || "").toLowerCase() !== "eltern");
+      familieFuerKind = ehen.length === 1 ? ehen[0] : (fams || []).find((f) => !f.partner_b_id || !f.partner_a_id) || null;
+      if (!neu.nachname) {
+        const vater = ichMann ? ich : (ehen.length === 1 ? (await sb.from("personen").select("nachname, geschlecht").eq("id", ehen[0].partner_a_id === personId ? ehen[0].partner_b_id : ehen[0].partner_a_id).single()).data : null);
+        neu.nachname = (vater && String(vater.geschlecht || "").toLowerCase().startsWith("m") ? vater.nachname : ich?.nachname) || null;
+      }
+    }
+    const neueId = crypto.randomUUID();
+    const { error: pe } = await sb.from("personen").insert({ id: neueId, ...Object.fromEntries(Object.entries(neu).filter(([, v]) => v !== undefined && v !== null && v !== "")) });
+    if (pe) throw pe;
+    if (art === "partner") {
+      const fam = { partner_a_id: ichMann ? personId : neueId, partner_b_id: ichMann ? neueId : personId, familientyp: "Ehe", beginn: zusatz.datum, beginn_jahr: zusatz.datum ? null : zusatz.jahr };
+      const { error: fe } = await mitFamJahr((mitJahr) => sb.from("familien").insert(mitJahr ? fam : ohneFamJahr(fam)));
+      if (fe) throw fe;
+    } else {
+      if (!familieFuerKind) familieFuerKind = await findeOderErstelleFamilie(personId, null, "Eltern");
+      await addKindZuFamilie(familieFuerKind.id, neueId);
+    }
+    // Eintrag aus der Liste nehmen und die Liste sofort speichern
+    zeile.remove();
+    const spalte = art === "kind" ? "kinder_ohne_datenblatt" : "partner_ohne_datenblatt";
+    const { error: le } = await sb.from("personen").update({ [spalte]: lesePartnerOhneDatenblatt(art) }).eq("id", personId);
+    if (le) debugLog(`⚠️ Liste ${spalte}: ${le.message}`);
+    setzeDetailSauber();
+    zeigeToast(`Datenblatt für „${name}“ angelegt`);
+    try { loadPersonen(); } catch {}
+    await openPersonEdit(neueId);
+  } catch (err) {
+    alert(`Das Datenblatt konnte nicht angelegt werden: ${err.message || err}`);
+  }
+}
+for (const art of ["partner", "kind"]) {
+  document.getElementById(`d-${art}-ohne-plus`)?.addEventListener("click", () => {
+    const box = document.getElementById(`d-${art}-ohne-liste`);
+    const z = partnerOhneZeile({}, art);
+    box?.appendChild(z);
+    z.querySelector(".partner-ohne-name")?.focus();
+  });
+}
 
 function setzeNeuFormular(name, offen) {
   const neu = document.getElementById(`d-${name}-neu`);
@@ -11325,7 +11408,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=397");
+      treeModul3D = await import("./tree3d.js?v=398");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

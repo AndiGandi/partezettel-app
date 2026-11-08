@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 397 -->
+    <!-- Version 398 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=397">
+<link rel="stylesheet" href="style.css?v=398">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -119,7 +119,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 397</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 398</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -851,7 +851,7 @@
         <button type="button" id="d-partner-plus" class="btn btn--plus btn--full">＋ Partner/in hinzufügen</button>
         <details class="mehr-angaben partner-ohne" id="d-partner-ohne">
           <summary>Ehepartner ohne eigenes Datenblatt (nur Name)</summary>
-          <p class="capture-status">Für Ehepartner, von denen nur der Name bekannt ist. Sie erscheinen bei dieser Person unter „Ehepartner“, ohne Link. Gespeichert wird mit „Speichern“ unten.</p>
+          <p class="capture-status">Für Ehepartner, von denen nur der Name bekannt ist. Sie erscheinen bei dieser Person unter „Ehepartner“, ohne Link. Gespeichert wird mit „Speichern“ unten. Werden später Daten bekannt: „↗ Datenblatt“ antippen – dann wird eine richtige Person samt Ehe angelegt.</p>
           <div id="d-partner-ohne-liste"></div>
           <button type="button" id="d-partner-ohne-plus" class="btn btn--ghost">＋ Namen hinzufügen</button>
         </details>
@@ -899,6 +899,12 @@
         <legend>Kinder <small class="sofort-hinweis">speichert sofort</small></legend>
         <div id="d-kinder-list" class="detail-media-list"></div>
         <button type="button" id="d-kind-plus" class="btn btn--plus btn--full">＋ Kind hinzufügen</button>
+        <details class="mehr-angaben partner-ohne" id="d-kind-ohne">
+          <summary>Kinder ohne eigenes Datenblatt (nur Name)</summary>
+          <p class="capture-status">Für Kinder, von denen nur der Name bekannt ist. Werden später Daten bekannt: „↗ Datenblatt“ antippen – dann wird eine richtige Person angelegt und verbunden.</p>
+          <div id="d-kind-ohne-liste"></div>
+          <button type="button" id="d-kind-ohne-plus" class="btn btn--ghost">＋ Namen hinzufügen</button>
+        </details>
         <div id="d-kind-neu" class="neu-formular" hidden>
           <label class="field"><span>Kind</span>
             <select id="d-kind-person"><option value="">— auswählen —</option></select>
@@ -1025,8 +1031,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=397"></script>
-<script src="app.js?v=397"></script>
-<script src="chronik.js?v=397"></script>
+<script src="hinweise.js?v=398"></script>
+<script src="app.js?v=398"></script>
+<script src="chronik.js?v=398"></script>
 </body>
 </html>
