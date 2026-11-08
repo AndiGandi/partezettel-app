@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 396 -->
+    <!-- Version 397 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=396">
+<link rel="stylesheet" href="style.css?v=397">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -119,7 +119,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 396</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 397</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -849,6 +849,12 @@
         <legend>Partner / Partnerin <small class="sofort-hinweis">speichert sofort</small></legend>
         <div id="d-partner-list" class="detail-media-list"></div>
         <button type="button" id="d-partner-plus" class="btn btn--plus btn--full">＋ Partner/in hinzufügen</button>
+        <details class="mehr-angaben partner-ohne" id="d-partner-ohne">
+          <summary>Ehepartner ohne eigenes Datenblatt (nur Name)</summary>
+          <p class="capture-status">Für Ehepartner, von denen nur der Name bekannt ist. Sie erscheinen bei dieser Person unter „Ehepartner“, ohne Link. Gespeichert wird mit „Speichern“ unten.</p>
+          <div id="d-partner-ohne-liste"></div>
+          <button type="button" id="d-partner-ohne-plus" class="btn btn--ghost">＋ Namen hinzufügen</button>
+        </details>
         <div id="d-partner-neu" class="neu-formular" hidden>
           <label class="field partner-new-person"><span>Partner / Partnerin</span>
             <select id="d-partner-person"><option value="">— auswählen —</option></select>
@@ -1019,8 +1025,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=396"></script>
-<script src="app.js?v=396"></script>
-<script src="chronik.js?v=396"></script>
+<script src="hinweise.js?v=397"></script>
+<script src="app.js?v=397"></script>
+<script src="chronik.js?v=397"></script>
 </body>
 </html>

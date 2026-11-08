@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 396
+// Partezettel Archiv – Version 397
+// v397: Ehepartner ohne eigenes Datenblatt (nur Name) – Eingabe in Bearbeiten, Anzeige bei der Person und unter den Kindern (Paket 8).
 // v396: Eigentümer kann im Konto die Ansicht als Bearbeiter oder Leser ausprobieren (Vorschau-Leiste oben).
 // v395: Stammbaum – Schlüsselfotos werden wieder angezeigt (Abfrage war bei vielen Personen zu lang).
 // v394: Chronik – neuer Abschnitt „Schicksalsschläge“ (automatisch aus den Lebensdaten).
@@ -2995,9 +2996,9 @@ function pruefPunktHtml(p) {
 // wird ohne sie gespeichert, damit nichts verloren geht.
 let kbSeiteVorhanden = true;
 function istKbSeitenFehler(error) {
-  return kbSeiteVorhanden && /_seite|todesumstand/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
+  return kbSeiteVorhanden && /_seite|todesumstand|partner_ohne/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
 }
-const ohneKbSeite = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !k.endsWith("_seite") && !k.startsWith("todesumstand")));
+const ohneKbSeite = (obj) => Object.fromEntries(Object.entries(obj || {}).filter(([k]) => !k.endsWith("_seite") && !k.startsWith("todesumstand") && k !== "partner_ohne_datenblatt"));
 async function mitKbSeite(bau) {
   let r = await bau(kbSeiteVorhanden);
   if (r?.error && istKbSeitenFehler(r.error)) {
@@ -4284,15 +4285,22 @@ async function zeigeEhepartnerDerKinder(kindIds, liste, personId, kinderMap) {
     ]);
     if (currentPersonViewId !== personId) return;
     const ehen = [...(a.data || []), ...(b.data || [])].filter((f, i, arr) => f.partner_a_id && f.partner_b_id && String(f.familientyp || "").toLowerCase() !== "eltern" && arr.findIndex(x => x.id === f.id) === i);
-    if (!ehen.length) return;
+    // v397: dazu die Ehepartner ohne eigenes Datenblatt der Kinder
+    const ohneMap = new Map();
+    try {
+      const { data: ko, error: koErr } = await sb.from("personen").select("id, partner_ohne_datenblatt").in("id", kindIds);
+      if (!koErr) for (const k of ko || []) { const l = partnerOhneListe(k.partner_ohne_datenblatt); if (l.length) ohneMap.set(k.id, l); }
+    } catch {}
+    if (!ehen.length && !ohneMap.size) return;
     const partnerIds = [...new Set(ehen.map(f => kindIds.includes(f.partner_a_id) ? f.partner_b_id : f.partner_a_id))];
-    const { data: partner } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", partnerIds);
+    const { data: partner } = partnerIds.length ? await sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", partnerIds) : { data: [] };
     if (currentPersonViewId !== personId) return;
     const pMap = new Map((partner || []).map(p => [p.id, p]));
     for (const kindId of kindIds) {
       const eigene = ehen.filter(f => f.partner_a_id === kindId || f.partner_b_id === kindId)
         .sort((x, y) => String(familieBeginnWert(x) || "9999").localeCompare(String(familieBeginnWert(y) || "9999")));
-      if (!eigene.length) continue;
+      const ohne = ohneMap.get(kindId) || [];
+      if (!eigene.length && !ohne.length) continue;
       const btn = [...liste.querySelectorAll(".person-view-person-link")].find(el => el.dataset.personId === kindId);
       if (!btn || btn.nextElementSibling?.classList?.contains("pv-kind-ehe")) continue;
       const zeile = document.createElement("div");
@@ -4320,6 +4328,14 @@ async function zeigeEhepartnerDerKinder(kindIds, liste, personId, kinderMap) {
           zeile.append(l);
         } else zeile.append(text);
         if (jahr) zeile.append(` (${jahr})`);
+      });
+      const gesamt = eigene.length + ohne.length;
+      ohne.forEach((e, j) => {
+        if (eigene.length + j) zeile.append(" · ");
+        if (gesamt > 1) zeile.append(`${eigene.length + j + 1}. `);
+        const sp = document.createElement("span"); sp.className = "pv-kind-ehe__ohne"; sp.textContent = e.name; sp.title = "ohne eigenes Datenblatt";
+        zeile.append(sp);
+        if (e.heirat) zeile.append(` (${String(e.heirat).match(/\d{4}/)?.[0] || e.heirat})`);
       });
       btn.after(zeile);
     }
@@ -4672,6 +4688,15 @@ async function openPersonDetail(personId, options = {}) {
         }
         date.textContent = `💍 Hochzeit: ${marriage}${duration}`; row.appendChild(date);
       }
+      spouseList.appendChild(row);
+    }
+    // v397: Ehepartner ohne eigenes Datenblatt (nur Name, kein Link)
+    for (const eintrag of partnerOhneListe(person.partner_ohne_datenblatt)) {
+      const row = document.createElement("div"); row.className = "person-view-relation-row person-view-relation-row--ohne";
+      const name = document.createElement("span"); name.className = "person-view-ohne-name"; name.textContent = eintrag.name;
+      name.title = "ohne eigenes Datenblatt";
+      row.appendChild(name);
+      if (eintrag.heirat) { const dt = document.createElement("span"); dt.className = "person-view-relation-date"; dt.textContent = `💍 Hochzeit: ${eintrag.heirat}`; row.appendChild(dt); }
       spouseList.appendChild(row);
     }
     spouseSection.hidden = !spouseList.children.length;
@@ -5033,6 +5058,7 @@ async function openPersonEdit(personId, options = {}) {
   { const tu = document.getElementById("d-todesumstand"), tt = document.getElementById("d-todesumstand-text");
     if (tu) tu.value = person.todesumstand && TODESUMSTAND.hasOwnProperty(person.todesumstand) ? person.todesumstand : "";
     if (tt) tt.value = person.todesumstand_text || ""; }
+  zeichnePartnerOhneDatenblatt(person.partner_ohne_datenblatt);
   aktualisiereLinkButton("d-taufbuch-open", person.taufbuch_link);
   aktualisiereLinkButton("d-trauungsbuch-open", person.trauungsbuch_link);
   aktualisiereLinkButton("d-sterbebuch-open", person.sterbebuch_link);
@@ -5199,6 +5225,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     sterbebuch_seite: kbSeiteWert("d-sterbebuch-seite"),
     todesumstand: document.getElementById("d-todesumstand")?.value || null,
     todesumstand_text: (document.getElementById("d-todesumstand")?.value && document.getElementById("d-todesumstand-text")?.value.trim()) || null,
+    partner_ohne_datenblatt: lesePartnerOhneDatenblatt(),
     Notiz: document.getElementById("d-notiz").value.trim() || null,
     weiterfuehrende_links: leseWeiterfuehrendeLinksEditor(),
   };
@@ -6663,6 +6690,45 @@ function setzeDetailGeaendert(wert, text) {
 }
 
 function setzeDetailSauber() { setzeDetailGeaendert(false); }
+
+// v397: Ehepartner ohne eigenes Datenblatt – nur Name (+ optional Heiratsjahr/-datum und Notiz), als Liste bei der Person
+function partnerOhneListe(wert) {
+  let liste = wert;
+  if (typeof liste === "string") { try { liste = JSON.parse(liste); } catch { liste = []; } }
+  return Array.isArray(liste) ? liste.filter((x) => x && String(x.name || "").trim()) : [];
+}
+function partnerOhneZeile(eintrag = {}) {
+  const z = document.createElement("div");
+  z.className = "partner-ohne-zeile";
+  z.innerHTML = `<input type="text" class="partner-ohne-name" maxlength="120" placeholder="Name, z. B. … geb. Hohenfelder" aria-label="Name des Ehepartners">
+    <input type="text" class="partner-ohne-heirat" maxlength="20" placeholder="Heirat (Jahr oder Datum)" aria-label="Heirat">
+    <button type="button" class="btn btn--ghost partner-ohne-weg" aria-label="Entfernen">✕</button>`;
+  z.querySelector(".partner-ohne-name").value = eintrag.name || "";
+  z.querySelector(".partner-ohne-heirat").value = eintrag.heirat || "";
+  z.addEventListener("input", () => setzeDetailGeaendert(true));
+  z.querySelector(".partner-ohne-weg").addEventListener("click", () => { z.remove(); setzeDetailGeaendert(true); });
+  return z;
+}
+function zeichnePartnerOhneDatenblatt(wert) {
+  const box = document.getElementById("d-partner-ohne-liste");
+  if (!box) return;
+  const liste = partnerOhneListe(wert);
+  box.replaceChildren(...liste.map(partnerOhneZeile));
+  const det = document.getElementById("d-partner-ohne");
+  if (det) det.open = liste.length > 0;
+}
+function lesePartnerOhneDatenblatt() {
+  return [...document.querySelectorAll("#d-partner-ohne-liste .partner-ohne-zeile")]
+    .map((z) => ({ name: z.querySelector(".partner-ohne-name").value.trim(), heirat: z.querySelector(".partner-ohne-heirat").value.trim() }))
+    .filter((x) => x.name)
+    .map((x) => (x.heirat ? x : { name: x.name }));
+}
+document.getElementById("d-partner-ohne-plus")?.addEventListener("click", () => {
+  const box = document.getElementById("d-partner-ohne-liste");
+  const z = partnerOhneZeile();
+  box?.appendChild(z);
+  z.querySelector(".partner-ohne-name")?.focus();
+});
 
 function setzeNeuFormular(name, offen) {
   const neu = document.getElementById(`d-${name}-neu`);
@@ -11259,7 +11325,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=396");
+      treeModul3D = await import("./tree3d.js?v=397");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
