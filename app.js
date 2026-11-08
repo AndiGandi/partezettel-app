@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 395
+// Partezettel Archiv – Version 396
+// v396: Eigentümer kann im Konto die Ansicht als Bearbeiter oder Leser ausprobieren (Vorschau-Leiste oben).
 // v395: Stammbaum – Schlüsselfotos werden wieder angezeigt (Abfrage war bei vielen Personen zu lang).
 // v394: Chronik – neuer Abschnitt „Schicksalsschläge“ (automatisch aus den Lebensdaten).
 // v393: Wohnorte – Geburtshaus, Elternhaus, dann nach Jahr; Stammbaum – Schlüsselfotos ein-/ausblendbar (📷).
@@ -686,6 +687,48 @@ function setzeRollenAnzeige() {
     zeile.hidden = false;
   }
 }
+
+// v396: Eigentümer kann die App vorübergehend „als Bearbeiter“ oder „als Leser“ ansehen (nur Anzeige,
+// die Rechte in der Datenbank bleiben unverändert). Nach dem Neuladen gilt wieder die echte Rolle.
+function rollenVorschauStarten(rolle) {
+  if (!ROLLEN_NAMEN[rolle]) return;
+  if (!zugang.echteRolle) zugang.echteRolle = zugang.rolle;
+  if (zugang.echteRolle !== "eigentuemer") return;
+  zugang.rolle = rolle;
+  zugang.vorschau = rolle !== "eigentuemer";
+  if (!zugang.vorschau) { delete zugang.echteRolle; }
+  setzeRollenAnzeige();
+  let leiste = document.getElementById("rollen-vorschau-leiste");
+  if (zugang.vorschau) {
+    if (!leiste) {
+      leiste = document.createElement("div");
+      leiste.id = "rollen-vorschau-leiste";
+      leiste.className = "rollen-vorschau-leiste";
+      document.body.prepend(leiste);
+    }
+    leiste.innerHTML = `<span>👁 <strong>Vorschau:</strong> So sieht ein <strong>${ROLLEN_NAMEN[rolle]}</strong> die App.</span>
+      <span class="rollen-vorschau-knoepfe">${Object.keys(ROLLEN_NAMEN).filter((r) => r !== "eigentuemer" && r !== rolle).map((r) => `<button type="button" data-vorschau-rolle="${r}">als ${ROLLEN_NAMEN[r]}</button>`).join("")}
+      <button type="button" data-vorschau-rolle="eigentuemer" class="is-zurueck">Zurück zu meiner Ansicht</button></span>`;
+  } else if (leiste) leiste.remove();
+  document.body.classList.toggle("rollen-vorschau-aktiv", !!zugang.vorschau);
+  rollenVorschauNeuZeichnen();
+}
+function rollenVorschauNeuZeichnen() {
+  try { document.getElementById("konto-overlay").hidden = true; } catch {}
+  const pv = document.getElementById("person-view-overlay");
+  const offenePerson = pv && !pv.hidden ? currentPersonViewId : null;
+  const det = document.getElementById("detail-overlay");
+  if (det && !det.hidden) det.hidden = true;
+  try { loadPersonen(); } catch {}
+  try { const t = document.querySelector('.tab-btn[aria-selected="true"]')?.dataset.tab; if (t === "stammbaum" && typeof renderStammbaum === "function") renderStammbaum(document.getElementById("tree-person-select")?.value); } catch {}
+  if (offenePerson) setTimeout(() => openPersonDetail(offenePerson), 150);
+}
+document.addEventListener("click", (e) => {
+  const b = e.target.closest?.("[data-vorschau-rolle]");
+  if (!b) return;
+  e.preventDefault();
+  rollenVorschauStarten(b.dataset.vorschauRolle);
+});
 
 function zugangZuruecksetzen() {
   zugangGeprueftFuer = null;
@@ -11216,7 +11259,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=395");
+      treeModul3D = await import("./tree3d.js?v=396");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

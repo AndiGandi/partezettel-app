@@ -2082,3 +2082,15 @@ body.tree-ohne-fotos .tree-node{padding-top:.55rem}
 .chr-zeitlinie{list-style:none;padding-left:0}
 .chr-zeitlinie li{padding:.12rem 0}
 @media (min-width:900px){.chr-karte.chr-breit .chr-schicksal{display:inline-block;vertical-align:top;width:calc(50% - 1.2rem);margin-right:1rem}}
+
+/* v396: Rollen-Vorschau */
+.rollen-vorschau-leiste{position:fixed;left:0;right:0;bottom:0;z-index:100000;box-shadow:0 -4px 14px rgba(0,0,0,.15);padding-bottom:calc(.55rem + env(safe-area-inset-bottom, 0px));display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between;padding:.55rem 1rem;background:#fff4d6;border-top:2px solid #e2b13c;color:#5b4210;font-size:.92rem}
+.rollen-vorschau-knoepfe{display:flex;gap:.4rem;flex-wrap:wrap}
+.rollen-vorschau-leiste button{border:1px solid #d9b45a;background:#fff;border-radius:999px;padding:.3rem .8rem;font:inherit;font-size:.86rem;color:#5b4210;cursor:pointer}
+.rollen-vorschau-leiste button.is-zurueck{background:#1f5a40;border-color:#1f5a40;color:#fff}
+.konto-vorschau{margin-top:1rem}
+.konto-vorschau .btn{margin:.2rem .3rem .2rem 0}
+.nur-eigentuemer{display:none}
+body.rolle-eigentuemer .nur-eigentuemer{display:block}
+
+body.rollen-vorschau-aktiv{padding-bottom:4.2rem}
