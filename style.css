@@ -2109,3 +2109,8 @@ body.rollen-vorschau-aktiv{padding-bottom:4.2rem}
 .tree-luecken__sortierung{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin:1rem 0 .4rem;font-size:.88rem;color:#55745e}
 .tree-luecken__sortierung button{border:1px solid #d9e3db;background:#fff;border-radius:999px;padding:.25rem .75rem;font:inherit;color:#24583f;cursor:pointer}
 .tree-luecken__sortierung button.is-active{background:#1f5a40;border-color:#1f5a40;color:#fff}
+
+/* v401: Platz links/rechts im Stammbaum, damit auch Personen am Rand in die Bildschirmmitte gerückt werden können */
+#tab-stammbaum:not(.tree-view--3d):not(.tree-view--descendants) .tree-viewport{padding-left:max(1.5rem, 42%);padding-right:max(1.5rem, 42%)}
+#tab-stammbaum:not(.tree-view--3d):not(.tree-view--descendants) .tree-viewport > *{flex-shrink:0}
+#tab-stammbaum:not(.tree-view--3d):not(.tree-view--descendants) .tree-classic-stage{width:max-content;min-width:100%}

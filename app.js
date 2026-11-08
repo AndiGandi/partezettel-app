@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 400
+// Partezettel Archiv – Version 401
+// v401: Jede gewählte Person (antippen, Suche, Ansichtswechsel) steht mittig im Stammbaum.
 // v400: Stammlinie wählen – Stammbaum wird sofort ins Bild geholt und die Linie mittig gezeigt.
 // v399: Lücken & Inseln – Liste aller erfassten Namen; alle Listen nach Nachname, Vorname oder Geburtsdatum sortierbar.
 // v398: Kinder ohne eigenes Datenblatt; „↗ Datenblatt“ macht aus einem Nur-Namen-Eintrag eine richtige Person samt Verbindung.
@@ -9178,7 +9179,7 @@ function treePedigreeNodeHtml(k, m, y, rootId) {
 // Tippen auf die bereits gewählte Mitte öffnet sie sofort. Der Zustand gilt über das Neuzeichnen hinweg.
 let treeTippTimer = null, treeTippId = null, treeLetzteBeruehrung = 0;
 function treeAktuelleMitte() { return document.getElementById("tree-person-select")?.value || ""; }
-function treeWaehlen(id) { const a = document.getElementById("tree-person-select"); if (a) a.value = id; renderStammbaum(id); }
+function treeWaehlen(id) { const a = document.getElementById("tree-person-select"); if (a) a.value = id; renderStammbaum(id); treeLinieMittigZeigen(id, { seite: false }); }
 async function treeOeffnen(id) { const a = document.getElementById("tree-person-select"); if (a) a.value = id; await openPersonDetail(id, { fromTree: true }); }
 function treeTippVerarbeiten(id) {
   // erster Tipp/Klick: kurz warten, ob ein zweiter folgt; zweiter: Personenansicht öffnen
@@ -11436,7 +11437,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=400");
+      treeModul3D = await import("./tree3d.js?v=401");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11659,7 +11660,7 @@ function renderTreeLinePreset(rootIds, direction, label = "") {
 }
 // v400: Nach der Wahl einer Stammlinie den Stammbaum sofort in den sichtbaren Bereich holen und die Linie mittig zeigen.
 // Mehrere Versuche, weil die Ansicht (und Fotos) etwas später fertig gezeichnet sein können.
-function treeLinieMittigZeigen(rootId) {
+function treeLinieMittigZeigen(rootId, { seite = true } = {}) {
   const viewport = document.getElementById("tree-viewport");
   const versuch = (n) => {
     const stage = document.getElementById(treeStageIdFuerAnsicht());
@@ -11670,6 +11671,7 @@ function treeLinieMittigZeigen(rootId) {
       centerTreeViewport(rootCard || stage);
     }
     // den Stammbaum selbst ins Bild holen (die Auswahl steht weiter oben auf der Seite)
+    if (!seite) return;
     const r = viewport?.getBoundingClientRect();
     const reiter = document.querySelector(".tabs")?.offsetHeight || 0;
     if (r && (r.top < reiter || r.top > window.innerHeight * 0.45)) window.scrollBy({ top: r.top - reiter - 12, behavior: "smooth" });
@@ -11741,12 +11743,7 @@ function setTreePersonSelection(id, { confirmed = false } = {}) {
   treeSelect.value = id;
   treePresetZuruecksetzen();   // eine bewusst gewählte Person wird ohne Linienfilter gezeigt
   renderStammbaum(id);
-  requestAnimationFrame(() => {
-    if (treeViewMode === "descendants" || treeViewMode === "tree3d") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
-    const stage = document.getElementById(treeStageIdFuerAnsicht());
-    const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(id)}"]`);
-    centerTreeViewport(rootCard || stage);
-  });
+  treeLinieMittigZeigen(id);
   if (confirmed) {
     const message = document.getElementById("tree-message");
     if (message) message.textContent = `Auswahl bestätigt: ${treePersonSearchText(treePerson(id))}`;
@@ -11853,8 +11850,8 @@ if (treeZoomOut) treeZoomOut.addEventListener("click", () => { treeZoom = Math.m
 if (treeReset) treeReset.addEventListener("click", () => { treeZoom = 1; updateTreeZoom(); });
 const treeViewCards = document.getElementById("tree-view-cards");
 const treeViewClassic = document.getElementById("tree-view-classic");
-if (treeViewCards) treeViewCards.addEventListener("click", () => setTreeViewMode("cards"));
-if (treeViewClassic) treeViewClassic.addEventListener("click", () => setTreeViewMode("classic"));
+if (treeViewCards) treeViewCards.addEventListener("click", () => { setTreeViewMode("cards"); const _id = document.getElementById("tree-person-select")?.value; if (_id) treeLinieMittigZeigen(_id, { seite: false }); });
+if (treeViewClassic) treeViewClassic.addEventListener("click", () => { setTreeViewMode("classic"); const _id = document.getElementById("tree-person-select")?.value; if (_id) treeLinieMittigZeigen(_id, { seite: false }); });
 setTreeViewMode(treeViewMode);   // Startzustand der Ansichtstasten und Flächen
 const treeView3D = document.getElementById("tree-view-3d");
 if (treeView3D) treeView3D.addEventListener("click", () => {
@@ -11865,7 +11862,7 @@ if (treeView3D) treeView3D.addEventListener("click", () => {
 const treeViewDescendants = document.getElementById("tree-view-descendants");
 if (treeViewDescendants) treeViewDescendants.addEventListener("click", () => setTreeViewMode("descendants"));
 const treeViewPedigree = document.getElementById("tree-view-pedigree");
-if (treeViewPedigree) treeViewPedigree.addEventListener("click", () => setTreeViewMode("pedigree"));
+if (treeViewPedigree) treeViewPedigree.addEventListener("click", () => { setTreeViewMode("pedigree"); const _id = document.getElementById("tree-person-select")?.value; if (_id) treeLinieMittigZeigen(_id, { seite: false }); });
 const treePedigreeGensSelect = document.getElementById("tree-pedigree-gens");
 if (treePedigreeGensSelect) treePedigreeGensSelect.addEventListener("change", () => {
   const wert = Math.min(6, Math.max(2, Number(treePedigreeGensSelect.value) || 4));
