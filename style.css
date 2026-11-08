@@ -2104,3 +2104,8 @@ body.rollen-vorschau-aktiv{padding-bottom:4.2rem}
 .person-view-relation-row--ohne::before{content:"";display:inline-block;width:.55rem;height:.55rem;border-radius:50%;border:1.5px solid #b8b2a4;margin-right:.45rem;vertical-align:1px}
 .pv-kind-ehe__ohne{color:#6d6a60;border-bottom:1px dotted #b8b2a4}
 .partner-ohne-umwandeln{font-size:.82rem;white-space:nowrap}
+
+/* v399: Sortierung in Lücken & Inseln */
+.tree-luecken__sortierung{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin:1rem 0 .4rem;font-size:.88rem;color:#55745e}
+.tree-luecken__sortierung button{border:1px solid #d9e3db;background:#fff;border-radius:999px;padding:.25rem .75rem;font:inherit;color:#24583f;cursor:pointer}
+.tree-luecken__sortierung button.is-active{background:#1f5a40;border-color:#1f5a40;color:#fff}

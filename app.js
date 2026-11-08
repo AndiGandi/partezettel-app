@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 398
+// Partezettel Archiv – Version 399
+// v399: Lücken & Inseln – Liste aller erfassten Namen; alle Listen nach Nachname, Vorname oder Geburtsdatum sortierbar.
 // v398: Kinder ohne eigenes Datenblatt; „↗ Datenblatt“ macht aus einem Nur-Namen-Eintrag eine richtige Person samt Verbindung.
 // v397: Ehepartner ohne eigenes Datenblatt (nur Name) – Eingabe in Bearbeiten, Anzeige bei der Person und unter den Kindern (Paket 8).
 // v396: Eigentümer kann im Konto die Ansicht als Bearbeiter oder Leser ausprobieren (Vorschau-Leiste oben).
@@ -10483,9 +10484,33 @@ function treeLueckenRender(analyse) {
   if (analyse.einzeln.length) {
     html += `<h4 class="tree-luecken__titel">Ganz ohne Verbindung (${analyse.einzeln.length})</h4><ul class="tree-luecken__liste tree-luecken__liste--karte">${analyse.einzeln.map((id) => personZeile(id, false)).join("")}</ul>`;
   }
-  const liste = (titel, ids) => ids.length ? `<details class="tree-luecken__details"><summary>${titel} (${ids.length})</summary><ul class="tree-luecken__liste">${ids.map((id) => `<li>${nameKnopf(id)}${jahre(byId.get(id))}</li>`).join("")}</ul></details>` : "";
-  html += liste("Alle Personen ohne Eltern", analyse.ohneEltern) + liste("Alle Personen ohne Kinder", analyse.ohneKinder);
+  // v399: Listen sortierbar (Nachname, Vorname, Geburtsdatum) + Liste aller erfassten Namen
+  const gebSchluessel = (p) => { const d = String(p?.geburtsdatum || "").slice(0, 10); return d || (p?.geburtsjahr ? `${p.geburtsjahr}-99-99` : "9999-99-99"); };
+  const gebText = (p) => { const d = String(p?.geburtsdatum || "").slice(0, 10); if (/^\d{4}-\d{2}-\d{2}$/.test(d)) { const [y, m, t] = d.split("-"); return `${t}.${m}.${y}`; } return p?.geburtsjahr ? String(p.geburtsjahr) : ""; };
+  const zeileSortierbar = (id, mitGeburt) => {
+    const p = byId.get(id) || {};
+    const nach = String(p.nachname || p.Ledigenname || "").toLocaleLowerCase("de") || "\uffff"; // ohne Nachname ans Ende
+    const vor = String(p.vorname || "").toLocaleLowerCase("de");
+    const geb = gebText(p);
+    return `<li data-nach="${escTree(nach)}" data-vor="${escTree(vor)}" data-geb="${escTree(gebSchluessel(p))}">${nameKnopf(id)}${mitGeburt && geb ? ` <span class="tree-cousins__years">* ${escTree(geb)}</span>` : jahre(p)}</li>`;
+  };
+  const liste = (titel, ids, mitGeburt = false, offen = false) => ids.length ? `<details class="tree-luecken__details"${offen ? " open" : ""}><summary>${titel} (${ids.length})</summary><ul class="tree-luecken__liste tree-luecken__sortierbar">${ids.map((id) => zeileSortierbar(id, mitGeburt)).join("")}</ul></details>` : "";
+  html += `<div class="tree-luecken__sortierung"><span>Listen sortieren nach</span>
+    <button type="button" data-luecken-sort="nach" class="is-active">Nachname</button><button type="button" data-luecken-sort="vor">Vorname</button><button type="button" data-luecken-sort="geb">Geburtsdatum</button></div>`;
+  html += liste("Alle Personen ohne Eltern", analyse.ohneEltern) + liste("Alle Personen ohne Kinder", analyse.ohneKinder)
+    + liste("Alle erfassten Namen", [...byId.keys()], true);
   ziel.innerHTML = html;
+  treeLueckenSortieren(ziel, "nach");
+}
+function treeLueckenSortieren(ziel, nach) {
+  const vgl = (a, b, k) => String(a.dataset[k] || "").localeCompare(String(b.dataset[k] || ""), "de");
+  const reihen = { nach: ["nach", "vor", "geb"], vor: ["vor", "nach", "geb"], geb: ["geb", "nach", "vor"] }[nach] || ["nach", "vor", "geb"];
+  ziel.querySelectorAll(".tree-luecken__sortierbar").forEach((ul) => {
+    const lis = [...ul.children];
+    lis.sort((a, b) => { for (const k of reihen) { const r = vgl(a, b, k); if (r) return r; } return 0; });
+    ul.append(...lis);
+  });
+  ziel.querySelectorAll("[data-luecken-sort]").forEach((b) => b.classList.toggle("is-active", b.dataset.lueckenSort === nach));
 }
 
 async function treeLueckenOeffnen() {
@@ -10517,6 +10542,8 @@ function initTreeLueckenUI() {
   document.getElementById("tree-luecken-open")?.addEventListener("click", () => { void treeLueckenOeffnen(); });
   document.getElementById("tree-luecken-close")?.addEventListener("click", () => { document.getElementById("tree-luecken-panel").hidden = true; });
   document.getElementById("tree-luecken-result")?.addEventListener("click", (e) => {
+    const sortKnopf = e.target.closest("[data-luecken-sort]");
+    if (sortKnopf) { treeLueckenSortieren(e.currentTarget, sortKnopf.dataset.lueckenSort); return; }
     const knopf = e.target.closest("[data-luecken-person]");
     if (knopf) void openPersonDetail(knopf.getAttribute("data-luecken-person"));
   });
@@ -11408,7 +11435,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=398");
+      treeModul3D = await import("./tree3d.js?v=399");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
