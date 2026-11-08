@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 399
+// Partezettel Archiv – Version 400
+// v400: Stammlinie wählen – Stammbaum wird sofort ins Bild geholt und die Linie mittig gezeigt.
 // v399: Lücken & Inseln – Liste aller erfassten Namen; alle Listen nach Nachname, Vorname oder Geburtsdatum sortierbar.
 // v398: Kinder ohne eigenes Datenblatt; „↗ Datenblatt“ macht aus einem Nur-Namen-Eintrag eine richtige Person samt Verbindung.
 // v397: Ehepartner ohne eigenes Datenblatt (nur Name) – Eingabe in Bearbeiten, Anzeige bei der Person und unter den Kindern (Paket 8).
@@ -11435,7 +11436,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=399");
+      treeModul3D = await import("./tree3d.js?v=400");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11555,14 +11556,16 @@ function treeStandardPerson() {
   return treeData.personen[0]?.id || "";
 }
 
-function treeFindPresetPerson(tokens, surname) {
+function treeFindPresetPerson(tokens, surname, geburtsjahr = null) {
   const normalizedSurname = treeNormalizeName(surname);
   const normalizedTokens = tokens.map(treeNormalizeName);
-  const candidates = treeData.personen.filter(person => {
+  let candidates = treeData.personen.filter(person => {
     const full = treeNormalizeName(`${person.vorname || ""} ${person.nachname || ""}`);
     const last = treeNormalizeName(person.nachname || "");
     return last === normalizedSurname && normalizedTokens.every(token => full.includes(token));
   });
+  // v400: inzwischen gibt es z. B. zwei „Luise Ganahl“ und zwei „Hubert Ganahl“ – das Geburtsjahr entscheidet
+  if (candidates.length > 1 && geburtsjahr) candidates = candidates.filter((p) => String(p.geburtsdatum || p.geburtsjahr || "").startsWith(String(geburtsjahr)));
   return candidates.length === 1 ? candidates[0] : null;
 }
 
@@ -11652,12 +11655,26 @@ function renderTreeLinePreset(rootIds, direction, label = "") {
   if (!roots.length) return;
   treeActivePreset = { roots, direction, label };
   renderStammbaum(roots[0]);   // renderStammbaum wendet den Filter in jeder Ansicht selbst an
-  requestAnimationFrame(() => {
+  treeLinieMittigZeigen(roots[0]);
+}
+// v400: Nach der Wahl einer Stammlinie den Stammbaum sofort in den sichtbaren Bereich holen und die Linie mittig zeigen.
+// Mehrere Versuche, weil die Ansicht (und Fotos) etwas später fertig gezeichnet sein können.
+function treeLinieMittigZeigen(rootId) {
+  const viewport = document.getElementById("tree-viewport");
+  const versuch = (n) => {
     const stage = document.getElementById(treeStageIdFuerAnsicht());
-    if (treeViewMode === "descendants" || treeViewMode === "tree3d") { document.getElementById("tree-viewport")?.scrollTo({ top: 0 }); return; }
-    const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(roots[0])}"]`);
-    centerTreeViewport(rootCard || stage);
-  });
+    if (treeViewMode === "descendants" || treeViewMode === "tree3d") { viewport?.scrollTo({ top: 0 }); }
+    else {
+      const rootCard = stage?.querySelector(`[data-tree-person="${CSS.escape(rootId)}"], [data-classic-person="${CSS.escape(rootId)}"]`);
+      if (!rootCard && n < 6) { setTimeout(() => versuch(n + 1), 120); return; }
+      centerTreeViewport(rootCard || stage);
+    }
+    // den Stammbaum selbst ins Bild holen (die Auswahl steht weiter oben auf der Seite)
+    const r = viewport?.getBoundingClientRect();
+    const reiter = document.querySelector(".tabs")?.offsetHeight || 0;
+    if (r && (r.top < reiter || r.top > window.innerHeight * 0.45)) window.scrollBy({ top: r.top - reiter - 12, behavior: "smooth" });
+  };
+  requestAnimationFrame(() => requestAnimationFrame(() => versuch(0)));
 }
 
 function applyTreeLinePreset(value) {
@@ -11666,8 +11683,8 @@ function applyTreeLinePreset(value) {
   const search = document.getElementById("tree-person-search");
   const presets = {
     "gawatsch-linie": { personType: "mangeng-couple", direction: "both", label: "Gawatsch Linie" },
-    "reinhard-linie": { tokens: ["hubert"], direction: "both", label: "Reinhard Linie" },
-    "fall-linie": { tokens: ["luise"], direction: "maternal", label: "Fall Linie" }
+    "reinhard-linie": { tokens: ["hubert"], geb: "1930", direction: "both", label: "Reinhard Linie" },
+    "fall-linie": { tokens: ["luise"], geb: "1933", direction: "maternal", label: "Fall Linie" }
   };
   const preset = presets[value];
   if (!preset) {
@@ -11681,7 +11698,7 @@ function applyTreeLinePreset(value) {
   }
   const root = preset.personType === "mangeng-couple"
     ? treeFindMangengRosina()
-    : treeFindPresetPerson(preset.tokens, "Ganahl");
+    : treeFindPresetPerson(preset.tokens, "Ganahl", preset.geb);
   if (!root) {
     if (message) message.textContent = `Ausgangspunkt für „${preset.label}“ konnte nicht eindeutig gefunden werden. Bitte Personendaten prüfen.`;
     return;
