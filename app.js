@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 402
+// Partezettel Archiv – Version 403
+// v403: 📷-Schalter blendet die Schlüsselfotos auch in der Ahnentafel aus.
 // v402: Personenansicht neu geordnet – Eltern, Ehepartner, Kinder, Notizen, dann Wohnorte, Kirchenbücher, Fotos, Links, Zeitgeschehen, Sprachnotizen, Verlauf.
 // v401: Jede gewählte Person (antippen, Suche, Ansichtswechsel) steht mittig im Stammbaum.
 // v400: Stammlinie wählen – Stammbaum wird sofort ins Bild geholt und die Linie mittig gezeigt.
@@ -11438,7 +11439,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=402");
+      treeModul3D = await import("./tree3d.js?v=403");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

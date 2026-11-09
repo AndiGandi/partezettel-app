@@ -2114,3 +2114,5 @@ body.rollen-vorschau-aktiv{padding-bottom:4.2rem}
 #tab-stammbaum:not(.tree-view--3d):not(.tree-view--descendants) .tree-viewport{padding-left:max(1.5rem, 42%);padding-right:max(1.5rem, 42%)}
 #tab-stammbaum:not(.tree-view--3d):not(.tree-view--descendants) .tree-viewport > *{flex-shrink:0}
 #tab-stammbaum:not(.tree-view--3d):not(.tree-view--descendants) .tree-classic-stage{width:max-content;min-width:100%}
+/* v403: Schlüsselfotos auch in der Ahnentafel und in der Gebirge-Darstellung ausblendbar */
+body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
