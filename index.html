@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 401 -->
+    <!-- Version 402 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=401">
+<link rel="stylesheet" href="style.css?v=402">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -119,7 +119,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 401</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 402</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -715,18 +715,21 @@
       <section class="person-view-section" id="pv-parents-section" hidden>
         <h3>Eltern</h3><div id="pv-parents-list" class="person-view-relations"></div>
       </section>
-      <section class="person-view-section person-view-sources" id="pv-books-section" hidden>
-        <h3>Kirchenbücher</h3>
-        <div id="pv-books-list" class="person-view-books"></div>
-      </section>
-      <section class="person-view-section" id="pv-wohnorte-section" hidden>
-        <h3>Wohnorte</h3><ol id="pv-wohnorte-list" class="person-view-wohnorte"></ol>
-      </section>
       <section class="person-view-section" id="pv-spouse-section" hidden>
         <h3>Ehepartner</h3><div id="pv-spouse-list" class="person-view-relations"></div>
       </section>
       <section class="person-view-section" id="pv-children-section" hidden>
         <h3>Kinder</h3><div id="pv-children-list" class="person-view-relations"></div>
+      </section>
+      <section class="person-view-section" id="pv-notes-section" hidden>
+        <h3>Notizen</h3><p id="pv-notes"></p>
+      </section>
+      <section class="person-view-section" id="pv-wohnorte-section" hidden>
+        <h3>Wohnorte</h3><ol id="pv-wohnorte-list" class="person-view-wohnorte"></ol>
+      </section>
+      <section class="person-view-section person-view-sources" id="pv-books-section" hidden>
+        <h3>Kirchenbücher</h3>
+        <div id="pv-books-list" class="person-view-books"></div>
       </section>
       <section class="person-view-section" id="pv-photos-section" hidden>
         <h3>Weitere Fotos</h3><div id="pv-photos-list" class="person-view-photos"></div>
@@ -742,9 +745,6 @@
         <h3>Sprachnotizen</h3>
         <p>Aufnahmen direkt hier aufnehmen und anhören.</p>
         <div id="pv-audio-panel" class="person-card__audio-panel person-view-audio-panel"></div>
-      </section>
-      <section class="person-view-section" id="pv-notes-section" hidden>
-        <h3>Notizen</h3><p id="pv-notes"></p>
       </section>
       <section class="person-view-section" id="pv-verlauf-section" data-rolle="eigentuemer">
         <details id="pv-verlauf">
@@ -1031,8 +1031,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=401"></script>
-<script src="app.js?v=401"></script>
-<script src="chronik.js?v=401"></script>
+<script src="hinweise.js?v=402"></script>
+<script src="app.js?v=402"></script>
+<script src="chronik.js?v=402"></script>
 </body>
 </html>
