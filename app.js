@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 403
+// Partezettel Archiv – Version 404
+// v404: Gruppenfoto austauschen (bessere Qualität/koloriert) – Personen und Markierungen bleiben erhalten.
 // v403: 📷-Schalter blendet die Schlüsselfotos auch in der Ahnentafel aus.
 // v402: Personenansicht neu geordnet – Eltern, Ehepartner, Kinder, Notizen, dann Wohnorte, Kirchenbücher, Fotos, Links, Zeitgeschehen, Sprachnotizen, Verlauf.
 // v401: Jede gewählte Person (antippen, Suche, Ansichtswechsel) steht mittig im Stammbaum.
@@ -1392,9 +1393,9 @@ function closePhotoEditor(result) {
   if (resolve) resolve(result);
 }
 
-async function blobZuJPEGUnter200KB(blob) {
+async function blobZuJPEGUnter200KB(blob, maxKB = 200) {
   if (!blob) return null;
-  const MAX_BYTES = 200 * 1024;
+  const MAX_BYTES = maxKB * 1024;   // v404: beim Austauschen von Gruppenfotos darf es größer sein (bessere Qualität)
   if (blob.size <= MAX_BYTES && blob.type === "image/jpeg") return new File([blob], "partezettel.jpg", { type: "image/jpeg" });
 
   const img = await loadImage(await bildZuDataURL(blob));
@@ -5796,6 +5797,54 @@ const fotoPersonenMessage = document.getElementById("foto-personen-message");
 const gruppenfotoBearbeitenTitel = document.getElementById("gruppenfoto-bearbeiten-titel");
 
 
+
+// v404: Gruppenfoto austauschen (bessere Qualität, koloriert …) – Markierungen bleiben erhalten,
+// weil sie in Prozent der Bildfläche gespeichert sind.
+const bildMasse = (src) => new Promise((ok) => { const i = new Image(); i.onload = () => ok({ w: i.naturalWidth, h: i.naturalHeight }); i.onerror = () => ok(null); i.src = src; });
+document.getElementById("gruppenfoto-austauschen-btn")?.addEventListener("click", () => document.getElementById("gruppenfoto-austauschen-input")?.click());
+document.getElementById("gruppenfoto-austauschen-input")?.addEventListener("change", async (e) => {
+  const datei = e.target.files?.[0];
+  e.target.value = "";
+  const foto = fotoPersonenAktuell;
+  const msg = document.getElementById("gruppenfoto-austauschen-message");
+  if (!datei || !foto) return;
+  const knopf = document.getElementById("gruppenfoto-austauschen-btn");
+  try {
+    knopf.disabled = true;
+    msg.textContent = "Foto anpassen …";
+    const edited = await openPhotoEditor(datei);
+    if (!edited) { msg.textContent = "Nicht übernommen."; return; }
+    const optimiert = await blobZuJPEGUnter200KB(edited, 450);
+    if (!optimiert) throw new Error("Foto konnte nicht optimiert werden.");
+    // Seitenverhältnis vergleichen – weicht es ab, können die Markierungen verrutschen
+    const alt = await bildMasse(fotoMarkierbild.src);
+    const neuUrl = URL.createObjectURL(optimiert);
+    const neu = await bildMasse(neuUrl);
+    if (alt && neu && alt.w && neu.w) {
+      const a = alt.w / alt.h, b = neu.w / neu.h;
+      if (Math.abs(a - b) / a > 0.03 && fotoMarkierungen.length
+        && !confirm(`Das neue Bild hat ein anderes Seitenverhältnis (${neu.w}×${neu.h} statt ${alt.w}×${alt.h}).\nDie ${fotoMarkierungen.length} Markierungen bleiben, können aber etwas verrutschen – danach einfach verschieben.\n\nTrotzdem austauschen?`)) { msg.textContent = "Nicht ausgetauscht."; URL.revokeObjectURL(neuUrl); return; }
+    }
+    const path = `gruppenfotos/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+    msg.textContent = `Lade hoch … (${Math.round(optimiert.size / 1024)} KB)`;
+    const { error: upErr } = await sb.storage.from(BUCKET_FOTOS).upload(path, optimiert, { contentType: "image/jpeg", upsert: false });
+    if (upErr) throw upErr;
+    const altPfad = foto.dateipfad;
+    const { error: updErr } = await sb.from("fotos").update({ dateipfad: path }).eq("id", foto.id);
+    if (updErr) { await sb.storage.from(BUCKET_FOTOS).remove([path]); throw updErr; }
+    foto.dateipfad = path;
+    // altes Bild nur löschen, wenn kein anderer Eintrag es noch verwendet
+    try {
+      const { data: andere } = await sb.from("fotos").select("id").eq("dateipfad", altPfad).limit(1);
+      if (altPfad && !(andere || []).length) await sb.storage.from(BUCKET_FOTOS).remove([altPfad]);
+    } catch {}
+    fotoMarkierbild.src = neuUrl;
+    msg.textContent = `✓ Bild ausgetauscht (${Math.round(optimiert.size / 1024)} KB) – Markierungen und Personen bleiben erhalten.`;
+    try { if (typeof ladeGruppenfotoListe === "function") ladeGruppenfotoListe(); } catch {}
+  } catch (err) {
+    msg.textContent = `Austauschen fehlgeschlagen: ${err.message || err}`;
+  } finally { knopf.disabled = false; }
+});
 
 const gruppenfotoMetadatenSpeichern = document.getElementById("gruppenfoto-metadaten-speichern");
 const gruppenfotoMetadatenMessage = document.getElementById("gruppenfoto-metadaten-message");
@@ -11439,7 +11488,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=403");
+      treeModul3D = await import("./tree3d.js?v=404");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
