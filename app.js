@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 404
+// Partezettel Archiv – Version 405
+// v405: Bearbeiten – bei nur einem Elternteil (oder vertauschter Reihenfolge) entscheidet das Geschlecht, ob Vater oder Mutter.
 // v404: Gruppenfoto austauschen (bessere Qualität/koloriert) – Personen und Markierungen bleiben erhalten.
 // v403: 📷-Schalter blendet die Schlüsselfotos auch in der Ahnentafel aus.
 // v402: Personenansicht neu geordnet – Eltern, Ehepartner, Kinder, Notizen, dann Wohnorte, Kirchenbücher, Fotos, Links, Zeitgeschehen, Sprachnotizen, Verlauf.
@@ -7139,9 +7140,20 @@ async function loadDetailFamilie(personId) {
     const a = detailPerson(aktuelleElternfamilie.partner_a_id);
     const b = detailPerson(aktuelleElternfamilie.partner_b_id);
 
-    // Elternzuordnung folgt der gespeicherten Partnerreihenfolge, nicht Geschlechtsdaten.
-    vaterId = a?.id || null;
-    mutterId = b?.id || null;
+    // v405: Grundsätzlich A = Vater, B = Mutter. Ist aber nur EIN Elternteil gespeichert (steht dann immer in A)
+    // oder sind die beiden vertauscht, entscheidet das Geschlecht – sonst erschien z. B. eine Mutter als „Vater“.
+    const weiblich = (p) => /^w/i.test(String(p?.geschlecht || ""));
+    const maennlich = (p) => /^m/i.test(String(p?.geschlecht || ""));
+    if (a && !b) {
+      if (weiblich(a)) mutterId = a.id; else vaterId = a.id;
+    } else if (!a && b) {
+      if (maennlich(b)) vaterId = b.id; else mutterId = b.id;
+    } else if (a && b && weiblich(a) && maennlich(b)) {
+      vaterId = b.id; mutterId = a.id;
+    } else {
+      vaterId = a?.id || null;
+      mutterId = b?.id || null;
+    }
   }
 
   [parentSelectVater, parentSelectMutter].forEach((select) => {
@@ -11488,7 +11500,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=404");
+      treeModul3D = await import("./tree3d.js?v=405");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
