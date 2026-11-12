@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 405
+// Partezettel Archiv – Version 406
+// v406: Eltern-Felder – das Geschlecht wurde für die Anzeige nicht mitgeladen, deshalb wirkte v405 nicht.
 // v405: Bearbeiten – bei nur einem Elternteil (oder vertauschter Reihenfolge) entscheidet das Geschlecht, ob Vater oder Mutter.
 // v404: Gruppenfoto austauschen (bessere Qualität/koloriert) – Personen und Markierungen bleiben erhalten.
 // v403: 📷-Schalter blendet die Schlüsselfotos auch in der Ahnentafel aus.
@@ -7069,7 +7070,7 @@ async function loadDetailFamilie(personId) {
   if (personenCache.length < 2) {
     const { data: familienPersonen, error: familienPersonenError } = await sb
       .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz")
+      .select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz")
       .order("nachname", { ascending: true });
     if (familienPersonenError) {
       debugLog(`❌ Personen für Familienauswahl laden: ${familienPersonenError.message}`);
@@ -7117,8 +7118,8 @@ async function loadDetailFamilie(personId) {
   if (detailPersonIds.size) {
     const { data: detailPersons, error: detailPersonsError } = await sb
       .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr")
-      .in("id", Array.from(detailPersonIds));
+      .select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr")
+      .in("id", Array.from(detailPersonIds));   // v406: geschlecht nötig für Vater/Mutter
     if (detailPersonsError) {
       debugLog(`❌ Personendaten für Familienanzeige: ${detailPersonsError.message}`);
     } else {
@@ -11500,7 +11501,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=405");
+      treeModul3D = await import("./tree3d.js?v=406");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
