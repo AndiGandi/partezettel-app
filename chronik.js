@@ -58,6 +58,7 @@ const ZEITGESCHEHEN = [
   [1809, "Aufstand in Tirol und Vorarlberg gegen Bayern und Napoleon (Andreas Hofer, Anton Schneider)"],
   [1810, "Andreas Hofer wird in Mantua hingerichtet"],
   [1811, "Über zwei Dutzend Männer werden zur Großen Armee Napoleons eingezogen; sechs fallen in Russland", "B"],
+  [1812, "Napoleons Russlandfeldzug: Vorarlberger kämpfen im bayerischen Heer, nur wenige kehren zurück"],
   [1813, "Völkerschlacht bei Leipzig"],
   [1814, "Laut Totenbuch sterben in der Pfarrei 61 Menschen, davon 18 Kinder", "B"],
   [1814, "Vorarlberg kommt wieder zu Österreich"],
