@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 406
+// Partezettel Archiv – Version 407
+// v407: neues Logo (Baum im Bogen) als App-Icon, Anmelde- und Kopfzeilen-Logo.
 // v406: Eltern-Felder – das Geschlecht wurde für die Anzeige nicht mitgeladen, deshalb wirkte v405 nicht.
 // v405: Bearbeiten – bei nur einem Elternteil (oder vertauschter Reihenfolge) entscheidet das Geschlecht, ob Vater oder Mutter.
 // v404: Gruppenfoto austauschen (bessere Qualität/koloriert) – Personen und Markierungen bleiben erhalten.
@@ -11501,7 +11502,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=406");
+      treeModul3D = await import("./tree3d.js?v=407");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
