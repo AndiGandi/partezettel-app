@@ -2150,9 +2150,19 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 /* v411 */
 .tree-zurueck:disabled { opacity: 0.45; }
 
-/* v412: schwebender Zurück-Knopf im Stammbaum – bleibt beim Verschieben des Baums an Ort und Stelle */
-.tree-viewport-wrap{position:relative}
-.tree-zurueck-schwebend{position:absolute;left:12px;bottom:12px;z-index:20;width:48px;height:48px;border-radius:50%;border:1px solid #c9d8cb;background:rgba(255,255,255,.94);color:#174f3b;font-size:1.45rem;font-weight:700;line-height:1;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 12px rgba(23,79,59,.22);cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
-.tree-zurueck-schwebend[hidden]{display:none}
-.tree-zurueck-schwebend:active{transform:scale(.94);background:#eef5ef}
-.tree-zurueck-schwebend:focus-visible{outline:3px solid #7fb08f;outline-offset:2px}
+/* v412: Kirchenbuch-Kurzanzeige (Eigentümer) */
+.pv-kb-kurz { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 0; font-size: 0.88rem; }
+.pv-kb-kurz__titel { color: var(--color-text-muted, #6b6459); margin-right: 2px; }
+.kb-chip { border: 1px solid var(--line, #d8d2c6); border-radius: 999px; padding: 3px 10px; font: 600 0.8rem/1.2 system-ui, sans-serif; background: transparent; cursor: pointer; }
+.kb-chip.is-da { background: #e6f2ea; border-color: #9cc9ab; color: #1f5f3a; }
+.kb-chip.is-fehlt { background: #fbeee6; border-color: #e3b393; color: #8a4a20; }
+.kb-chip--zu { color: var(--color-text-muted, #6b6459); font-weight: 500; }
+.kb-mini { display: inline-flex; align-items: center; gap: 2px; margin-left: 6px; vertical-align: middle; font: 700 0.62rem/1 system-ui, sans-serif; }
+.kb-mini__icon { font-size: 0.8rem; margin-right: 1px; }
+.kb-mini__b { padding: 2px 3px; border-radius: 4px; }
+.kb-mini__b.is-da { background: #2e7d4f; color: #fff; }
+.kb-mini__b.is-fehlt { background: transparent; color: #b5651d; border: 1px dashed #d9a273; }
+@media (prefers-color-scheme: dark) {
+  .kb-chip.is-da { background: #1d3a29; color: #9fd8b3; border-color: #3d7a55; }
+  .kb-chip.is-fehlt { background: #3a2619; color: #f0b98e; border-color: #8a5a36; }
+}

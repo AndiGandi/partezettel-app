@@ -1,5 +1,5 @@
 // Partezettel Archiv – Version 412
-// v412: Stammbaum – schwebender „←“-Knopf direkt im Baum; Android-Zurück-Taste/Wischgeste springen zur vorigen Ansicht.
+// v412: Kirchenbuch-Kurzanzeige für Eigentümer (Personenansicht oben, Bestandsliste T/Tr/S, Filter „Kirchenbuch fehlt“).
 // v411: Stammbaum – „← Zurück“ zur vorigen Ansicht; unbekannte Vorfahren/Partner werden nicht mehr als Platzhalter gezeigt.
 // v410: Einheitliche Eingabe – Trauungsbuch in der Ehe wie Tauf-/Sterbebuch, ✏️ bei Kirchenbüchern in der Personenansicht, Ehe-Angaben mit gemeinsamem „Speichern“, Hinweise je Abschnitt.
 // v409: Stammlinien (Schrunser / Bartholomäberg Linie): Kürzel S/B, Zeile in der Personenansicht, Bestand-Filter, Stammbaum-Vorlagen, Chronik-Karte.
@@ -1255,7 +1255,6 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       if (relationResult) relationResult.innerHTML = "";
       if (relationPanel) relationPanel.hidden = true;
       treeRelationshipSelection = { personAId: null, personBId: null };
-      treeBrowserVerlaufAufraeumen();   // v412
     }
     document.querySelectorAll(".tab-btn").forEach((b) => {
       b.classList.remove("is-active");
@@ -3001,6 +3000,103 @@ function pruefPunkt(p) {
   s.setAttribute("aria-label", s.title);
   return s;
 }
+// v412: Kirchenbuch-Kurzanzeige (nur Eigentümer) – oben in der Personenansicht und in der Bestandsliste
+const KB_ARTEN = [
+  { key: "T", name: "Taufbuch", erwartet: () => true },
+  { key: "Tr", name: "Trauungsbuch", erwartet: (p, ehen) => ehen > 0 },
+  { key: "S", name: "Sterbebuch", erwartet: (p) => !!(p?.sterbedatum || p?.sterbejahr) },
+];
+function zeigeKbKurz(person, ehenAnzahl) {
+  const ziel = document.getElementById("pv-lifetime");
+  if (!ziel) return;
+  let box = document.getElementById("pv-kb-kurz");
+  if (!box) { box = document.createElement("p"); box.id = "pv-kb-kurz"; box.className = "pv-kb-kurz"; }
+  // immer direkt unter den Lebensdaten bzw. den Stammlinien
+  (document.getElementById("pv-linien") || ziel).insertAdjacentElement("afterend", box);
+  if (!rolleIstEigentuemer()) { box.hidden = true; return; }
+  const rows = [...document.querySelectorAll("#pv-books-list .person-view-book-row")];
+  const vorhanden = (name) => rows.filter((r) => (r.querySelector("a")?.textContent || "").includes(name));
+  box.replaceChildren();
+  const kopf = document.createElement("span"); kopf.className = "pv-kb-kurz__titel"; kopf.textContent = "📖 Kirchenbücher:"; box.appendChild(kopf);
+  for (const a of KB_ARTEN) {
+    const treffer = vorhanden(a.name);
+    const erwartet = a.erwartet(person, ehenAnzahl);
+    if (!treffer.length && !erwartet) continue;
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = `kb-chip ${treffer.length ? "is-da" : "is-fehlt"}`;
+    chip.textContent = `${a.name}${treffer.length > 1 ? ` ×${treffer.length}` : ""} ${treffer.length ? "✓" : "–"}`;
+    chip.title = treffer.length ? `${a.name} öffnen` : `${a.name} fehlt – jetzt ergänzen`;
+    chip.addEventListener("click", () => {
+      if (treffer.length === 1) { const href = treffer[0].querySelector("a")?.href; if (href) { window.open(href, "_blank", "noopener"); return; } }
+      if (treffer.length > 1) { document.getElementById("pv-books-section")?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+      kbBearbeitenOeffnen(person.id, a.key === "T" ? "taufbuch" : a.key === "S" ? "sterbebuch" : "trauung");
+    });
+    box.appendChild(chip);
+  }
+  if (rows.length) {
+    const zu = document.createElement("button"); zu.type = "button"; zu.className = "kb-chip kb-chip--zu"; zu.textContent = "↓ zu den Links";
+    zu.addEventListener("click", () => document.getElementById("pv-books-section")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    box.appendChild(zu);
+  }
+  box.hidden = box.children.length <= 1;
+}
+
+// Filter „Kirchenbuch fehlt“ nur für Eigentümer (iPad-Safari blendet <option> per CSS nicht aus → entfernen/wieder einsetzen)
+let kbFilterOptionenAblage = null;
+function kbFilterOptionenAnpassen() {
+  const sel = document.getElementById("personen-pruef-filter");
+  if (!sel) return;
+  if (!kbFilterOptionenAblage) kbFilterOptionenAblage = [...sel.querySelectorAll('option[value^="kb:"]')];
+  const darf = rolleIstEigentuemer();
+  for (const o of kbFilterOptionenAblage) {
+    if (darf && !o.parentNode) sel.appendChild(o);
+    if (!darf && o.parentNode) o.remove();
+  }
+  if (!darf && String(personenPruefFilter || "").startsWith("kb:")) { sel.value = ""; sel.dispatchEvent(new Event("change", { bubbles: true })); }
+}
+// Übersicht für die Bestandsliste: welche Bücher sind je Person verlinkt (Eigentümer)
+let kbUebersicht = new Map();   // personId -> { T, Tr, S, ehen, tot }
+let kbUebersichtLauf = null;
+async function kbUebersichtLaden() {
+  if (!rolleIstEigentuemer()) return;
+  if (kbUebersichtLauf) return kbUebersichtLauf;
+  kbUebersichtLauf = (async () => {
+    try {
+      const [pe, fa, tq] = await Promise.all([
+        alleZeilenLaden(() => sb.from("personen").select("id, taufbuch_link, sterbebuch_link, trauungsbuch_link, sterbedatum, sterbejahr").order("id")),
+        alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp").order("id")),
+        alleZeilenLaden(() => sb.from("familien_trauungsbuch_quellen").select("familie_id, trauungsbuch_link").order("familie_id")),
+      ]);
+      if (pe.error || fa.error) return;
+      const m = new Map();
+      for (const p of pe.data || []) m.set(p.id, { T: !!p.taufbuch_link, Tr: !!p.trauungsbuch_link, S: !!p.sterbebuch_link, ehen: 0, tot: !!(p.sterbedatum || p.sterbejahr) });
+      const mitQuelle = new Set((tq.data || []).filter((q) => q.trauungsbuch_link).map((q) => q.familie_id));
+      for (const f of fa.data || []) {
+        if (!f.partner_a_id || !f.partner_b_id || f.familientyp === "Eltern") continue;
+        for (const id of [f.partner_a_id, f.partner_b_id]) { const e = m.get(id); if (!e) continue; e.ehen += 1; if (mitQuelle.has(f.id)) e.Tr = true; }
+      }
+      kbUebersicht = m;
+      document.dispatchEvent(new CustomEvent("kb-uebersicht-bereit"));
+    } catch (e) { debugLog(`⚠️ Kirchenbuch-Übersicht laden: ${e.message || e}`); }
+    finally { setTimeout(() => { kbUebersichtLauf = null; }, 0); }
+  })();
+  return kbUebersichtLauf;
+}
+function kbChipsElement(personId) {
+  if (!rolleIstEigentuemer()) return null;
+  const e = kbUebersicht.get(personId);
+  if (!e) return null;
+  const sp = document.createElement("span"); sp.className = "kb-mini";
+  const teile = [["T", "Taufbuch", true], ["Tr", "Trauungsbuch", e.ehen > 0], ["S", "Sterbebuch", e.tot]];
+  sp.title = teile.filter(([, , erw]) => erw).map(([k, n]) => `${n}: ${e[k] ? "verlinkt" : "fehlt"}`).join(" · ");
+  sp.innerHTML = `<span class="kb-mini__icon" aria-hidden="true">📖</span>` + teile.filter(([, , erw]) => erw).map(([k]) => `<span class="kb-mini__b ${e[k] ? "is-da" : "is-fehlt"}">${k}</span>`).join("");
+  return sp;
+}
+document.addEventListener("kb-uebersicht-bereit", () => {
+  try { for (const karte of personenKartenCache.values()) if (karte?.person) aktualisierePersonenKarte(karte, karte.person); } catch {}
+});
+
 // v410: Stift neben jedem Kirchenbuch in der Personenansicht – öffnet „Bearbeiten“ direkt an der richtigen Stelle
 function kbStiftAnhaengen(row, personId, ziel) {
   if (!rolleDarfSchreiben()) return;
@@ -3862,6 +3958,7 @@ function aktualisierePersonenKarte(karte, p) {
   const punkt = pruefPunkt(p);
   if (punkt) karte.name.prepend(punkt);
   { const lb = linienBadgesElement(p.id); if (lb) karte.name.appendChild(lb); }
+  { const kb = kbChipsElement(p.id); if (kb) karte.name.appendChild(kb); }   // v412
   const kartenLedigenname = String(p.Ledigenname || p.ledigenname || "").trim();
   if (kartenLedigenname) {
     const maiden = document.createElement("span");
@@ -4079,6 +4176,8 @@ async function renderPersonenList(personen) {
   if (filterFeld?.hidden && personenPruefFilter) { personenPruefFilter = ""; const sel = document.getElementById("personen-pruef-filter"); if (sel) sel.value = ""; }
   beobachteSchluesselfotos();
   if (!stammlinienInfo.size) stammlinienLaden();   // v409
+  if (rolleIstEigentuemer()) kbUebersichtLaden();   // v412
+  kbFilterOptionenAnpassen();
   // Trefferzähler („272 Personen“) nach jedem Neuaufbau der Liste aktualisieren.
   if (typeof window.partezettelPersonenSuche === "function") {
     window.partezettelPersonenSuche(document.getElementById("search-input")?.value || "");
@@ -4124,6 +4223,15 @@ function pruefFilterPasst(p) {
   if (personenPruefFilter === "eigene") return !p.herkunft_quelle;
   if (personenPruefFilter === "ohne-nurname") return !istNurName(p);
   if (personenPruefFilter === "nurname") return istNurName(p);
+  if (personenPruefFilter.startsWith("kb:")) {   // v412: fehlende Kirchenbuch-Links
+    const e = kbUebersicht.get(p.id); if (!e) return false;
+    const art = personenPruefFilter.slice(3);
+    if (art === "T") return !e.T;
+    if (art === "Tr") return e.ehen > 0 && !e.Tr;
+    if (art === "S") return e.tot && !e.S;
+    if (art === "alle") return e.T && (e.ehen === 0 || e.Tr) && (!e.tot || e.S);
+    return true;
+  }
   if (personenPruefFilter.startsWith("linie:")) {   // v409
     const [, key, art] = personenPruefFilter.split(":");
     const l = stammlinienInfo.get(p.id) || [];
@@ -4659,6 +4767,7 @@ async function openPersonDetail(personId, options = {}) {
       }
     }
 
+    try { zeigeKbKurz(person, partnerFamilies.length); } catch (e) { debugLog(`⚠️ Kirchenbuch-Übersicht: ${e.message || e}`); }   // v412
     const spouseIds = [...new Set(partnerFamilies.map(f => f.partner_a_id === personId ? f.partner_b_id : f.partner_a_id).filter(Boolean))];
     // v372: auch Kinder aus Familien mit nur einem Elternteil (z. B. ledige oder verwitwete Mutter)
     const childFamilyIds = new Set((familyRows || []).map(f => f.id));
@@ -5441,6 +5550,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     debugLog(`⚠️ Trauungsbuch-Synchronisierung: ${err.message || err}`);
   }
 
+  if (rolleIstEigentuemer()) kbUebersichtLaden();   // v412: Kirchenbuch-Übersicht aktualisieren
   msg.textContent = "Gespeichert ✓";
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
   aktualisiereLinkButton("d-trauungsbuch-open", document.getElementById("d-trauungsbuch-link").value.trim());
@@ -9600,14 +9710,8 @@ function initTreeDescendants() {
 }
 
 // v411: Verlauf der Stammbaum-Ansichten – „← Zurück“ führt zur vorigen Ansicht
-// v412: schwebender „←“-Knopf im Baum; Android-Zurück-Taste und Wischgeste (Browser-Verlauf) gehen eine Ansicht zurück
 let treeVerlauf = [];
 let treeVerlaufWiederherstellen = false;
-let treeBrowserEintraege = 0;          // so viele Browser-Verlaufseinträge hat der Stammbaum angelegt
-let treeBrowserPopIgnorieren = 0;      // popstate-Ereignisse, die vom Aufräumen stammen
-function treeTabAktiv() {
-  return document.querySelector(".tab-btn.is-active")?.dataset.tab === "stammbaum";
-}
 function treeVerlaufMerken(rootId) {
   if (treeVerlaufWiederherstellen || !rootId) return;
   const z = { root: rootId, mode: treeViewMode, preset: document.getElementById("tree-line-preset")?.value || "", presetObj: treeActivePreset };
@@ -9615,25 +9719,15 @@ function treeVerlaufMerken(rootId) {
   if (l && l.root === z.root && l.mode === z.mode && l.preset === z.preset) return;
   treeVerlauf.push(z);
   if (treeVerlauf.length > 40) treeVerlauf.shift();
-  // v412: echten Ansichtswechsel auch im Browser-Verlauf vermerken
-  if (treeVerlauf.length >= 2 && treeTabAktiv()) {
-    try { history.pushState({ fsStammbaum: true }, ""); treeBrowserEintraege++; } catch {}
-  }
   treeZurueckKnopfAktualisieren();
 }
 function treeZurueckKnopfAktualisieren() {
+  const b = document.getElementById("tree-zurueck");
+  if (!b) return;
+  b.disabled = treeVerlauf.length < 2;
   const v = treeVerlauf[treeVerlauf.length - 2];
   const namen = { classic: "Familie", cards: "Generationen", pedigree: "Ahnentafel", descendants: "Nachkommen", tree3d: "3D-Baum" };
-  const titel = v ? `Zurück zu: ${namen[v.mode] || ""} · ${treePersonLabel(v.root)}` : "Keine vorige Ansicht";
-  for (const id of ["tree-zurueck", "tree-zurueck-schwebend"]) {
-    const b = document.getElementById(id);
-    if (!b) continue;
-    b.disabled = treeVerlauf.length < 2;
-    b.title = titel;
-    b.setAttribute("aria-label", titel);
-  }
-  const schwebend = document.getElementById("tree-zurueck-schwebend");
-  if (schwebend) schwebend.hidden = treeVerlauf.length < 2;
+  b.title = v ? `Zurück zu: ${namen[v.mode] || ""} · ${treePersonLabel(v.root)}` : "Keine vorige Ansicht";
 }
 function treeZurueck() {
   if (treeVerlauf.length < 2) return;
@@ -9652,39 +9746,7 @@ function treeZurueck() {
   } finally { treeVerlaufWiederherstellen = false; }
   treeZurueckKnopfAktualisieren();
 }
-// v412: Knopf-Klick geht über den Browser-Verlauf, damit Knopf und Zurück-Geste gleich zählen
-function treeZurueckKlick() {
-  if (treeVerlauf.length < 2) return;
-  if (treeBrowserEintraege > 0) { history.back(); return; }   // popstate erledigt den Rest
-  treeZurueck();
-}
-// v412: Beim Verlassen des Stammbaums die angelegten Browser-Einträge wieder entfernen,
-// damit die Zurück-Geste in anderen Bereichen nicht unsichtbar im Baum „verbraucht“ wird.
-function treeBrowserVerlaufAufraeumen() {
-  if (treeBrowserEintraege <= 0) return;
-  const n = treeBrowserEintraege;
-  treeBrowserEintraege = 0;
-  treeBrowserPopIgnorieren++;
-  try { history.go(-n); } catch { treeBrowserPopIgnorieren--; }
-}
-window.addEventListener("popstate", () => {
-  if (treeBrowserPopIgnorieren > 0) { treeBrowserPopIgnorieren--; return; }
-  if (treeBrowserEintraege <= 0) return;
-  treeBrowserEintraege--;
-  // Ist die Personenansicht offen, schließt die Zurück-Geste zuerst diese – der Baum bleibt, wie er ist.
-  const pv = document.getElementById("person-view-overlay");
-  if (pv && !pv.hidden) {
-    try { history.pushState({ fsStammbaum: true }, ""); treeBrowserEintraege++; } catch {}
-    document.getElementById("pv-close")?.click();
-    return;
-  }
-  if (!treeTabAktiv()) return;
-  treeZurueck();
-});
-document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("tree-zurueck")?.addEventListener("click", treeZurueckKlick);
-  document.getElementById("tree-zurueck-schwebend")?.addEventListener("click", treeZurueckKlick);
-});
+document.addEventListener("DOMContentLoaded", () => document.getElementById("tree-zurueck")?.addEventListener("click", treeZurueck));
 
 function renderStammbaum(rootId) {
   if (!treeFilterAktiv) treeVerlaufMerken(rootId);

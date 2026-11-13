@@ -334,6 +334,10 @@
         <option value="linie:bberg">Bartholomäberg Linie · alle</option>
         <option value="linie:bberg:mann">Bartholomäberg Linie · Mannesstamm</option>
         <option value="linie:beide">Beiden Linien angehörig</option>
+        <option value="kb:T" data-rolle="eigentuemer">Kirchenbuch fehlt: Taufbuch</option>
+        <option value="kb:Tr" data-rolle="eigentuemer">Kirchenbuch fehlt: Trauungsbuch (Verheiratete)</option>
+        <option value="kb:S" data-rolle="eigentuemer">Kirchenbuch fehlt: Sterbebuch (Verstorbene)</option>
+        <option value="kb:alle" data-rolle="eigentuemer">Kirchenbücher vollständig</option>
       </select>
     </label>
     <ul id="personen-list" class="personen-list"></ul>
@@ -449,15 +453,12 @@
         <button type="button" id="tree-fotos-toggle" class="btn btn--ghost tree-fotos-toggle is-active" aria-pressed="true" title="Schlüsselfotos ausblenden">📷</button>
       </div>
     </div>
-    <div class="tree-viewport-wrap">
-      <div id="tree-viewport" class="tree-viewport">
-        <div id="tree-stage" class="tree-stage" hidden></div>
-        <div id="tree-classic-stage" class="tree-classic-stage"></div>
-        <div id="tree-pedigree-stage" class="tree-pedigree-stage" hidden></div>
-        <div id="tree-descendants-stage" class="tree-descendants-stage" hidden></div>
-        <div id="tree-3d-stage" class="tree-3d-stage" hidden></div>
-      </div>
-      <button type="button" id="tree-zurueck-schwebend" class="tree-zurueck-schwebend" hidden disabled title="Keine vorige Ansicht" aria-label="Zurück zur vorigen Ansicht">←</button>
+    <div id="tree-viewport" class="tree-viewport">
+      <div id="tree-stage" class="tree-stage" hidden></div>
+      <div id="tree-classic-stage" class="tree-classic-stage"></div>
+      <div id="tree-pedigree-stage" class="tree-pedigree-stage" hidden></div>
+      <div id="tree-descendants-stage" class="tree-descendants-stage" hidden></div>
+      <div id="tree-3d-stage" class="tree-3d-stage" hidden></div>
     </div>
   </section>
 
