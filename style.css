@@ -2146,3 +2146,6 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .familie-item .familie-trauungsbuch .familie-source-row { width: 4.2em; flex: 0 0 auto; }
 .familie-item .familie-trauungsbuch .source-side-select { width: auto; flex: 0 0 auto; }
 .familie-item .familie-trauungsbuch .source-edit-btn { flex: 0 0 auto; }
+
+/* v411 */
+.tree-zurueck:disabled { opacity: 0.45; }

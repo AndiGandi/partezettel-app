@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 410
+// Partezettel Archiv – Version 411
+// v411: Stammbaum – „← Zurück“ zur vorigen Ansicht; unbekannte Vorfahren/Partner werden nicht mehr als Platzhalter gezeigt.
 // v410: Einheitliche Eingabe – Trauungsbuch in der Ehe wie Tauf-/Sterbebuch, ✏️ bei Kirchenbüchern in der Personenansicht, Ehe-Angaben mit gemeinsamem „Speichern“, Hinweise je Abschnitt.
 // v409: Stammlinien (Schrunser / Bartholomäberg Linie): Kürzel S/B, Zeile in der Personenansicht, Bestand-Filter, Stammbaum-Vorlagen, Chronik-Karte.
 // v408: Zeitgeschehen – Eintrag 1812 Russlandfeldzug Napoleons ergänzt.
@@ -9369,9 +9370,7 @@ function treePedigreeCollect(rootId, gens) {
 
 function treePedigreeNodeHtml(k, m, y, rootId) {
   const style = `left:${k.gen * (m.cardW + m.gap)}px;top:${y - m.cardH / 2}px;width:${m.cardW}px;height:${m.cardH}px`;
-  if (!k.person) {
-    return `<div class="tree-ped-node tree-ped-node--unknown" style="${style}"><span class="tree-ped-node__name">${escTree(k.rolle)} unbekannt</span><span class="tree-ped-node__nr">${k.kekule}</span></div>`;
-  }
+  if (!k.person) return "";   // v411: unbekannte Vorfahren werden nicht angezeigt
   const p = k.person;
   const g = treePersonGender(p);
   const name = treeAnzeigeName(p).name;
@@ -9448,14 +9447,16 @@ function renderAhnentafel(rootId) {
     if (!k.person || k.gen >= gens - 1) continue;
     const vater = nachSchluessel.get(`${k.gen + 1}:${k.idx * 2}`);
     const mutter = nachSchluessel.get(`${k.gen + 1}:${k.idx * 2 + 1}`);
-    if (!vater || !mutter) continue;
+    // v411: Linien nur zu erfassten Eltern
+    const bekannte = [vater, mutter].filter((e) => e?.person);
+    if (!bekannte.length) continue;
     const x1 = k.gen * (m.cardW + m.gap) + m.cardW;
     const x2 = (k.gen + 1) * (m.cardW + m.gap);
     const xm = x1 + m.gap / 2;
     const y1 = mitteY(k);
-    const yv = mitteY(vater);
-    const ym = mitteY(mutter);
-    pfade.push(`M${x1} ${y1}H${xm}M${xm} ${yv}V${ym}M${xm} ${yv}H${x2}M${xm} ${ym}H${x2}`);
+    const ys = bekannte.map(mitteY);
+    const yTop = Math.min(y1, ...ys), yBot = Math.max(y1, ...ys);
+    pfade.push(`M${x1} ${y1}H${xm}M${xm} ${yTop}V${yBot}` + ys.map((y) => `M${xm} ${y}H${x2}`).join(""));
   }
 
   const bekannt = knoten.filter((k) => k.person && k.gen > 0).length;
@@ -9596,7 +9597,47 @@ function initTreeDescendants() {
   });
 }
 
+// v411: Verlauf der Stammbaum-Ansichten – „← Zurück“ führt zur vorigen Ansicht
+let treeVerlauf = [];
+let treeVerlaufWiederherstellen = false;
+function treeVerlaufMerken(rootId) {
+  if (treeVerlaufWiederherstellen || !rootId) return;
+  const z = { root: rootId, mode: treeViewMode, preset: document.getElementById("tree-line-preset")?.value || "", presetObj: treeActivePreset };
+  const l = treeVerlauf[treeVerlauf.length - 1];
+  if (l && l.root === z.root && l.mode === z.mode && l.preset === z.preset) return;
+  treeVerlauf.push(z);
+  if (treeVerlauf.length > 40) treeVerlauf.shift();
+  treeZurueckKnopfAktualisieren();
+}
+function treeZurueckKnopfAktualisieren() {
+  const b = document.getElementById("tree-zurueck");
+  if (!b) return;
+  b.disabled = treeVerlauf.length < 2;
+  const v = treeVerlauf[treeVerlauf.length - 2];
+  const namen = { classic: "Familie", cards: "Generationen", pedigree: "Ahnentafel", descendants: "Nachkommen", tree3d: "3D-Baum" };
+  b.title = v ? `Zurück zu: ${namen[v.mode] || ""} · ${treePersonLabel(v.root)}` : "Keine vorige Ansicht";
+}
+function treeZurueck() {
+  if (treeVerlauf.length < 2) return;
+  treeVerlauf.pop();
+  const v = treeVerlauf[treeVerlauf.length - 1];
+  treeVerlaufWiederherstellen = true;
+  try {
+    const sel = document.getElementById("tree-person-select"), such = document.getElementById("tree-person-search"), pre = document.getElementById("tree-line-preset");
+    if (sel) { if (![...sel.options].some((o) => o.value === v.root)) sel.appendChild(new Option(treePersonLabel(v.root), v.root)); sel.value = v.root; }
+    if (such) such.value = treePersonLabel(v.root);
+    if (pre) pre.value = v.preset;
+    treeActivePreset = v.presetObj || null;
+    setTreeViewMode(v.mode, v.root);
+    renderStammbaum(v.root);
+    try { treeLinieMittigZeigen(v.root); } catch {}
+  } finally { treeVerlaufWiederherstellen = false; }
+  treeZurueckKnopfAktualisieren();
+}
+document.addEventListener("DOMContentLoaded", () => document.getElementById("tree-zurueck")?.addEventListener("click", treeZurueck));
+
 function renderStammbaum(rootId) {
+  if (!treeFilterAktiv) treeVerlaufMerken(rootId);
   treeCousinsRefreshIfOpen(rootId);
   if (treeActivePreset && !treeFilterAktiv) {
     treeFilterAktiv = true;
@@ -9705,12 +9746,12 @@ function renderStammbaum(rootId) {
       block.innerHTML = `
         <div class="tree-couple">
           ${treePersonCard(root, rootId, "", stammlinie)}
-          <div class="tree-relationship ${isMarriage ? "tree-relationship--marriage" : ""}" aria-label="${escTree(relationType)}">
+          ${partner ? `<div class="tree-relationship ${isMarriage ? "tree-relationship--marriage" : ""}" aria-label="${escTree(relationType)}">
             <span class="tree-marriage__label">${escTree(relationType)}</span>
             ${isMarriage ? `<span class="tree-marriage__rings" aria-hidden="true">◯◯</span>` : `<span class="tree-partner-link" aria-hidden="true"></span>`}
           </div>
-          ${partnerCard}
-        </div>`;
+          ${partnerCard}` : ""}
+        </div>`;   // v411: ohne bekannten Partner keine Platzhalter-Karte
       rootSection.appendChild(block);
     }
   } else {
@@ -11649,7 +11690,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=410");
+      treeModul3D = await import("./tree3d.js?v=411");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
