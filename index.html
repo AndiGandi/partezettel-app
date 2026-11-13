@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 409 -->
+    <!-- Version 410 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=409">
+<link rel="stylesheet" href="style.css?v=410">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -101,7 +101,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 409</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 410</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -759,7 +759,7 @@
 
     <div class="detail-body">
       <fieldset class="field-group person-edit-fields">
-        <legend>Person</legend>
+        <legend>Person <small class="speichern-hinweis">mit „Speichern“</small></legend>
         <div class="person-name-keyphoto-row">
           <div class="person-name-fields">
             <label class="field"><span>Vorname *</span><input type="text" id="d-vorname" autocapitalize="words" autocorrect="off" spellcheck="false" autocomplete="off"></label>
@@ -805,7 +805,7 @@
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>Fotos</legend>
+        <legend>Fotos <small class="sofort-hinweis">speichert sofort</small></legend>
         <div id="d-fotos-list" class="detail-media-list"></div>
         <div class="capture-row">
           <label class="btn btn--secondary capture-btn">
@@ -821,7 +821,7 @@
       </fieldset>
 
       <fieldset class="field-group">
-        <legend>Sprachnotizen</legend>
+        <legend>Sprachnotizen <small class="sofort-hinweis">speichert sofort</small></legend>
         <div id="d-audio-list" class="detail-media-list"></div>
         <button type="button" id="d-audio-record-btn" class="btn btn--secondary">🎙️ Neue Aufnahme hinzufügen</button>
         <p id="d-audio-message" class="form-message"></p>
@@ -835,7 +835,7 @@
       </fieldset>
 
       <fieldset class="field-group" id="d-partner-gruppe">
-        <legend>Partner / Partnerin <small class="sofort-hinweis">speichert sofort</small></legend>
+        <legend>Partner / Partnerin <small class="sofort-hinweis">＋ und 🗑️ sofort</small> <small class="speichern-hinweis">Angaben mit „Speichern“</small></legend>
         <div id="d-partner-list" class="detail-media-list"></div>
         <button type="button" id="d-partner-plus" class="btn btn--plus btn--full">＋ Partner/in hinzufügen</button>
         <details class="mehr-angaben partner-ohne" id="d-partner-ohne">
@@ -885,12 +885,12 @@
       </fieldset>
 
       <fieldset class="field-group" id="d-kinder-gruppe">
-        <legend>Kinder <small class="sofort-hinweis">speichert sofort</small></legend>
+        <legend>Kinder <small class="sofort-hinweis">＋ und 🗑️ sofort</small> <small class="speichern-hinweis">Namen ohne Datenblatt mit „Speichern“</small></legend>
         <div id="d-kinder-list" class="detail-media-list"></div>
         <button type="button" id="d-kind-plus" class="btn btn--plus btn--full">＋ Kind hinzufügen</button>
         <details class="mehr-angaben partner-ohne" id="d-kind-ohne">
           <summary>Kinder ohne eigenes Datenblatt (nur Name)</summary>
-          <p class="capture-status">Für Kinder, von denen nur der Name bekannt ist. Werden später Daten bekannt: „↗ Datenblatt“ antippen – dann wird eine richtige Person angelegt und verbunden.</p>
+          <p class="capture-status">Für Kinder, von denen nur der Name bekannt ist. Gespeichert wird mit „Speichern“ unten. Werden später Daten bekannt: „↗ Datenblatt“ antippen – dann wird eine richtige Person angelegt und verbunden.</p>
           <div id="d-kind-ohne-liste"></div>
           <button type="button" id="d-kind-ohne-plus" class="btn btn--ghost">＋ Namen hinzufügen</button>
         </details>
@@ -1027,8 +1027,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=409"></script>
-<script src="app.js?v=409"></script>
-<script src="chronik.js?v=409"></script>
+<script src="hinweise.js?v=410"></script>
+<script src="app.js?v=410"></script>
+<script src="chronik.js?v=410"></script>
 </body>
 </html>

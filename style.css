@@ -2132,3 +2132,17 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
   .linie-badge.linie-schruns.is-tochter { color: #7cc79a; border-color: #7cc79a; }
   .linie-badge.linie-bberg.is-tochter { color: #8fb1ea; border-color: #8fb1ea; }
 }
+
+/* v410: einheitliche Speicher-Hinweise und Trauungsbuch in der Ehe-Karte */
+.speichern-hinweis { font: 500 0.72rem/1 system-ui, sans-serif; color: var(--color-text-muted, #6b6459); background: rgba(176, 140, 60, 0.13); border-radius: 999px; padding: 3px 8px; margin-left: 6px; vertical-align: middle; letter-spacing: 0; text-transform: none; }
+.familie-item .familie-trauungsbuch { margin: 8px 0 4px; display: block; }
+.familie-item .familie-trauungsbuch .source-heading { display: block; font-size: 0.82rem; color: var(--color-text-muted, #6b6459); margin-bottom: 4px; }
+.familie-item .familie-trauungsbuch .familie-trauungsbuch-zeile { display: block; font-size: 0.8rem; color: var(--color-text-muted, #6b6459); margin-top: 3px; }
+.familie-item .familie-source-url.source-url-editing { display: block; width: 100%; margin: 0 0 6px; }
+.person-view-book-row .pv-book-edit { margin-left: auto; }
+.is-hervorgehoben { outline: 3px solid rgba(46, 125, 79, 0.55); outline-offset: 4px; border-radius: 10px; }
+.familie-item .familie-trauungsbuch .source-button-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.familie-item .familie-trauungsbuch .source-open-btn { flex: 0 0 auto; width: auto; text-decoration: none; }
+.familie-item .familie-trauungsbuch .familie-source-row { width: 4.2em; flex: 0 0 auto; }
+.familie-item .familie-trauungsbuch .source-side-select { width: auto; flex: 0 0 auto; }
+.familie-item .familie-trauungsbuch .source-edit-btn { flex: 0 0 auto; }

@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 409
+// Partezettel Archiv – Version 410
+// v410: Einheitliche Eingabe – Trauungsbuch in der Ehe wie Tauf-/Sterbebuch, ✏️ bei Kirchenbüchern in der Personenansicht, Ehe-Angaben mit gemeinsamem „Speichern“, Hinweise je Abschnitt.
 // v409: Stammlinien (Schrunser / Bartholomäberg Linie): Kürzel S/B, Zeile in der Personenansicht, Bestand-Filter, Stammbaum-Vorlagen, Chronik-Karte.
 // v408: Zeitgeschehen – Eintrag 1812 Russlandfeldzug Napoleons ergänzt.
 // v407: neues Logo (Baum im Bogen) als App-Icon, Anmelde- und Kopfzeilen-Logo.
@@ -2997,6 +2998,37 @@ function pruefPunkt(p) {
   s.setAttribute("aria-label", s.title);
   return s;
 }
+// v410: Stift neben jedem Kirchenbuch in der Personenansicht – öffnet „Bearbeiten“ direkt an der richtigen Stelle
+function kbStiftAnhaengen(row, personId, ziel) {
+  if (!rolleDarfSchreiben()) return;
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "source-edit-btn pv-book-edit"; b.textContent = "✏️";
+  b.title = "Kirchenbuch-Angaben bearbeiten"; b.setAttribute("aria-label", b.title);
+  b.addEventListener("click", () => kbBearbeitenOeffnen(personId, ziel));
+  row.appendChild(b);
+}
+async function kbBearbeitenOeffnen(personId, ziel) {
+  // wie „✏️ Bearbeiten“ in der Personenansicht: Ansicht schließen, nach dem Schließen der Maske zurückkehren
+  const ov = document.getElementById("person-view-overlay");
+  rueckkehrNachPerson = null; bearbeitenAusAnsicht = personId;
+  if (ov) ov.hidden = true; document.body.classList.remove("person-view-open");
+  try { await openPersonEdit(personId); } catch (e) { debugLog(`⚠️ Bearbeiten öffnen: ${e.message || e}`); return; }
+  const warte = async (fn) => { for (let i = 0; i < 40; i++) { const x = fn(); if (x) return x; await new Promise((r) => setTimeout(r, 100)); } return null; };
+  let feld = null;
+  if (ziel === "taufbuch" || ziel === "sterbebuch") {
+    feld = document.querySelector(`[data-source-edit="d-${ziel}-link"]`)?.closest(".detail-event-source");
+  } else if (ziel.startsWith("trauung:")) {
+    const id = ziel.slice(8);
+    feld = await warte(() => document.querySelector(`#d-partner-list .familie-item[data-familie-id="${CSS.escape(id)}"] .familie-trauungsbuch`));
+  } else {
+    feld = await warte(() => document.querySelector("#d-partner-list .familie-trauungsbuch")) || document.getElementById("d-partner-gruppe");
+  }
+  if (!feld) return;
+  feld.scrollIntoView({ block: "center", behavior: "smooth" });
+  feld.classList.add("is-hervorgehoben"); setTimeout(() => feld.classList.remove("is-hervorgehoben"), 2200);
+  feld.querySelector(".familie-source-row, input[type=number]")?.focus({ preventScroll: true });
+}
+
 // v409: Stammlinien – Nachkommen eines Gründers (auch über Töchter). „Mannesstamm“ = Weg nur über Väter.
 const STAMMLINIEN = [
   { key: "schruns", name: "Schrunser Linie", kurz: "S", gruender: { vorname: "Johann Christian", nachname: "Mangeng", geb: "1736-09-14" } },
@@ -4546,6 +4578,7 @@ async function openPersonDetail(personId, options = {}) {
         const lineText = document.createElement("span"); lineText.className = "person-view-book-line"; lineText.textContent = fundstelle; row.appendChild(lineText);
       }
       { const q = matriculaFundstelleSpan(url); if (q) row.appendChild(q); }
+      kbStiftAnhaengen(row, personId, label === "Taufbuch" ? "taufbuch" : label === "Sterbebuch" ? "sterbebuch" : "trauung");
       booksList.appendChild(row);
     });
     booksSection.hidden = booksList.children.length === 0;
@@ -4613,6 +4646,7 @@ async function openPersonDetail(personId, options = {}) {
             row.appendChild(lineText);
           }
           { const q = matriculaFundstelleSpan(url); if (q) row.appendChild(q); }
+          kbStiftAnhaengen(row, personId, `trauung:${quelle.familie_id}`);
           booksList.appendChild(row);
           bereitsAngezeigt.add(key);
         }
@@ -5275,9 +5309,20 @@ async function synchronisiereTrauungsbuchBeiEhe(personAId, personBId) {
 }
 
 // ---- Person-Felder speichern ----
+// v410: Ehe-Angaben und Trauungsbuch-Quellen werden mit dem gemeinsamen „Speichern“ gesichert
+async function speichereOffeneEhen() {
+  let ok = true, etwas = false;
+  for (const item of document.querySelectorAll("#d-partner-list .familie-item")) {
+    if (item.dataset.eheGeaendert === "1" && item._eheSpeichern) { etwas = true; ok = (await item._eheSpeichern({ ohneNeuladen: true })) && ok; delete item.dataset.eheGeaendert; }
+    if (item.dataset.quelleGeaendert === "1" && item._quelleSpeichern) { etwas = true; ok = (await item._quelleSpeichern({ ohneNeuladen: true })) && ok; delete item.dataset.quelleGeaendert; }
+  }
+  if (etwas && currentDetailPersonId) await loadDetailFamilie(currentDetailPersonId);
+  return ok;
+}
 document.getElementById("d-save-person-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-person-message");
   msg.textContent = "Speichere …";
+  if (!(await speichereOffeneEhen())) { msg.textContent = "Ehe-Angaben konnten nicht gespeichert werden."; return; }
   // Elternauswahl vor dem allgemeinen Speichern sichern. Die allgemeinen
   // Personendaten dürfen bereits gespeicherte Elternbeziehungen nicht verlieren.
   const elternVaterId = document.getElementById("d-vater")?.value || null;
@@ -7012,16 +7057,17 @@ function verdichtePartnerBloecke() {
     knopf.type = "button";
     knopf.className = "btn btn--ghost familie-toggle";
     knopf.setAttribute("aria-expanded", "false");
-    knopf.textContent = "✎ Bearbeiten";
+    knopf.textContent = "✏️";
+    knopf.title = "Art, Beginn und Ende der Ehe bearbeiten"; knopf.setAttribute("aria-label", knopf.title);
     knopf.addEventListener("click", () => {
       const offen = felder.hidden;
       felder.hidden = !offen;
       knopf.setAttribute("aria-expanded", String(offen));
-      knopf.textContent = offen ? "Zuklappen" : "✎ Bearbeiten";
+      knopf.textContent = offen ? "Fertig" : "✏️";
     });
     kopf.append(text, knopf);
     felder.hidden = true;
-    felder.before(kopf);
+    (item.querySelector(".familie-partner-link") || felder).after(kopf);   // v410: Kopf direkt unter dem Namen
   }
 }
 
@@ -7293,6 +7339,12 @@ async function loadDetailFamilie(personId) {
     div.innerHTML = `
       <div class="beziehung-text familie-edit-block">
         <button type="button" class="familie-partner-link" title="Person bearbeiten">${personenAuswahlText(detailPerson(otherId))}</button>
+        <div class="familie-trauungsbuch detail-event-source" aria-live="polite"><span class="source-heading">Trauungsbuch</span>
+          <input type="url" class="familie-source-url source-url-hidden" placeholder="https://…" aria-label="Trauungsbuch-URL">
+          <div class="source-button-line"><a class="btn source-open-btn familie-trauungsbuch-link" target="_blank" rel="noopener"></a><span class="source-line-label">Zeile</span><input type="number" class="familie-source-row" min="1" inputmode="numeric" placeholder="–" aria-label="Zeile"><select class="familie-source-side source-side-select" aria-label="Seite der Doppelseite"><option value="">Seite –</option><option value="links">links</option><option value="rechts">rechts</option></select><button type="button" class="source-edit-btn familie-source-edit" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button></div>
+          <span class="familie-trauungsbuch-zeile"></span>
+          <div class="familie-source-editor" hidden></div><button type="button" class="familie-source-save" hidden></button>
+        </div>
         <div class="familie-edit-fields">
           <label class="field"><span>Art</span>
             <select class="familie-typ-edit">
@@ -7321,8 +7373,7 @@ async function loadDetailFamilie(personId) {
             <button class="del-btn" title="Partnerschaft löschen">🗑️</button>
           </div>
           <div class="familie-auto-ende"></div>
-          <div class="familie-trauungsbuch" aria-live="polite"><span>Trauungsbuch:</span> <a class="familie-trauungsbuch-link" target="_blank" rel="noopener" hidden></a><span class="familie-trauungsbuch-zeile"></span><button type="button" class="source-edit-btn familie-source-edit" title="Trauungsbuch-Link bearbeiten" aria-label="Trauungsbuch-Link bearbeiten">✏️</button><div class="familie-source-editor" hidden><input type="url" class="familie-source-url" placeholder="https://…" aria-label="Trauungsbuch-URL"><label>Zeile <input type="number" class="familie-source-row" min="1" placeholder="–"></label><label>Seite <select class="familie-source-side" aria-label="Seite der Doppelseite"><option value="">–</option><option value="links">links</option><option value="rechts">rechts</option></select></label><button type="button" class="btn btn--secondary familie-source-save">Quelle speichern</button><small class="familie-source-hint">Feld leeren und speichern entfernt den Link.</small></div></div>
-          <button type="button" class="btn btn--secondary familie-save-btn">Partnerschaft speichern</button>
+          <button type="button" class="btn btn--secondary familie-save-btn" hidden>Partnerschaft speichern</button>
         </div>
       </div>`;
 
@@ -7425,15 +7476,15 @@ async function loadDetailFamilie(personId) {
       }
       if (eheQuelle?.trauungsbuch_link) {
         familienQuelleLink.href = eheQuelle.trauungsbuch_link;
-        familienQuelleLink.textContent = "Trauungsbuch öffnen";
+        familienQuelleLink.textContent = "📖 Trauungsbuch öffnen";
         familienQuelleLink.hidden = false;
         familienQuelleLink.classList.add("btn--link-present");
         familienQuelleLink.removeAttribute("aria-disabled");
-        familienQuelleZeile.textContent = [kbFundstelleText(eheQuelle.trauungsbuch_seite, eheQuelle.trauungsbuch_zeile) || "Zeile –", matriculaFundstelle(eheQuelle.trauungsbuch_link)?.text].filter(Boolean).join(" · ");
+        familienQuelleZeile.textContent = matriculaFundstelle(eheQuelle.trauungsbuch_link)?.text || "";
       } else {
         familienQuelleLink.hidden = false;
         familienQuelleLink.href = "#";
-        familienQuelleLink.textContent = "Trauungsbuch nicht hinterlegt";
+        familienQuelleLink.textContent = "📖 Kein Trauungsbuch-Link";
         familienQuelleLink.classList.remove("btn--link-present");
         familienQuelleLink.setAttribute("aria-disabled", "true");
         familienQuelleZeile.textContent = "";
@@ -7451,8 +7502,17 @@ async function loadDetailFamilie(personId) {
     sourceRowInput.value = eheQuelle?.trauungsbuch_zeile ?? "";
     const sourceSideInput = div.querySelector(".familie-source-side");
     if (sourceSideInput) sourceSideInput.value = eheQuelle?.trauungsbuch_seite || "";
-    sourceEditBtn.addEventListener("click", () => { sourceEditor.hidden = !sourceEditor.hidden; });
-    div.querySelector(".familie-source-save").addEventListener("click", async () => {
+    div.dataset.familieId = f.id;
+    sourceEditBtn.addEventListener("click", () => {   // v410: wie beim Taufbuch – URL-Feld ein-/ausblenden
+      sourceUrlInput.classList.toggle("source-url-hidden"); sourceUrlInput.classList.toggle("source-url-editing");
+      if (!sourceUrlInput.classList.contains("source-url-hidden")) sourceUrlInput.focus();
+    });
+    // v410: Änderungen an Quelle oder Ehe-Angaben → Speicherleiste; gespeichert wird mit „Speichern“
+    const quelleGeaendert = () => { div.dataset.quelleGeaendert = "1"; setzeDetailGeaendert(true); };
+    [sourceUrlInput, sourceRowInput, div.querySelector(".familie-source-side")].forEach((x) => x?.addEventListener("input", quelleGeaendert));
+    div.querySelector(".familie-source-side")?.addEventListener("change", quelleGeaendert);
+    div.querySelector(".familie-edit-fields")?.addEventListener("change", () => { div.dataset.eheGeaendert = "1"; setzeDetailGeaendert(true); });
+    div._quelleSpeichern = async ({ ohneNeuladen = false } = {}) => {
       const url = sourceUrlInput.value.trim();
       const rowText = sourceRowInput.value.trim();
       const row = rowText ? Number(rowText) : null;
@@ -7463,12 +7523,14 @@ async function loadDetailFamilie(personId) {
       }
       if (!url) {
         // v361: leeres Feld = Quelle dieser Ehe entfernen (vorher wurde der alte Link behalten)
-        if (!eheQuelle?.trauungsbuch_link) { sourceEditor.hidden = true; return; }
-        if (!confirm("Trauungsbuch-Link dieser Ehe entfernen?")) return;
+        if (!eheQuelle?.trauungsbuch_link) return true;
+        if (!confirm("Trauungsbuch-Link dieser Ehe entfernen?")) return false;
         const fehler = await entferneTrauungsQuelle(f.id, eheQuelle.trauungsbuch_link, [personId, otherId], !!eheQuelle.alt);
-        if (fehler) { alert(`Trauungsbuch-Quelle konnte nicht entfernt werden: ${fehler}`); return; }
-        await loadDetailFamilie(currentDetailPersonId);
-        return;
+        if (fehler) { alert(`Trauungsbuch-Quelle konnte nicht entfernt werden: ${fehler}`); return false; }
+        // v410: altes Personenfeld auch im (versteckten) Formularfeld leeren, sonst schreibt „Speichern“ es zurück
+        if (eheQuelle.alt) for (const id of ["d-trauungsbuch-link", "d-trauungsbuch-zeile", "d-trauungsbuch-seite"]) { const x = document.getElementById(id); if (x) x.value = ""; }
+        if (!ohneNeuladen) await loadDetailFamilie(currentDetailPersonId);
+        return true;
       }
       const updateDaten = {
         familie_id: f.id,
@@ -7478,11 +7540,13 @@ async function loadDetailFamilie(personId) {
         geaendert_am: new Date().toISOString()
       };
       const { error } = await mitKbSeite((mitSeite) => sb.from("familien_trauungsbuch_quellen").upsert(mitSeite ? updateDaten : ohneKbSeite(updateDaten), { onConflict: "familie_id" }));
-      if (error) { alert(`Trauungsbuch-Quelle konnte nicht gespeichert werden: ${error.message}`); return; }
-      await loadDetailFamilie(currentDetailPersonId);
-    });
+      if (error) { alert(`Trauungsbuch-Quelle konnte nicht gespeichert werden: ${error.message}`); return false; }
+      if (!ohneNeuladen) await loadDetailFamilie(currentDetailPersonId);
+      return true;
+    };
+    div.querySelector(".familie-source-save").addEventListener("click", () => div._quelleSpeichern());
 
-    div.querySelector(".familie-save-btn").addEventListener("click", async () => {
+    div._eheSpeichern = async ({ ohneNeuladen = false } = {}) => {
       let eingegebenesEnde = getDatum(endePrefix);
       // Ist kein manuelles Ende eingegeben und ist der Todestag des anderen
       // Partners bekannt, wird dieser beim Speichern als Partnerschaftsende
@@ -7511,11 +7575,13 @@ async function loadDetailFamilie(personId) {
       const { error } = await mitFamJahr((mitJahr) => sb.from("familien").update(mitJahr ? updates : ohneFamJahr(updates)).eq("id", f.id));
       if (error) {
         msg.textContent = `Fehler: ${error.message}`;
-      } else {
-        msg.textContent = "Partnerschaft gespeichert ✓";
-        await loadDetailFamilie(personId);
+        return false;
       }
-    });
+      msg.textContent = "";
+      if (!ohneNeuladen) await loadDetailFamilie(personId);
+      return true;
+    };
+    div.querySelector(".familie-save-btn").addEventListener("click", () => div._eheSpeichern());
 
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!confirm("Diese Partnerschaft mit allen zugehörigen Kinder-Verknüpfungen löschen?")) return;
@@ -11583,7 +11649,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=409");
+      treeModul3D = await import("./tree3d.js?v=410");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
