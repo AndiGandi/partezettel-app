@@ -453,6 +453,25 @@ function chronikAuswerten(d) {
     const geboren = d.personen.filter((p) => chrGebJahr(p) === jahr);
     return { jahr, text, quelle, lebend: lebend.length, geboren };
   }).filter((z) => z.lebend || z.geboren.length);
+  // 11 · Stammlinien (v409)
+  r.linien = null;
+  if (typeof stammlinienBerechnenAus === "function" && typeof STAMMLINIEN !== "undefined") {
+    const { info, gruender } = stammlinienBerechnenAus(d.personen, d.familien, d.kinder);
+    const zeilen = STAMMLINIEN.filter((l) => gruender[l.key]).map((l) => {
+      const mit = [...info.entries()].filter(([, li]) => li.some((e) => e.key === l.key));
+      const eintr = mit.map(([id, li]) => ({ p: P.get(id), e: li.find((e) => e.key === l.key) })).filter((x) => x.p);
+      const jahrVon = (p) => Number(String(p.geburtsdatum || p.geburtsjahr || "").slice(0, 4)) || null;
+      const mitJahr = eintr.filter((x) => x.e.gen > 0 && jahrVon(x.p)).sort((a, b) => jahrVon(b.p) - jahrVon(a.p));
+      return { l, g: gruender[l.key], n: eintr.length, mann: eintr.filter((x) => x.e.mann).length, gen: Math.max(0, ...eintr.map((x) => x.e.gen)), juengste: mitJahr[0]?.p || null };
+    });
+    const beide = [...info.values()].filter((li) => li.length >= 2).length;
+    const inL = (id, key) => (info.get(id) || []).some((e) => e.key === key);
+    const ehen = d.familien.filter((f) => f.partner_a_id && f.partner_b_id && STAMMLINIEN.length >= 2 &&
+      ((inL(f.partner_a_id, STAMMLINIEN[0].key) && inL(f.partner_b_id, STAMMLINIEN[1].key)) || (inL(f.partner_a_id, STAMMLINIEN[1].key) && inL(f.partner_b_id, STAMMLINIEN[0].key))));
+    const jz = (p) => Number(String(p?.geburtsdatum || p?.geburtsjahr || "").slice(0, 4)) || 9999;
+    r.linien = { zeilen, beide, ehen: ehen.map((f) => [P.get(f.partner_a_id), P.get(f.partner_b_id)]).filter(([a, b]) => a && b).sort((x, y) => Math.min(jz(x[0]), jz(x[1])) - Math.min(jz(y[0]), jz(y[1]))) };
+  }
+
   return r;
 }
 
@@ -510,6 +529,10 @@ function chronikRendern(r, ziel) {
         return `<div class="chr-schicksal"><h4>${g.vater ? chrLink(g.vater) : "?"} ∞ ${g.mutter ? chrLink(g.mutter) : "?"}</h4>
           <p class="chr-sub">${g.ks.length} Kinder, davon ${g.kinderTot} vor dem 15. Geburtstag gestorben</p><ol class="chr-liste chr-zeitlinie">${zeilen}</ol></div>`;
       }).join("")}` : `<p class="chr-leer">Keine auffälligen Häufungen gefunden.</p>`, "chr-breit"),
+    r.linien && r.linien.zeilen.length ? karte("🌳 Stammlinien", `${r.linien.zeilen.map((x) => `<h4><span class="linie-badge linie-${x.l.key}">${chrEsc(x.l.kurz)}</span> ${chrEsc(x.l.name)}</h4>
+      <p>Gründer ${chrLink(x.g)} · <b>${chrZahl(x.n - 1)}</b> Nachkommen im Bestand, davon <b>${chrZahl(Math.max(0, x.mann - 1))}</b> im Mannesstamm · ${x.gen} Generationen${x.juengste ? ` · jüngste: ${chrLink(x.juengste)}` : ""}</p>`).join("")}
+      <p class="chr-sub">${chrZahl(r.linien.beide)} Personen stammen aus beiden Linien.</p>
+      ${r.linien.ehen.length ? `<h4>Ehen zwischen den Linien</h4>${liste(r.linien.ehen.slice(0, 8), ([a, b]) => `${chrLink(a)} ∞ ${chrLink(b)}`)}` : ""}`) : "",
     karte("🧬 Verwandtschaft", `<p><b>${chrZahl(r.verbund.groesste)} von ${chrZahl(z.personen)}</b> Personen (${chrRund(100 * r.verbund.groesste / Math.max(1, z.personen), 0)} %) sind über Eltern, Kinder und Ehen miteinander verbunden.</p>
       <p class="chr-sub">Daneben gibt es ${r.verbund.inseln} getrennte „Inseln“, davon ${r.verbund.einzeln} einzelne Personen ohne jede Verbindung.</p>
       <h4>Stammeltern mit den meisten Nachkommen im Bestand</h4>${liste(r.stammeltern, (x) => `${chrLink(x.p)} – <b>${chrZahl(x.n)}</b> Nachkommen`)}`),

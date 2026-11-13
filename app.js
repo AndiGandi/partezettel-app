@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 408
+// Partezettel Archiv – Version 409
+// v409: Stammlinien (Schrunser / Bartholomäberg Linie): Kürzel S/B, Zeile in der Personenansicht, Bestand-Filter, Stammbaum-Vorlagen, Chronik-Karte.
 // v408: Zeitgeschehen – Eintrag 1812 Russlandfeldzug Napoleons ergänzt.
 // v407: neues Logo (Baum im Bogen) als App-Icon, Anmelde- und Kopfzeilen-Logo.
 // v406: Eltern-Felder – das Geschlecht wurde für die Anzeige nicht mitgeladen, deshalb wirkte v405 nicht.
@@ -2996,6 +2997,76 @@ function pruefPunkt(p) {
   s.setAttribute("aria-label", s.title);
   return s;
 }
+// v409: Stammlinien – Nachkommen eines Gründers (auch über Töchter). „Mannesstamm“ = Weg nur über Väter.
+const STAMMLINIEN = [
+  { key: "schruns", name: "Schrunser Linie", kurz: "S", gruender: { vorname: "Johann Christian", nachname: "Mangeng", geb: "1736-09-14" } },
+  { key: "bberg", name: "Bartholomäberg Linie", kurz: "B", gruender: { vorname: "Johann Josef", nachname: "Mangeng", geb: "1738-06-09" } },
+];
+let stammlinienInfo = new Map();   // personId -> [{ key, gen, mann }]
+let stammlinienGruender = {};      // key -> person
+let stammlinienLauf = null;
+function stammlinienBerechnenAus(personen, familien, kinder) {
+  const byId = new Map(personen.map((p) => [p.id, p]));
+  const famMap = new Map(familien.map((f) => [f.id, f]));
+  const kinderVon = new Map();   // elternteil -> [kind]
+  for (const k of kinder) {
+    const f = famMap.get(k.familie_id); if (!f) continue;
+    for (const e of [f.partner_a_id, f.partner_b_id]) if (e) { if (!kinderVon.has(e)) kinderVon.set(e, []); kinderVon.get(e).push(k.kind_id); }
+  }
+  const info = new Map(), gruender = {};
+  for (const l of STAMMLINIEN) {
+    const g = personen.find((p) => p.vorname === l.gruender.vorname && p.nachname === l.gruender.nachname && String(p.geburtsdatum || "").slice(0, 10) === l.gruender.geb);
+    if (!g) continue;
+    gruender[l.key] = g;
+    const best = new Map([[g.id, { gen: 0, mann: true }]]);
+    const schlange = [g.id];
+    while (schlange.length) {
+      const id = schlange.shift(); const st = best.get(id); const p = byId.get(id);
+      const maennlich = /^m/i.test(String(p?.geschlecht || ""));
+      for (const kid of kinderVon.get(id) || []) {
+        const neu = { gen: st.gen + 1, mann: st.mann && maennlich };
+        const alt = best.get(kid);
+        if (!alt) { best.set(kid, neu); schlange.push(kid); }
+        else if (neu.mann && !alt.mann) { alt.mann = true; alt.gen = Math.min(alt.gen, neu.gen); schlange.push(kid); }
+      }
+    }
+    for (const [id, st] of best) { if (!info.has(id)) info.set(id, []); info.get(id).push({ key: l.key, gen: st.gen, mann: st.mann }); }
+  }
+  return { info, gruender };
+}
+async function stammlinienLaden() {
+  if (stammlinienLauf) return stammlinienLauf;
+  stammlinienLauf = (async () => {
+    try {
+      const [pe, fa, ki] = await Promise.all([
+        alleZeilenLaden(() => sb.from("personen").select("id, vorname, nachname, geschlecht, geburtsdatum").order("id")),
+        alleZeilenLaden(() => sb.from("familien").select("id, partner_a_id, partner_b_id").order("id")),
+        alleZeilenLaden(() => sb.from("familien_kinder").select("familie_id, kind_id").order("kind_id")),
+      ]);
+      if (pe.error || fa.error || ki.error) return;
+      const r = stammlinienBerechnenAus(pe.data || [], fa.data || [], ki.data || []);
+      stammlinienInfo = r.info; stammlinienGruender = r.gruender;
+      document.dispatchEvent(new CustomEvent("stammlinien-bereit"));
+    } catch (e) { debugLog?.(`Stammlinien: ${e.message}`); }
+    finally { setTimeout(() => { stammlinienLauf = null; }, 0); }
+  })();
+  return stammlinienLauf;
+}
+function stammlinienTitel(e) {
+  const l = STAMMLINIEN.find((x) => x.key === e.key);
+  return `${l?.name || e.key} · ${e.gen === 0 ? "Gründer" : `${e.gen}. Generation`} · ${e.mann ? "im Mannesstamm" : "über eine Tochter"}`;
+}
+function linienBadgesHtml(personId) {
+  const list = stammlinienInfo.get(personId);
+  if (!list?.length) return "";
+  return list.map((e) => `<span class="linie-badge linie-${e.key}${e.mann ? "" : " is-tochter"}" title="${escapeHtml(stammlinienTitel(e))}">${STAMMLINIEN.find((x) => x.key === e.key)?.kurz || "?"}</span>`).join("");
+}
+function linienBadgesElement(personId) {
+  const html = linienBadgesHtml(personId);
+  if (!html) return null;
+  const sp = document.createElement("span"); sp.className = "linie-badges"; sp.innerHTML = html; return sp;
+}
+
 function pruefPunktHtml(p) {
   if (!p || !rolleIstEigentuemer()) return "";
   if (!p.herkunft_quelle) return !pruefSpaltenVorhanden ? "" : `<span class="pruef-punkt is-eigen" role="img" title="selbst erfasst" aria-label="selbst erfasst"></span>`;
@@ -3755,6 +3826,7 @@ function aktualisierePersonenKarte(karte, p) {
   karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();
   const punkt = pruefPunkt(p);
   if (punkt) karte.name.prepend(punkt);
+  { const lb = linienBadgesElement(p.id); if (lb) karte.name.appendChild(lb); }
   const kartenLedigenname = String(p.Ledigenname || p.ledigenname || "").trim();
   if (kartenLedigenname) {
     const maiden = document.createElement("span");
@@ -3971,6 +4043,7 @@ async function renderPersonenList(personen) {
   if (filterFeld) filterFeld.hidden = !rolleIstEigentuemer() || !personenCache.some((x) => x.herkunft_quelle);
   if (filterFeld?.hidden && personenPruefFilter) { personenPruefFilter = ""; const sel = document.getElementById("personen-pruef-filter"); if (sel) sel.value = ""; }
   beobachteSchluesselfotos();
+  if (!stammlinienInfo.size) stammlinienLaden();   // v409
   // Trefferzähler („272 Personen“) nach jedem Neuaufbau der Liste aktualisieren.
   if (typeof window.partezettelPersonenSuche === "function") {
     window.partezettelPersonenSuche(document.getElementById("search-input")?.value || "");
@@ -4016,6 +4089,13 @@ function pruefFilterPasst(p) {
   if (personenPruefFilter === "eigene") return !p.herkunft_quelle;
   if (personenPruefFilter === "ohne-nurname") return !istNurName(p);
   if (personenPruefFilter === "nurname") return istNurName(p);
+  if (personenPruefFilter.startsWith("linie:")) {   // v409
+    const [, key, art] = personenPruefFilter.split(":");
+    const l = stammlinienInfo.get(p.id) || [];
+    if (key === "beide") return l.length >= 2;
+    const e = l.find((x) => x.key === key);
+    return !!e && (art !== "mann" || e.mann);
+  }
   return true;
 }
 function wendePersonenSucheAn(suchwert) {
@@ -8972,7 +9052,7 @@ function treePersonCard(person, rootId = null, extraClass = "", lineSurname = ""
     ? ` <span class="tree-node__maiden-name">geb. ${escTree(ledigenname)}</span>` : "";
   return `<button type="button" class="tree-node ${rootId === person.id ? "tree-node--root" : ""} ${relationClass} ${lineClass} ${extraClass}" data-tree-person="${person.id}">
     ${foto ? `<img class="tree-node__photo" src="${escTree(foto)}" alt="Schlüsselfoto von ${escTree(person.vorname)} ${escTree(person.nachname)}">` : `<span class="tree-node__placeholder" aria-hidden="true">👤</span>`}
-    <span class="tree-node__name">${pruefPunktHtml(person)}${escTree(treeAnzeigeName(person).name)}${maidenLabel}</span>
+    <span class="tree-node__name">${pruefPunktHtml(person)}${escTree(treeAnzeigeName(person).name)}${maidenLabel}${linienBadgesHtml(person.id)}</span>
     ${jahre ? `<span class="tree-node__years">${escTree(jahre)}</span>` : ""}
   </button>`;
 }
@@ -9387,7 +9467,7 @@ function treeDescNodeHtml(knoten, tiefe) {
   const g = treePersonGender(p);
   const jahre = treeYearsText(p);
   const kopf = `<span class="tree-desc__dot tree-desc__dot--${g}"></span>`
-    + `<span class="tree-desc__text"><span class="tree-desc__name">${treeDescNameHtml(p)}</span>${jahre ? `<span class="tree-desc__years">${escTree(jahre)}</span>` : ""}</span>`
+    + `<span class="tree-desc__text"><span class="tree-desc__name">${treeDescNameHtml(p)}${linienBadgesHtml(p.id)}</span>${jahre ? `<span class="tree-desc__years">${escTree(jahre)}</span>` : ""}</span>`
     + (knoten.anzahl ? `<span class="tree-desc__count" title="Nachkommen insgesamt">${knoten.anzahl}</span>` : "");
   const partnerZeile = (partner) => partner
     ? `<div class="tree-desc__partner">⚭ ${treeDescNameHtml(partner)}${treeYearsText(partner) ? ` · ${escTree(treeYearsText(partner))}` : ""}</div>`
@@ -11503,7 +11583,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=408");
+      treeModul3D = await import("./tree3d.js?v=409");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11754,6 +11834,20 @@ function applyTreeLinePreset(value) {
     "reinhard-linie": { tokens: ["hubert"], geb: "1930", direction: "both", label: "Reinhard Linie" },
     "fall-linie": { tokens: ["luise"], geb: "1933", direction: "maternal", label: "Fall Linie" }
   };
+  // v409: Stammlinien – Nachkommen-Ansicht ab dem Gründer
+  const linie = STAMMLINIEN.find((l) => `stammlinie-${l.key}` === value);
+  if (linie) {
+    const g = (treeData.personen || []).find((p) => p.vorname === linie.gruender.vorname && p.nachname === linie.gruender.nachname && String(p.geburtsdatum || "").slice(0, 10) === linie.gruender.geb);
+    if (!g) { if (message) message.textContent = `Gründer der ${linie.name} nicht gefunden.`; return; }
+    treeActivePreset = null;
+    if (select) { if (![...select.options].some((o) => o.value === g.id)) { const o = document.createElement("option"); o.value = g.id; o.textContent = treePersonLabel(g.id); select.appendChild(o); } select.value = g.id; }
+    if (search) search.value = treePersonLabel(g.id);
+    setTreeViewMode("descendants", g.id);
+    renderStammbaum(g.id);
+    treeLinieMittigZeigen(g.id);
+    if (message) message.textContent = `${linie.name}: Nachkommen von ${treePersonLabel(g.id)}. Personen mit Kürzel ${linie.kurz} gehören zur Linie (umrandet = über eine Tochter).`;
+    return;
+  }
   const preset = presets[value];
   if (!preset) {
     // „— Stammlinie auswählen —“: Filter aufheben und die aktuelle Person ungefiltert zeigen.
@@ -12569,7 +12663,27 @@ const ImportAssistent = (() => {
 ImportAssistent.init();
 
 // v363: Vermerk „aus Hausblatt … · ungeprüft“ in der Personenansicht, mit „als geprüft markieren“
+function zeigeLinienZeile(person) {   // v409
+  const ziel = document.getElementById("pv-lifetime");
+  if (!ziel) return;
+  let box = document.getElementById("pv-linien");
+  if (!box) { box = document.createElement("p"); box.id = "pv-linien"; box.className = "pv-linien"; ziel.insertAdjacentElement("afterend", box); }
+  const list = stammlinienInfo.get(person?.id) || [];
+  box.hidden = !list.length;
+  box.innerHTML = list.map((e) => {
+    const l = STAMMLINIEN.find((x) => x.key === e.key); const g = stammlinienGruender[e.key];
+    const nach = e.gen > 0 && g ? ` nach ${escapeHtml(g.vorname)} (*${String(g.geburtsdatum || "").slice(0, 4)})` : "";
+    return `<span class="pv-linie"><span class="linie-badge linie-${e.key}${e.mann ? "" : " is-tochter"}">${l?.kurz || "?"}</span> <strong>${escapeHtml(l?.name || "")}</strong> · ${e.gen === 0 ? "Gründer" : `${e.gen}. Generation${nach}`} · ${e.mann ? "im Mannesstamm" : "über eine Tochter"}</span>`;
+  }).join("<br>");
+}
+document.addEventListener("stammlinien-bereit", () => {
+  try { for (const karte of personenKartenCache.values()) if (karte?.person) aktualisierePersonenKarte(karte, karte.person); } catch {}
+  try { const pv = document.getElementById("person-view-overlay"); if (pv && !pv.hidden && currentPersonViewId) zeigeLinienZeile({ id: currentPersonViewId }); } catch {}
+  try { const t = document.querySelector('.tab-btn[aria-selected="true"]')?.dataset.tab; if (t === "stammbaum") renderStammbaum(document.getElementById("tree-person-select")?.value); } catch {}
+});
+
 function zeigeHerkunftsvermerk(person) {
+  zeigeLinienZeile(person);
   const ziel = document.getElementById("pv-lifetime");
   if (!ziel) return;
   let box = document.getElementById("pv-herkunft");

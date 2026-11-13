@@ -2116,3 +2116,19 @@ body.rollen-vorschau-aktiv{padding-bottom:4.2rem}
 #tab-stammbaum:not(.tree-view--3d):not(.tree-view--descendants) .tree-classic-stage{width:max-content;min-width:100%}
 /* v403: Schlüsselfotos auch in der Ahnentafel und in der Gebirge-Darstellung ausblendbar */
 body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
+
+/* v409: Stammlinien-Kürzel */
+.linie-badges { display: inline-flex; gap: 3px; margin-left: 6px; vertical-align: middle; }
+.linie-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 1.35em; height: 1.35em; padding: 0 3px; border-radius: 999px; font: 700 0.7em/1 system-ui, sans-serif; color: #fff; vertical-align: middle; margin-left: 4px; border: 1.5px solid transparent; }
+.linie-badges .linie-badge { margin-left: 0; }
+.linie-badge.linie-schruns { background: #2e7d4f; border-color: #2e7d4f; }
+.linie-badge.linie-bberg { background: #2f5fa7; border-color: #2f5fa7; }
+.linie-badge.is-tochter { background: transparent; }
+.linie-badge.linie-schruns.is-tochter { color: #2e7d4f; }
+.linie-badge.linie-bberg.is-tochter { color: #2f5fa7; }
+.pv-linien { margin: 4px 0 0; font-size: 0.92rem; color: var(--color-text-muted, #6b6459); line-height: 1.7; }
+.pv-linien .linie-badge { margin-left: 0; margin-right: 4px; }
+@media (prefers-color-scheme: dark) {
+  .linie-badge.linie-schruns.is-tochter { color: #7cc79a; border-color: #7cc79a; }
+  .linie-badge.linie-bberg.is-tochter { color: #8fb1ea; border-color: #8fb1ea; }
+}
