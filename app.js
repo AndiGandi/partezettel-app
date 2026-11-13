@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 411
+// Partezettel Archiv – Version 412
+// v412: Stammbaum – schwebender „←“-Knopf direkt im Baum; Android-Zurück-Taste/Wischgeste springen zur vorigen Ansicht.
 // v411: Stammbaum – „← Zurück“ zur vorigen Ansicht; unbekannte Vorfahren/Partner werden nicht mehr als Platzhalter gezeigt.
 // v410: Einheitliche Eingabe – Trauungsbuch in der Ehe wie Tauf-/Sterbebuch, ✏️ bei Kirchenbüchern in der Personenansicht, Ehe-Angaben mit gemeinsamem „Speichern“, Hinweise je Abschnitt.
 // v409: Stammlinien (Schrunser / Bartholomäberg Linie): Kürzel S/B, Zeile in der Personenansicht, Bestand-Filter, Stammbaum-Vorlagen, Chronik-Karte.
@@ -1254,6 +1255,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
       if (relationResult) relationResult.innerHTML = "";
       if (relationPanel) relationPanel.hidden = true;
       treeRelationshipSelection = { personAId: null, personBId: null };
+      treeBrowserVerlaufAufraeumen();   // v412
     }
     document.querySelectorAll(".tab-btn").forEach((b) => {
       b.classList.remove("is-active");
@@ -9598,8 +9600,14 @@ function initTreeDescendants() {
 }
 
 // v411: Verlauf der Stammbaum-Ansichten – „← Zurück“ führt zur vorigen Ansicht
+// v412: schwebender „←“-Knopf im Baum; Android-Zurück-Taste und Wischgeste (Browser-Verlauf) gehen eine Ansicht zurück
 let treeVerlauf = [];
 let treeVerlaufWiederherstellen = false;
+let treeBrowserEintraege = 0;          // so viele Browser-Verlaufseinträge hat der Stammbaum angelegt
+let treeBrowserPopIgnorieren = 0;      // popstate-Ereignisse, die vom Aufräumen stammen
+function treeTabAktiv() {
+  return document.querySelector(".tab-btn.is-active")?.dataset.tab === "stammbaum";
+}
 function treeVerlaufMerken(rootId) {
   if (treeVerlaufWiederherstellen || !rootId) return;
   const z = { root: rootId, mode: treeViewMode, preset: document.getElementById("tree-line-preset")?.value || "", presetObj: treeActivePreset };
@@ -9607,15 +9615,25 @@ function treeVerlaufMerken(rootId) {
   if (l && l.root === z.root && l.mode === z.mode && l.preset === z.preset) return;
   treeVerlauf.push(z);
   if (treeVerlauf.length > 40) treeVerlauf.shift();
+  // v412: echten Ansichtswechsel auch im Browser-Verlauf vermerken
+  if (treeVerlauf.length >= 2 && treeTabAktiv()) {
+    try { history.pushState({ fsStammbaum: true }, ""); treeBrowserEintraege++; } catch {}
+  }
   treeZurueckKnopfAktualisieren();
 }
 function treeZurueckKnopfAktualisieren() {
-  const b = document.getElementById("tree-zurueck");
-  if (!b) return;
-  b.disabled = treeVerlauf.length < 2;
   const v = treeVerlauf[treeVerlauf.length - 2];
   const namen = { classic: "Familie", cards: "Generationen", pedigree: "Ahnentafel", descendants: "Nachkommen", tree3d: "3D-Baum" };
-  b.title = v ? `Zurück zu: ${namen[v.mode] || ""} · ${treePersonLabel(v.root)}` : "Keine vorige Ansicht";
+  const titel = v ? `Zurück zu: ${namen[v.mode] || ""} · ${treePersonLabel(v.root)}` : "Keine vorige Ansicht";
+  for (const id of ["tree-zurueck", "tree-zurueck-schwebend"]) {
+    const b = document.getElementById(id);
+    if (!b) continue;
+    b.disabled = treeVerlauf.length < 2;
+    b.title = titel;
+    b.setAttribute("aria-label", titel);
+  }
+  const schwebend = document.getElementById("tree-zurueck-schwebend");
+  if (schwebend) schwebend.hidden = treeVerlauf.length < 2;
 }
 function treeZurueck() {
   if (treeVerlauf.length < 2) return;
@@ -9634,7 +9652,39 @@ function treeZurueck() {
   } finally { treeVerlaufWiederherstellen = false; }
   treeZurueckKnopfAktualisieren();
 }
-document.addEventListener("DOMContentLoaded", () => document.getElementById("tree-zurueck")?.addEventListener("click", treeZurueck));
+// v412: Knopf-Klick geht über den Browser-Verlauf, damit Knopf und Zurück-Geste gleich zählen
+function treeZurueckKlick() {
+  if (treeVerlauf.length < 2) return;
+  if (treeBrowserEintraege > 0) { history.back(); return; }   // popstate erledigt den Rest
+  treeZurueck();
+}
+// v412: Beim Verlassen des Stammbaums die angelegten Browser-Einträge wieder entfernen,
+// damit die Zurück-Geste in anderen Bereichen nicht unsichtbar im Baum „verbraucht“ wird.
+function treeBrowserVerlaufAufraeumen() {
+  if (treeBrowserEintraege <= 0) return;
+  const n = treeBrowserEintraege;
+  treeBrowserEintraege = 0;
+  treeBrowserPopIgnorieren++;
+  try { history.go(-n); } catch { treeBrowserPopIgnorieren--; }
+}
+window.addEventListener("popstate", () => {
+  if (treeBrowserPopIgnorieren > 0) { treeBrowserPopIgnorieren--; return; }
+  if (treeBrowserEintraege <= 0) return;
+  treeBrowserEintraege--;
+  // Ist die Personenansicht offen, schließt die Zurück-Geste zuerst diese – der Baum bleibt, wie er ist.
+  const pv = document.getElementById("person-view-overlay");
+  if (pv && !pv.hidden) {
+    try { history.pushState({ fsStammbaum: true }, ""); treeBrowserEintraege++; } catch {}
+    document.getElementById("pv-close")?.click();
+    return;
+  }
+  if (!treeTabAktiv()) return;
+  treeZurueck();
+});
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("tree-zurueck")?.addEventListener("click", treeZurueckKlick);
+  document.getElementById("tree-zurueck-schwebend")?.addEventListener("click", treeZurueckKlick);
+});
 
 function renderStammbaum(rootId) {
   if (!treeFilterAktiv) treeVerlaufMerken(rootId);
@@ -11690,7 +11740,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=411");
+      treeModul3D = await import("./tree3d.js?v=412");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

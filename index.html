@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 411 -->
+    <!-- Version 412 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=411">
+<link rel="stylesheet" href="style.css?v=412">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -101,7 +101,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 411</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 412</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -449,12 +449,15 @@
         <button type="button" id="tree-fotos-toggle" class="btn btn--ghost tree-fotos-toggle is-active" aria-pressed="true" title="Schlüsselfotos ausblenden">📷</button>
       </div>
     </div>
-    <div id="tree-viewport" class="tree-viewport">
-      <div id="tree-stage" class="tree-stage" hidden></div>
-      <div id="tree-classic-stage" class="tree-classic-stage"></div>
-      <div id="tree-pedigree-stage" class="tree-pedigree-stage" hidden></div>
-      <div id="tree-descendants-stage" class="tree-descendants-stage" hidden></div>
-      <div id="tree-3d-stage" class="tree-3d-stage" hidden></div>
+    <div class="tree-viewport-wrap">
+      <div id="tree-viewport" class="tree-viewport">
+        <div id="tree-stage" class="tree-stage" hidden></div>
+        <div id="tree-classic-stage" class="tree-classic-stage"></div>
+        <div id="tree-pedigree-stage" class="tree-pedigree-stage" hidden></div>
+        <div id="tree-descendants-stage" class="tree-descendants-stage" hidden></div>
+        <div id="tree-3d-stage" class="tree-3d-stage" hidden></div>
+      </div>
+      <button type="button" id="tree-zurueck-schwebend" class="tree-zurueck-schwebend" hidden disabled title="Keine vorige Ansicht" aria-label="Zurück zur vorigen Ansicht">←</button>
     </div>
   </section>
 
@@ -1028,8 +1031,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=411"></script>
-<script src="app.js?v=411"></script>
-<script src="chronik.js?v=411"></script>
+<script src="hinweise.js?v=412"></script>
+<script src="app.js?v=412"></script>
+<script src="chronik.js?v=412"></script>
 </body>
 </html>
