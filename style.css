@@ -2195,7 +2195,7 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .pv-komfort__ich.is-leer { color: var(--color-text-muted, #6b6459); font-size: 0.9rem; }
 .pv-komfort__knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
 .pv-komfort__knoepfe .btn { width: auto; padding: 6px 14px; font-size: 0.92rem; }
-.komfort-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(20, 30, 25, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.komfort-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(60, 60, 50, 0.16); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .komfort-overlay[hidden] { display: none; }
 .komfort-fenster { background: var(--color-surface, #fffdf8); color: var(--color-text, #2b2722); border-radius: 18px; max-width: 34rem; width: 100%; max-height: 88vh; overflow: auto; padding: 26px 24px 20px; box-shadow: 0 12px 40px rgba(0,0,0,.25); text-align: center; }
 .tour-icon { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
@@ -2236,3 +2236,18 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .tb-rel { color: #2e7d4f; font-weight: 600; }
 .tb-hinweis { margin-top: 12px; font-style: italic; }
 @media (prefers-color-scheme: dark) { .tb-mond { background: #1f2a33; } .tb-mond__art { color: #9fbbd6; } .heute-liste li.is-verwandt { background: #1d3328; } }
+
+/* v420 */
+.gruppenfoto-personen-hinweis { margin: 8px 4px; color: var(--color-text-muted, #6b6459); font-size: .92rem; }
+/* v420: Tagesblatt heller, Symbole mit Text */
+.tb-mond { background: #f7f9f6; border: 1px solid #e4e9e1; border-radius: 12px; padding: 8px 12px; margin: 0 0 10px; }
+.tb-mz { display: flex; align-items: flex-start; gap: 10px; padding: 3px 0; line-height: 1.45; }
+.tb-mz__sym { flex: 0 0 1.6em; text-align: center; font-size: 1.25rem; line-height: 1.2; font-family: "Apple Symbols", "Segoe UI Symbol", "DejaVu Sans", serif; color: #3d4a40; }
+.tb-mz--klein { font-size: .88rem; color: var(--color-text-muted, #6b6459); }
+.tb-mz--klein .tb-mz__sym { font-size: 1rem; }
+.tb-glyph { font-family: "Apple Symbols", "Segoe UI Symbol", "DejaVu Sans", serif; font-size: 1.05em; color: #3d4a40; }
+.tb-liste { list-style: none; padding-left: 0; }
+.tb-liste li { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; line-height: 1.5; }
+.tb-icon { flex: 0 0 1.5em; text-align: center; }
+.komfort-fenster { box-shadow: 0 10px 34px rgba(0,0,0,.16); }
+@media (prefers-color-scheme: dark) { .tb-mond { background: #232823; border-color: #34402f; } .tb-mz__sym, .tb-glyph { color: #c9d3c4; } }

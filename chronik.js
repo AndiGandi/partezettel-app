@@ -663,7 +663,8 @@ const MOND = (() => {
     }
     return { auf: auf[0] || null, unter: unter[0] || null };
   }
-  function zeichenVon(lon) { const z = ZEICHEN[Math.floor(lon / 30)]; return { name: z[0], symbol: z[1], element: z[2], art: TAGESART[z[2]] }; }
+  const BILD = ["🐏", "🐂", "👬", "🦀", "🦁", "🌾", "⚖️", "🦂", "🏹", "🐐", "🏺", "🐟"];   // v420: bildhafte Zeichen wie im Kalender
+  function zeichenVon(lon) { const i = Math.floor(lon / 30), z = ZEICHEN[i]; return { name: z[0], symbol: z[1] + "\uFE0E", bild: BILD[i], element: z[2], art: TAGESART[z[2]] }; }
   function phase(date) { const m = mond(tage(date)); return rev(m.lon - m.sonne.lon); }   // 0 = Neumond, 180 = Vollmond
   function tag(jahr, monat, tagNr) {
     const beginn = tagesBeginn(jahr, monat, tagNr), ende = new Date(beginn.getTime() + 86400000);
@@ -863,14 +864,17 @@ function chrVermutlichLebend(p) {
   return !!j && j >= new Date().getFullYear() - 105;
 }
 const chrUhr = (d) => d ? d.toLocaleTimeString("de-AT", { timeZone: "Europe/Vienna", hour: "2-digit", minute: "2-digit" }) : "–";
-function mondZeileHtml(m) {
-  const symbol = m.ereignis === "Neumond" ? "🌑" : m.ereignis === "Vollmond" ? "🌕" : m.zunehmend ? "🌔" : "🌖";
-  const phase = m.ereignis || (m.zunehmend ? "zunehmend" : "abnehmend");
-  const wechsel = m.wechsel ? ` · ab ${chrUhr(m.wechsel.zeit)} im ${chrEsc(m.wechsel.nach.name)} ${m.wechsel.nach.symbol}` : "";
+function mondZeileHtml(m) {   // v420: Symbole wie im Vorarlberger Kalender, jeweils mit Text
+  const phase = m.ereignis === "Neumond" ? ["●", "Neumond"] : m.ereignis === "Vollmond" ? ["○", "Vollmond"] : m.zunehmend ? ["☽\uFE0E", "zunehmender Mond"] : ["☾\uFE0E", "abnehmender Mond"];
+  const bahn = m.aufsteigend ? ["◡", "aufsteigender Mond (obsigend)"] : ["⌒", "absteigender Mond (nidsigend)"];
+  const zeile = (sym, text, klasse = "") => `<div class="tb-mz ${klasse}"><span class="tb-mz__sym" aria-hidden="true">${sym}</span><span>${text}</span></div>`;
+  const wechsel = m.wechsel ? `<br><span class="tb-klein">ab ${chrUhr(m.wechsel.zeit)} Uhr im <strong>${chrEsc(m.wechsel.nach.name)}</strong> ${m.wechsel.nach.bild} – ${chrEsc(m.wechsel.nach.art)}</span>` : "";
   return `<div class="tb-mond">
-    <p class="tb-mond__haupt">${symbol} <strong>Mond ${chrEsc(phase)}</strong> · ${m.aufsteigend ? "aufsteigend (obsigend)" : "absteigend (nidsigend)"} · im <strong>${chrEsc(m.zeichen.name)} ${m.zeichen.symbol}</strong>${wechsel}</p>
-    <p class="tb-mond__art">${chrEsc(m.zeichen.art)}${m.wechsel ? ` · danach ${chrEsc(m.wechsel.nach.art)}` : ""}</p>
-    <p class="tb-mond__zeiten">Mondaufgang ${chrUhr(m.mondAuf)} · Monduntergang ${chrUhr(m.mondUnter)} · Sonne ${chrUhr(m.sonneAuf)} – ${chrUhr(m.sonneUnter)} <span class="tb-ort">(Bartholomäberg)</span></p>
+    ${zeile(phase[0], `<strong>${phase[1]}</strong>`)}
+    ${zeile(bahn[0], bahn[1])}
+    ${zeile(m.zeichen.bild, `Mond im <strong>${chrEsc(m.zeichen.name)}</strong> <span class="tb-glyph">${m.zeichen.symbol}</span> – ${chrEsc(m.zeichen.art)}${wechsel}`)}
+    ${zeile("🌙", `Mondaufgang ${chrUhr(m.mondAuf)} · Monduntergang ${chrUhr(m.mondUnter)}`, "tb-mz--klein")}
+    ${zeile("☀️", `Sonnenaufgang ${chrUhr(m.sonneAuf)} · Sonnenuntergang ${chrUhr(m.sonneUnter)} <span class="tb-ort">(Bartholomäberg)</span>`, "tb-mz--klein")}
   </div>`;
 }
 // Ganzes Tagesblatt. opt: { leser: bool, ich: {id,name}|null, beziehung: (personId) => "Urgroßmutter"|null }
@@ -903,24 +907,23 @@ function tagesblattAuswerten(d, opt = {}) {
       const rel = opt.beziehung ? (opt.beziehung(x.p.id) || (x.p2 ? opt.beziehung(x.p2.id) : null)) : null;
       return { ...x, jahre, rund, rel };
     })
-    .sort((a, b) => (b.rel ? 1 : 0) - (a.rel ? 1 : 0) || (b.rund ? 1 : 0) - (a.rund ? 1 : 0) || a.jahr - b.jahr);
+    .sort((a, b) => a.jahr - b.jahr);
   return r;
 }
 function tagesblattHtml(r) {
   const datum = new Date(Date.UTC(r.datum.jahr, r.datum.monat - 1, r.datum.tag, 12)).toLocaleDateString("de-AT", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
   const hochzeit = (j) => j === 25 ? " (Silberne Hochzeit)" : j === 50 ? " (Goldene Hochzeit)" : j === 60 ? " (Diamantene Hochzeit)" : j === 65 ? " (Eiserne Hochzeit)" : "";
   const zeile = (x) => {
-    const wer = x.rel ? ` <span class="tb-rel">– ${x.rel}</span>` : "";
-    const was = x.art === "geheiratet" ? `heirateten ${chrLink(x.p)} und ${chrLink(x.p2)}${hochzeit(x.jahre)}`
-      : x.art === "geboren" ? `wurde ${chrLink(x.p)} geboren` : `starb ${chrLink(x.p)}`;
-    return `<li class="${x.rund ? "is-rund" : ""}${x.rel ? " is-verwandt" : ""}">${x.rund ? "⭐ " : ""}<b>${x.jahr}</b> · vor ${x.jahre} Jahren ${was}${wer}</li>`;
+    const [icon, art] = x.art === "geheiratet" ? ["💍", "Hochzeitstag"] : x.art === "geboren" ? ["🎂", "Geburtstag"] : ["🕯️", "Todestag"];
+    const wer = x.art === "geheiratet" ? `${chrLink(x.p)} und ${chrLink(x.p2)}${hochzeit(x.jahre)}` : chrLink(x.p);
+    return `<li><span class="tb-icon" aria-hidden="true">${icon}</span><span><strong>${art}</strong> · heute vor ${x.jahre} Jahren (${x.jahr}): ${wer}</span></li>`;
   };
   const nt = r.namenstag;
   return `<p class="tb-datum">${chrEsc(datum)}</p>
     ${mondZeileHtml(r.mond)}
-    ${nt ? `<p class="tb-namenstag">😇 <strong>Namenstag:</strong> ${chrEsc(nt.namen.slice(0, 4).join(", "))} <span class="tb-klein">(${chrEsc(nt.patron)})</span>${nt.anzahl ? ` · ${chrZahl(nt.anzahl)} ${nt.anzahl === 1 ? "Person" : "Personen"} im Bestand` : ""}${nt.verwandte.length ? `<br><span class="tb-rel">darunter ${nt.verwandte.map((v) => `${chrLink(v.p)} (${chrEsc(v.rel)})`).join(", ")}</span>` : ""}</p>` : ""}
+    ${nt ? `<p class="tb-namenstag">😇 <strong>Namenstag:</strong> ${chrEsc(nt.namen.slice(0, 4).join(", "))} <span class="tb-klein">(${chrEsc(nt.patron)})</span>${nt.anzahl ? ` · ${chrZahl(nt.anzahl)} ${nt.anzahl === 1 ? "Person" : "Personen"} im Bestand` : ""}</p>` : ""}
     ${r.regel ? `<p class="tb-regel">🌾 <em>${chrEsc(r.regel)}</em></p>` : ""}
     <h3 class="tb-titel">Heute vor … Jahren</h3>
-    ${r.ereignisse.length ? `<ul class="heute-liste">${r.ereignisse.map(zeile).join("")}</ul>` : '<p class="tb-klein">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>'}
+    ${r.ereignisse.length ? `<ul class="heute-liste tb-liste">${r.ereignisse.map(zeile).join("")}</ul>` : '<p class="tb-klein">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>'}
     <p class="tb-hinweis">Mondangaben berechnet nach altem Mondkalender (Tierkreis wie im Vorarlberger Kalender) – überliefertes Brauchtum, keine Empfehlung.</p>`;
 }

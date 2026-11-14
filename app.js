@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 419
+// Partezettel Archiv – Version 420
+// v420: Tagesblatt ohne Personalisierung, mit Symbolen (🎂 🕯 💍) und Mond-Bildzeichen; Gruppenfoto: Namen erst beim Suchen, Hochladen nur Bearbeiter.
 // v419: Tagesblatt beim Start: Mondkalender (Bartholomäberg), Namenstag, Bauernregel, runde Jahrestage, Verwandte zuerst; Geburtstage Lebender nicht für Leser.
 // v418: Stammbaum →, Cousins aus, Leser einfacher, „Das bin ich“, Heute-vor-Jahren, Einführung, Zurück in der Kopfzeile, Vorlesen, Anmeldeprotokoll, Anmeldename merken.
 // v417: Stammbaum – Suchfeld zeigt immer die dargestellte Person (Chronik → Person → Stammbaum zeigte den alten Namen).
@@ -5934,7 +5935,14 @@ function fuelleGruppenfotoPersonen() {
   const bisher = gruppenfotoAuswahlIds;
   const suchtext = gruppenfotoPersonenSuche?.value || "";
   const personen = (personenCache || []).slice().sort(PersonSuche.sort);
-  const gefiltert = personen.filter(p => personenSuchTreffer(p, suchtext));
+  // v420: Namen erst beim Suchen zeigen (mind. 2 Zeichen); bereits Ausgewählte bleiben immer sichtbar
+  const q = suchtext.trim();
+  const gefiltert = q.length >= 2 ? personen.filter(p => personenSuchTreffer(p, suchtext)) : personen.filter(p => bisher.has(p.id));
+  if (!gefiltert.length) {
+    gruppenfotoPersonenListe.innerHTML = `<p class="gruppenfoto-personen-hinweis">${q.length >= 2 ? "Niemand gefunden." : "Namen eingeben – passende Personen erscheinen hier zur Auswahl."}</p>`;
+    aktualisiereGruppenfotoPersonenAnzahl();
+    return;
+  }
   gruppenfotoPersonenListe.innerHTML = gefiltert.map(p => {
     const anzeige = fotoPersonAnzeige(p);
     return `
@@ -11832,7 +11840,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=419");
+      treeModul3D = await import("./tree3d.js?v=420");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13395,23 +13403,7 @@ async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
   // v419: Tagesblatt – Mondkalender, Namenstag, Bauernregel, Jahrestage (runde hervorgehoben, Verwandte zuerst)
   if (typeof chronikDatenLaden !== "function" || typeof tagesblattAuswerten !== "function") return false;
   const d = await chronikDatenLaden(false);
-  const ich = ichPerson();
-  let beziehung = null;
-  if (ich) {
-    try {
-      await treeDatenAktualisieren(600000);
-      if (treePerson(ich.id)) {
-        const cache = new Map();
-        beziehung = (id) => {
-          if (cache.has(id)) return cache.get(id);
-          const b = beziehungZuMir(id, ich.id);
-          const rel = b ? (b.wort === "du" ? "das bist du" : `${b.artikel} ${b.wort}`.trim()) : null;
-          cache.set(id, rel); return rel;
-        };
-      }
-    } catch (e) { debugLog(`⚠️ Tagesblatt Verwandtschaft: ${e.message || e}`); }
-  }
-  const r = tagesblattAuswerten(d, { leser: zugang?.rolle === "leser", ich, beziehung });
+  const r = tagesblattAuswerten(d, { leser: zugang?.rolle === "leser" });   // v420: ohne Personalisierung
   if (!r.ereignisse.length && !auchLeer) return false;
   const f = komfortFenster(`
     <div class="tour-icon" aria-hidden="true">📅</div>
