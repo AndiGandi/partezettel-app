@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 412
+// Partezettel Archiv – Version 413
+// v413: Stammbaum – „←“ (zurück zur vorigen Ansicht) sitzt jetzt in der Zoom-Leiste neben − / + / ↺.
 // v412: Kirchenbuch-Kurzanzeige für Eigentümer (Personenansicht oben, Bestandsliste T/Tr/S, Filter „Kirchenbuch fehlt“).
 // v411: Stammbaum – „← Zurück“ zur vorigen Ansicht; unbekannte Vorfahren/Partner werden nicht mehr als Platzhalter gezeigt.
 // v410: Einheitliche Eingabe – Trauungsbuch in der Ehe wie Tauf-/Sterbebuch, ✏️ bei Kirchenbüchern in der Personenansicht, Ehe-Angaben mit gemeinsamem „Speichern“, Hinweise je Abschnitt.
@@ -11802,7 +11803,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=412");
+      treeModul3D = await import("./tree3d.js?v=413");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

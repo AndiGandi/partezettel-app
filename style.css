@@ -1625,7 +1625,7 @@ select[name*="Year"] {
 #tab-stammbaum .tree-list-controls{display:inline-flex;gap:.4rem}
 #tab-stammbaum .tree-list-controls[hidden]{display:none}
 #tab-stammbaum .tree-list-controls .btn{min-height:40px;padding:.3rem .8rem;font-size:.85rem}
-#tab-stammbaum.tree-view--descendants .tree-zoom-controls,#tab-stammbaum.tree-view--descendants .tree-viewport-bar__hint{display:none}
+#tab-stammbaum.tree-view--descendants .tree-zoom-controls > :not(#tree-zurueck),#tab-stammbaum.tree-view--descendants .tree-viewport-bar__hint{display:none}
 #tab-stammbaum.tree-view--descendants .tree-viewport-bar{justify-content:flex-end}
 .tree-descendants-stage{max-width:780px;margin:0 auto;padding:.3rem .1rem 1rem}
 .tree-descendants-stage[hidden]{display:none}
@@ -1709,7 +1709,7 @@ details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
 .tree-3d-stage[hidden]{display:none}
 .tree-3d-stage canvas{display:block;width:100%;height:100%;touch-action:none;outline:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 #tab-stammbaum.tree-view--3d .tree-viewport{overflow:hidden;padding:0;height:clamp(420px,66vh,780px);min-height:0;max-height:none}
-#tab-stammbaum.tree-view--3d .tree-zoom-controls,#tab-stammbaum.tree-view--3d .tree-viewport-bar__hint{display:none}
+#tab-stammbaum.tree-view--3d .tree-zoom-controls > :not(#tree-zurueck),#tab-stammbaum.tree-view--3d .tree-viewport-bar__hint{display:none}
 #tab-stammbaum.tree-view--3d .tree-viewport-bar{justify-content:flex-end}
 .tree-3d-stage .tree-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;padding:1.2rem;text-align:center}
 .tree3d__hud{position:absolute;left:.6rem;right:.6rem;top:.6rem;display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem;pointer-events:none}
@@ -2166,3 +2166,8 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
   .kb-chip.is-da { background: #1d3a29; color: #9fd8b3; border-color: #3d7a55; }
   .kb-chip.is-fehlt { background: #3a2619; color: #f0b98e; border-color: #8a5a36; }
 }
+
+/* v413: Zurück-Pfeil in der Zoom-Leiste */
+.tree-zoom-controls .tree-zurueck { font-size: 1.15rem; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--line, #d8d2c6); border-radius: 0; }
+.tree-zoom-controls .tree-zurueck:disabled { opacity: 0.35; }
+#tab-stammbaum.tree-view--descendants .tree-zoom-controls .tree-zurueck,#tab-stammbaum.tree-view--3d .tree-zoom-controls .tree-zurueck{border-right:0;padding-right:.6rem}
