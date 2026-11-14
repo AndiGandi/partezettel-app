@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 413 -->
+    <!-- Version 416 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -13,7 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=413">
+<link rel="stylesheet" href="style.css?v=416">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -101,7 +101,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 413</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 416</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -672,7 +672,7 @@
   <!-- ===================== TAB: VERLAUF (nur Eigentümer) ===================== -->
   <section id="tab-chronik" class="tab-panel">
     <div class="chr-kopf">
-      <div><h2>Chronik &amp; Statistik</h2><p id="chronik-status" class="capture-status">Wird beim Öffnen berechnet.</p></div>
+      <div><h2>Chronik &amp; Statistik</h2><p id="chronik-status" class="capture-status">Wird beim Öffnen berechnet.</p><p class="chr-vorbehalt">ℹ️ Berechnet aus dem aktuellen, unvollständigen Datenbestand (Lebensdaten und Wohnorte fehlen teilweise). Alle Zahlen dienen nur der Orientierung, nicht als gesicherte Tatsachen.</p></div>
       <button type="button" id="chronik-neu" class="btn btn--secondary">⟳ Neu berechnen</button>
     </div>
     <div id="chronik-inhalt" class="chr-raster"></div>
@@ -1032,8 +1032,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=413"></script>
-<script src="app.js?v=413"></script>
-<script src="chronik.js?v=413"></script>
+<script src="hinweise.js?v=416"></script>
+<script src="app.js?v=416"></script>
+<script src="chronik.js?v=416"></script>
 </body>
 </html>

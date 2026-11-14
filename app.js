@@ -1,4 +1,7 @@
-// Partezettel Archiv – Version 413
+// Partezettel Archiv – Version 416
+// v416: Stammbaum startet leer mit Hinweis „Person suchen“; keine automatisch gewählte Startperson mehr.
+// v415: Stammbaum startet mit der zuletzt gewählten Person (sonst Hubert Ganahl *1930) statt mit der ersten Person der Datenbank.
+// v414: Hinweise – keine Verantwortung des Eigentümers mehr, Vorbehalt zu Vollständigkeit/Fehlern, Statistik nur zur Orientierung (auch in der Chronik).
 // v413: Stammbaum – „←“ (zurück zur vorigen Ansicht) sitzt jetzt in der Zoom-Leiste neben − / + / ↺.
 // v412: Kirchenbuch-Kurzanzeige für Eigentümer (Personenansicht oben, Bestandsliste T/Tr/S, Filter „Kirchenbuch fehlt“).
 // v411: Stammbaum – „← Zurück“ zur vorigen Ansicht; unbekannte Vorfahren/Partner werden nicht mehr als Platzhalter gezeigt.
@@ -9542,7 +9545,7 @@ function renderAhnentafel(rootId) {
   if (!wurzel) {
     stage.style.width = "";
     stage.style.height = "";
-    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    stage.innerHTML = treeLeerHtml();
     return;
   }
   const gens = treePedigreeGens;
@@ -9671,7 +9674,7 @@ function renderNachkommen(rootId) {
   if (!stage) return;
   const wurzel = treePerson(rootId);
   if (!wurzel) {
-    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    stage.innerHTML = treeLeerHtml();
     return;
   }
   const baum = treeDescendants(rootId);
@@ -9778,7 +9781,7 @@ function renderStammbaum(rootId) {
   stage.innerHTML = "";
   const root = treePerson(rootId);
   if (!root) {
-    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    stage.innerHTML = treeLeerHtml();
     return;
   }
 
@@ -11730,7 +11733,7 @@ function treeClassicConnectFamily(svg,pos,f){
 function renderKlassischerStammbaum(rootId){
   treeCousinsRefreshIfOpen(rootId);
   const stage=document.getElementById("tree-classic-stage"); if(!stage)return; stage.innerHTML="";
-  const info=treeClassicFamilyInfo(rootId); if(!info){stage.innerHTML='<div class="tree-classic-empty">Bitte eine Person auswählen.</div>';return;}
+  const info=treeClassicFamilyInfo(rootId); if(!info){stage.innerHTML=treeLeerHtml();return;}
   const mobile=window.innerWidth<=700, card=mobile?125:145, gap=mobile?14:20, rowH=mobile?118:132, vw=document.getElementById("tree-viewport")?.clientWidth||window.innerWidth;
   const lineSurname=treeMaleAncestorSurname(rootId)||String(info.root.nachname||"").trim();
   const parents=[...info.parentIds].sort(treeClassicPersonSort), middle=[...info.siblingIds,rootId].sort(treeClassicPersonSort), families=info.families.filter(f=>f.spouseId||f.childIds.length);
@@ -11786,7 +11789,7 @@ async function renderBaum3D(rootId) {
   const message = document.getElementById("tree-message");
   if (!stage) return;
   if (!treePerson(rootId)) {
-    stage.innerHTML = '<div class="tree-empty">Bitte eine Person auswählen.</div>';
+    stage.innerHTML = treeLeerHtml();
     return;
   }
   // Daten sofort zusammenstellen (solange ein Linienfilter aktiv ist), erst danach das Modul laden.
@@ -11803,7 +11806,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=413");
+      treeModul3D = await import("./tree3d.js?v=416");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11890,9 +11893,11 @@ async function loadStammbaum() {
     }
     const current = select.value && treePerson(select.value) ? select.value : treeStandardPerson();
     fillTreePersonSelect(search?.value || "", current);
-    if (!select.value) {
+    if (!select.value && current) {
+      if (![...select.options].some((o) => o.value === current)) select.appendChild(new Option(treePersonLabel(current), current));
       select.value = current;
     }
+    if (search && select.value && !search.value) search.value = treePersonLabel(select.value);   // v415: zeigen, wer gewählt ist
     renderStammbaum(select.value);
     fillTreeRelationshipSelects();
     message.textContent = "";
@@ -11915,12 +11920,18 @@ function updateTreeZoom() {
 
 // v343: Ist im Stammbaum noch keine Person gewählt, werden Hubert und Luise Ganahl gezeigt
 // (Hubert als Ausgangsperson, Luise erscheint als seine Partnerin). Fallback: Luise, sonst die erste Person.
+function treeLeerHtml() {   // v416: freundlicher Startzustand
+  return `<div class="tree-empty tree-start">
+    <div class="tree-start__icon" aria-hidden="true">🌳</div>
+    <p class="tree-start__titel">Noch keine Person gewählt</p>
+    <p class="tree-start__text">Oben einen Namen eingeben, Vorschlag antippen und <strong>„Auswahl bestätigen“</strong>.<br>
+    Oder im <strong>Bestand</strong> eine Person öffnen und <strong>„🌳 Im Stammbaum anzeigen“</strong> tippen.</p>
+    <button type="button" class="btn btn--primary tree-start__suche" onclick="const f=document.getElementById('tree-person-search'); f?.scrollIntoView({block:'center',behavior:'smooth'}); setTimeout(()=>f?.focus(),300);">🔍 Person suchen</button>
+  </div>`;
+}
 function treeStandardPerson() {
-  const hubert = treeFindPresetPerson(["hubert"], "Ganahl");
-  if (hubert) return hubert.id;
-  const luise = treeFindPresetPerson(["luise"], "Ganahl");
-  if (luise) return luise.id;
-  return treeData.personen[0]?.id || "";
+  // v416: Der Stammbaum startet leer – man sucht eine Person (oben oder im Bestand → „Im Stammbaum anzeigen“).
+  return "";
 }
 
 function treeFindPresetPerson(tokens, surname, geburtsjahr = null) {

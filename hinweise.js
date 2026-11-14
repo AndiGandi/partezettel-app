@@ -3,7 +3,7 @@
 // und Version gespeichert. Ändert sich der Text inhaltlich, bitte die Version unten ändern:
 // dann muss jeder Benutzer den neuen Text noch einmal bestätigen.
 window.HINWEIS = {
-  version: "2026-10-18.5",
+  version: "2026-11-14.1",
   titel: "Vertraulichkeit und Hinweise",
   einleitung: "Familienspuren ist ein privates Archiv für die Familiengeschichte: Partezettel, Fotos, Aufnahmen und Erinnerungen. Der Zugang ist auf einen kleinen, persönlich eingeladenen Kreis beschränkt. Bitte nimm dir kurz Zeit für diese Hinweise.",
   abschnitte: [
@@ -40,10 +40,19 @@ window.HINWEIS = {
       ]
     },
     {
-      titel: "Verantwortlich und Rechte",
+      titel: "Genauigkeit der Angaben",
       punkte: [
-        "Verantwortlich für die Daten ist der Eigentümer dieser Datenbank. Fragen, Auskunfts-, Berichtigungs- und Löschwünsche gehen an ihn.",
-        "Die Daten, Fotos und Aufnahmen werden bei einem Cloud-Anbieter gespeichert. Sicherungskopien (Backups) legt allein der Eigentümer an und bewahrt sie sicher auf."
+        "Der Datenbestand ist nicht vollständig und kann Fehler enthalten. Viele Angaben stammen aus Hausblättern, Ahnentafeln, Sippenbüchern und Erzählungen und wurden nur teilweise mit den Kirchenbüchern abgeglichen.",
+        "Auch die Wohnorte sind nur lückenhaft erfasst. Auswertungen, Chronik und Statistiken dienen daher nur der Orientierung und sind nicht als gesicherte Tatsachen zu verstehen.",
+        "Wer einen Fehler entdeckt oder eine Ergänzung hat, meldet das bitte dem Eigentümer."
+      ]
+    },
+    {
+      titel: "Private Sammlung",
+      punkte: [
+        "Familienspuren ist eine private, nicht gewerbliche Sammlung für die Familie. Für die Richtigkeit und Vollständigkeit der Inhalte wird keine Gewähr übernommen.",
+        "Wünsche zur Berichtigung oder Löschung von Angaben gehen an den Eigentümer.",
+        "Die Daten, Fotos und Aufnahmen werden bei einem Cloud-Anbieter gespeichert. Sicherungskopien (Backups) legt der Eigentümer an und bewahrt sie sicher auf."
       ]
     }
   ],
