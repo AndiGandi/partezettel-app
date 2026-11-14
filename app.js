@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 420
+// Partezettel Archiv – Version 421
+// v421: Dunkelmodus-Regeln entfernt (App ist immer hell) – Mondkasten im Tagesblatt war auf iPads im Dunkelmodus unlesbar.
 // v420: Tagesblatt ohne Personalisierung, mit Symbolen (🎂 🕯 💍) und Mond-Bildzeichen; Gruppenfoto: Namen erst beim Suchen, Hochladen nur Bearbeiter.
 // v419: Tagesblatt beim Start: Mondkalender (Bartholomäberg), Namenstag, Bauernregel, runde Jahrestage, Verwandte zuerst; Geburtstage Lebender nicht für Leser.
 // v418: Stammbaum →, Cousins aus, Leser einfacher, „Das bin ich“, Heute-vor-Jahren, Einführung, Zurück in der Kopfzeile, Vorlesen, Anmeldeprotokoll, Anmeldename merken.
@@ -11840,7 +11841,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=420");
+      treeModul3D = await import("./tree3d.js?v=421");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13406,7 +13407,7 @@ async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
   const r = tagesblattAuswerten(d, { leser: zugang?.rolle === "leser" });   // v420: ohne Personalisierung
   if (!r.ereignisse.length && !auchLeer) return false;
   const f = komfortFenster(`
-    <div class="tour-icon" aria-hidden="true">📅</div>
+    <div class="tb-kalenderblatt" aria-hidden="true"><span>${new Date().toLocaleDateString("de-AT", { month: "short", timeZone: "Europe/Vienna" }).replace(".", "").toUpperCase()}</span><b>${new Date().toLocaleDateString("de-AT", { day: "numeric", timeZone: "Europe/Vienna" }).replace(".", "")}</b></div>
     <h2 class="tour-titel">Tagesblatt</h2>
     <div class="tagesblatt">${tagesblattHtml(r)}</div>
     <label class="heute-aus"><input type="checkbox" id="heute-aus-cb" ${lsGet(KOMFORT.heuteAus) ? "checked" : ""}> Nicht mehr automatisch beim Start zeigen</label>

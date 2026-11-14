@@ -2128,10 +2128,7 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .linie-badge.linie-bberg.is-tochter { color: #2f5fa7; }
 .pv-linien { margin: 4px 0 0; font-size: 0.92rem; color: var(--color-text-muted, #6b6459); line-height: 1.7; }
 .pv-linien .linie-badge { margin-left: 0; margin-right: 4px; }
-@media (prefers-color-scheme: dark) {
-  .linie-badge.linie-schruns.is-tochter { color: #7cc79a; border-color: #7cc79a; }
-  .linie-badge.linie-bberg.is-tochter { color: #8fb1ea; border-color: #8fb1ea; }
-}
+
 
 /* v410: einheitliche Speicher-Hinweise und Trauungsbuch in der Ehe-Karte */
 .speichern-hinweis { font: 500 0.72rem/1 system-ui, sans-serif; color: var(--color-text-muted, #6b6459); background: rgba(176, 140, 60, 0.13); border-radius: 999px; padding: 3px 8px; margin-left: 6px; vertical-align: middle; letter-spacing: 0; text-transform: none; }
@@ -2162,10 +2159,7 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .kb-mini__b { padding: 2px 3px; border-radius: 4px; }
 .kb-mini__b.is-da { background: #2e7d4f; color: #fff; }
 .kb-mini__b.is-fehlt { background: transparent; color: #b5651d; border: 1px dashed #d9a273; }
-@media (prefers-color-scheme: dark) {
-  .kb-chip.is-da { background: #1d3a29; color: #9fd8b3; border-color: #3d7a55; }
-  .kb-chip.is-fehlt { background: #3a2619; color: #f0b98e; border-color: #8a5a36; }
-}
+
 
 /* v413: Zurück-Pfeil in der Zoom-Leiste */
 .tree-zoom-controls .tree-zurueck { font-size: 1.15rem; padding: 0 8px; margin: 0; border-radius: 0; }
@@ -2217,9 +2211,7 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .konto-protokoll { margin-top: 8px; max-height: 50vh; overflow: auto; }
 .protokoll-tabelle { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
 .protokoll-tabelle th, .protokoll-tabelle td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line, #e3ddd0); vertical-align: top; }
-@media (prefers-color-scheme: dark) {
-  .komfort-suche__eintrag { background: transparent; color: inherit; }
-}
+
 
 /* v419: Tagesblatt */
 .komfort-fenster--heute { text-align: left; }
@@ -2235,7 +2227,7 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .heute-liste li.is-verwandt { background: #eef6f0; border-radius: 6px; padding: 0 4px; }
 .tb-rel { color: #2e7d4f; font-weight: 600; }
 .tb-hinweis { margin-top: 12px; font-style: italic; }
-@media (prefers-color-scheme: dark) { .tb-mond { background: #1f2a33; } .tb-mond__art { color: #9fbbd6; } .heute-liste li.is-verwandt { background: #1d3328; } }
+
 
 /* v420 */
 .gruppenfoto-personen-hinweis { margin: 8px 4px; color: var(--color-text-muted, #6b6459); font-size: .92rem; }
@@ -2250,4 +2242,10 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .tb-liste li { display: flex; gap: 8px; align-items: flex-start; padding: 3px 0; line-height: 1.5; }
 .tb-icon { flex: 0 0 1.5em; text-align: center; }
 .komfort-fenster { box-shadow: 0 10px 34px rgba(0,0,0,.16); }
-@media (prefers-color-scheme: dark) { .tb-mond { background: #232823; border-color: #34402f; } .tb-mz__sym, .tb-glyph { color: #c9d3c4; } }
+
+
+/* v421: Familienspuren ist immer hell – auch wenn das Gerät im Dunkelmodus ist */
+:root { color-scheme: light; }
+.tb-kalenderblatt { width: 58px; margin: 0 auto 8px; border-radius: 9px; overflow: hidden; border: 1px solid #ddd6c8; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); text-align: center; }
+.tb-kalenderblatt span { display: block; background: #2f6b4a; color: #fff; font: 700 .7rem/1.6 system-ui, sans-serif; letter-spacing: .06em; }
+.tb-kalenderblatt b { display: block; font: 700 1.6rem/1.5 Georgia, serif; color: #2b2722; }
