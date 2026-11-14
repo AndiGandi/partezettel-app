@@ -389,7 +389,7 @@ function chronikAuswerten(d) {
   const tag = (v) => v && String(v).slice(5, 10) === md;
   r.heute = [];
   for (const p of d.personen) {
-    if (tag(p.geburtsdatum)) r.heute.push({ art: "geboren", p, jahr: chrJahr(p.geburtsdatum) });
+    if (tag(p.geburtsdatum) && !(typeof zugang !== "undefined" && zugang?.rolle === "leser" && chrVermutlichLebend(p))) r.heute.push({ art: "geboren", p, jahr: chrJahr(p.geburtsdatum) });   // v419: Lebende nicht für Leser
     if (tag(p.sterbedatum)) r.heute.push({ art: "gestorben", p, jahr: chrJahr(p.sterbedatum) });
   }
   for (const f of ehen) if (tag(f.beginn)) r.heute.push({ art: "geheiratet", p: P.get(f.partner_a_id), p2: P.get(f.partner_b_id), jahr: chrJahr(f.beginn) });
@@ -484,7 +484,7 @@ function chronikRendern(r, ziel) {
   const monatsNamen = ["Jän", "Feb", "Mär", "Apr", "Mai", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dez"];
   const maxMonat = Math.max(...r.sterbeMonate, 1);
   const html = [
-    karte("📅 Heute vor … Jahren", `<p class="chr-sub">${chrEsc(r.heuteText)}</p>` + (r.heute.length ? liste(r.heute, (x) => `<b>${x.jahr}</b> · vor ${new Date().getFullYear() - x.jahr} Jahren ${x.art === "geheiratet" ? `heirateten ${chrLink(x.p)} und ${chrLink(x.p2)}` : `${x.art === "geboren" ? "wurde" : "starb"} ${chrLink(x.p)}${x.art === "geboren" ? " geboren" : ""}`}`) : `<p class="chr-leer">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>`), "chr-breit"),
+    karte("📅 Heute vor … Jahren", `<p class="chr-sub">${chrEsc(r.heuteText)}</p>` + (() => { try { const t = tagesMonatTag(); const nt = NAMENSTAGE[t.md]; return mondZeileHtml(MOND.tag(t.jahr, t.monat, t.tag)) + (nt ? `<p class="tb-namenstag">😇 <strong>Namenstag:</strong> ${chrEsc(nt[1].slice(0, 4).join(", "))} <span class="tb-klein">(${chrEsc(nt[0])})</span></p>` : ""); } catch { return ""; } })() + (r.heute.length ? liste(r.heute, (x) => `<b>${x.jahr}</b> · vor ${new Date().getFullYear() - x.jahr} Jahren ${x.art === "geheiratet" ? `heirateten ${chrLink(x.p)} und ${chrLink(x.p2)}` : `${x.art === "geboren" ? "wurde" : "starb"} ${chrLink(x.p)}${x.art === "geboren" ? " geboren" : ""}`}`) : `<p class="chr-leer">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>`), "chr-breit"),
     karte("🔢 Zahlen", `<div class="chr-zahlen">
       <div><b>${chrZahl(z.personen)}</b><span>Personen</span></div>
       <div><b>${chrZahl(z.ehen)}</b><span>Ehen</span></div>
@@ -586,4 +586,341 @@ function zeigeZeitgeschehen(person) {
     liste.querySelectorAll("li[hidden]").forEach((li) => { li.hidden = false; });
     e.currentTarget.closest("li").remove();
   });
+}
+
+/* ===================== v419: Tagesblatt – Mondkalender, Namenstage, Bauernregeln ===================== */
+// Mondkalender – Berechnung nach P. Schlyter (Störungsterme nach Meeus/Brown), Genauigkeit etwa 1–2 Bogenminuten.
+// Tierkreis tropisch (wie Vorarlberger Schreib-Kalender), Ort Bartholomäberg.
+const MOND = (() => {
+  const RAD = Math.PI / 180, DEG = 180 / Math.PI;
+  const rev = (x) => x - Math.floor(x / 360) * 360;
+  const sind = (x) => Math.sin(x * RAD), cosd = (x) => Math.cos(x * RAD);
+  const ZEICHEN = [
+    ["Widder", "♈", "Feuer"], ["Stier", "♉", "Erde"], ["Zwillinge", "♊", "Luft"], ["Krebs", "♋", "Wasser"],
+    ["Löwe", "♌", "Feuer"], ["Jungfrau", "♍", "Erde"], ["Waage", "♎", "Luft"], ["Skorpion", "♏", "Wasser"],
+    ["Schütze", "♐", "Feuer"], ["Steinbock", "♑", "Erde"], ["Wassermann", "♒", "Luft"], ["Fische", "♓", "Wasser"],
+  ];
+  const TAGESART = { Feuer: "Wärmetag · Fruchttag", Erde: "Kältetag · Wurzeltag", Luft: "Luft-/Lichttag · Blütetag", Wasser: "Wassertag · Blatttag" };
+  const ORT = { breite: 47.087, laenge: 9.909 };   // Bartholomäberg
+  const tage = (date) => date.getTime() / 86400000 + 2440587.5 - 2451543.5;   // d nach Schlyter (UT)
+  function sonne(d) {
+    const w = 282.9404 + 4.70935e-5 * d, e = 0.016709 - 1.151e-9 * d, M = rev(356.0470 + 0.9856002585 * d);
+    const E = M + e * DEG * sind(M) * (1 + e * cosd(M));
+    const xv = cosd(E) - e, yv = Math.sqrt(1 - e * e) * sind(E);
+    const v = Math.atan2(yv, xv) * DEG;
+    return { lon: rev(v + w), M, L: rev(M + w) };
+  }
+  function mond(d) {
+    const N = 125.1228 - 0.0529538083 * d, i = 5.1454, w = 318.0634 + 0.1643573223 * d, a = 60.2666, e = 0.0549;
+    const M = rev(115.3654 + 13.0649929509 * d);
+    let E = M + e * DEG * sind(M) * (1 + e * cosd(M));
+    for (let k = 0; k < 5; k++) E = E - (E - e * DEG * sind(E) - M) / (1 - e * cosd(E));
+    const xv = a * (cosd(E) - e), yv = a * Math.sqrt(1 - e * e) * sind(E);
+    const v = Math.atan2(yv, xv) * DEG, r = Math.hypot(xv, yv);
+    const xh = r * (cosd(N) * cosd(v + w) - sind(N) * sind(v + w) * cosd(i));
+    const yh = r * (sind(N) * cosd(v + w) + cosd(N) * sind(v + w) * cosd(i));
+    const zh = r * sind(v + w) * sind(i);
+    let lon = Math.atan2(yh, xh) * DEG, lat = Math.atan2(zh, Math.hypot(xh, yh)) * DEG, dist = r;
+    const s = sonne(d), Ms = s.M, Ls = s.L, Lm = rev(M + w + N), D = Lm - Ls, F = Lm - N;
+    lon += -1.274 * sind(M - 2 * D) + 0.658 * sind(2 * D) - 0.186 * sind(Ms) - 0.059 * sind(2 * M - 2 * D) - 0.057 * sind(M - 2 * D + Ms)
+      + 0.053 * sind(M + 2 * D) + 0.046 * sind(2 * D - Ms) + 0.041 * sind(M - Ms) - 0.035 * sind(D) - 0.031 * sind(M + Ms)
+      - 0.015 * sind(2 * F - 2 * D) + 0.011 * sind(M - 4 * D);
+    lat += -0.173 * sind(F - 2 * D) - 0.055 * sind(M - F - 2 * D) - 0.046 * sind(M + F - 2 * D) + 0.033 * sind(F + 2 * D) + 0.017 * sind(2 * M + F);
+    dist += -0.58 * cosd(M - 2 * D) - 0.46 * cosd(2 * D);
+    return { lon: rev(lon), lat, dist, sonne: s };
+  }
+  function hoehe(lon, lat, d, date, istMond, dist) {
+    const ecl = 23.4393 - 3.563e-7 * d;
+    const x = cosd(lon) * cosd(lat), y = sind(lon) * cosd(lat), z = sind(lat);
+    const ye = y * cosd(ecl) - z * sind(ecl), ze = y * sind(ecl) + z * cosd(ecl);
+    const ra = Math.atan2(ye, x) * DEG, dec = Math.atan2(ze, Math.hypot(x, ye)) * DEG;
+    const ut = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+    const lst = rev(sonne(d).L + 180 + ut * 15 + ORT.laenge);
+    const ha = lst - ra;
+    let h = Math.asin(sind(ORT.breite) * sind(dec) + cosd(ORT.breite) * cosd(dec) * cosd(ha)) * DEG;
+    if (istMond) h -= Math.asin(1 / dist) * DEG * cosd(h);   // Parallaxe
+    return h;
+  }
+  const hMond = (date) => { const d = tage(date), m = mond(d); return hoehe(m.lon, m.lat, d, date, true, m.dist); };
+  const hSonne = (date) => { const d = tage(date), s = sonne(d); return hoehe(s.lon, 0, d, date, false); };
+  // Mitternacht des Kalendertags in Wien
+  function tagesBeginn(jahr, monat, tag) {
+    let t = Date.UTC(jahr, monat - 1, tag, 0, 0);
+    const off = (dt) => { const p = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Vienna", hour: "2-digit", hourCycle: "h23", day: "2-digit" }).formatToParts(dt); const h = +p.find((x) => x.type === "hour").value; const dd = +p.find((x) => x.type === "day").value; return dd === tag ? h : h - 24; };
+    return new Date(t - off(new Date(t)) * 3600000);
+  }
+  function durchgaenge(fn, start, h0) {
+    const auf = [], unter = []; const schritt = 10 * 60000;
+    let t0 = start.getTime(), v0 = fn(new Date(t0)) - h0;
+    for (let t = t0 + schritt; t <= t0 + 86400000; t += schritt) {
+      const v = fn(new Date(t)) - h0;
+      if ((v0 < 0) !== (v < 0)) {
+        let a = t - schritt, b = t, va = v0;
+        for (let k = 0; k < 12; k++) { const m = (a + b) / 2, vm = fn(new Date(m)) - h0; if ((va < 0) === (vm < 0)) { a = m; va = vm; } else b = m; }
+        (v0 < 0 ? auf : unter).push(new Date((a + b) / 2));
+      }
+      v0 = v;
+    }
+    return { auf: auf[0] || null, unter: unter[0] || null };
+  }
+  function zeichenVon(lon) { const z = ZEICHEN[Math.floor(lon / 30)]; return { name: z[0], symbol: z[1], element: z[2], art: TAGESART[z[2]] }; }
+  function phase(date) { const m = mond(tage(date)); return rev(m.lon - m.sonne.lon); }   // 0 = Neumond, 180 = Vollmond
+  function tag(jahr, monat, tagNr) {
+    const beginn = tagesBeginn(jahr, monat, tagNr), ende = new Date(beginn.getTime() + 86400000);
+    const mittag = new Date(beginn.getTime() + 12 * 3600000);
+    const m = mond(tage(mittag));
+    const z = zeichenVon(m.lon);
+    // Zeichenwechsel innerhalb des Tages
+    let wechsel = null;
+    const zA = Math.floor(mond(tage(beginn)).lon / 30), zE = Math.floor(mond(tage(ende)).lon / 30);
+    if (zA !== zE) {
+      let a = beginn.getTime(), b = ende.getTime();
+      for (let k = 0; k < 30; k++) { const c = (a + b) / 2; if (Math.floor(mond(tage(new Date(c))).lon / 30) === zA) a = c; else b = c; }
+      wechsel = { zeit: new Date(b), nach: zeichenVon(zE * 30 + 1), von: zeichenVon(zA * 30 + 1) };
+    }
+    // Neumond/Vollmond an diesem Tag?
+    let ereignis = null;
+    const pA = phase(beginn), pE = phase(ende);
+    const kreuzt = (ziel) => { const a = rev(pA - ziel + 180) - 180, b = rev(pE - ziel + 180) - 180; return a < 0 && b >= 0; };
+    if (kreuzt(0)) ereignis = "Neumond"; else if (kreuzt(180)) ereignis = "Vollmond";
+    const p = phase(mittag);
+    const zunehmend = p < 180;
+    const aufsteigend = m.lon >= 270 || m.lon < 90;   // Steinbock … Zwillinge
+    const mz = durchgaenge(hMond, beginn, 0.125 - 0.583 - 0.27 + 0.27);   // Oberrand, Refraktion
+    const sz = durchgaenge(hSonne, beginn, -0.833);
+    const beleuchtet = Math.round((1 - Math.cos(p * RAD)) / 2 * 100);
+    return { zeichen: z, wechsel, ereignis, zunehmend, aufsteigend, beleuchtet, mondAuf: mz.auf, mondUnter: mz.unter, sonneAuf: sz.auf, sonneUnter: sz.unter, laenge: m.lon };
+  }
+  return { tag, ZEICHEN, phase, mondLaenge: (date) => mond(tage(date)).lon };
+})();
+// Namenstage: Hauptfest des Namenspatrons nach dem katholischen Kalender in Österreich (je Name ein Tag).
+// Schlüssel "MM-TT" -> [Patron, [Vornamen-Varianten im Bestand]]
+const NAMENSTAGE = {
+  "01-02": ["hl. Basilius", ["Basilius"]],
+  "01-03": ["hl. Genovefa", ["Genovefa", "Genoveva"]],
+  "01-06": ["hl. Kaspar (Dreikönig)", ["Kaspar"]],
+  "01-08": ["hl. Severin", ["Severin"]],
+  "01-13": ["hl. Hilarius", ["Hilar", "Hilarius"]],
+  "01-20": ["hl. Sebastian", ["Sebastian"]],
+  "01-21": ["hl. Agnes", ["Agnes"]],
+  "01-26": ["hl. Paula", ["Paula", "Paulina", "Pauline"]],
+  "01-27": ["hl. Angela Merici", ["Angela"]],
+  "01-30": ["hl. Martina", ["Martina"]],
+  "02-01": ["hl. Brigida", ["Brigitte", "Brigitta", "Birgith"]],
+  "02-03": ["hl. Ansgar · hl. Blasius", ["Oskar"]],
+  "02-05": ["hl. Agatha", ["Agatha", "Agathe"]],
+  "02-06": ["hl. Dorothea", ["Dorothea", "Dora"]],
+  "02-09": ["hl. Apollonia", ["Apollonia"]],
+  "02-24": ["hl. Matthias", ["Matthias", "Mathias", "Mathies"]],
+  "02-25": ["hl. Walburga", ["Walburga"]],
+  "02-26": ["hl. Edigna", ["Edigna"]],
+  "03-04": ["hl. Kasimir", ["Kasimir"]],
+  "03-06": ["hl. Fridolin", ["Fridolin", "Fridolina"]],
+  "03-07": ["hl. Felizitas", ["Felizitas", "Filizitas"]],
+  "03-09": ["hl. Franziska von Rom", ["Franziska", "Francisca"]],
+  "03-11": ["hl. Rosina", ["Rosina", "Rosi"]],
+  "03-14": ["hl. Mathilde", ["Mathilda", "Mathilde"]],
+  "03-15": ["hl. Longinus · hl. Luise", ["Longinus", "Luise", "Louise"]],
+  "03-17": ["hl. Gertrud", ["Gertrud"]],
+  "03-19": ["hl. Josef", ["Josef", "Josefa", "Josefine", "Josefina", "Josepha", "Josephine", "Pepi"]],
+  "04-04": ["hl. Isidor von Sevilla", []],
+  "04-05": ["hl. Crescentia", ["Kreszenz", "Kreszenzia", "Creszenz", "Creszenzia", "Kresenza"]],
+  "04-11": ["hl. Stanislaus", ["Stanislaus"]],
+  "04-14": ["hl. Lidwina", ["Ludwina"]],
+  "04-16": ["hl. Bernadette", ["Bernadette"]],
+  "04-23": ["hl. Georg · hl. Adalbert", ["Georg", "Adalbert"]],
+  "04-24": ["hl. Fidelis von Sigmaringen", ["Fidel", "Fidelis", "Fidelius"]],
+  "04-25": ["hl. Markus", ["Markus", "Marko"]],
+  "04-27": ["hl. Zita", ["Zitta", "Zita"]],
+  "05-03": ["hl. Philippus und Jakobus", ["Philipp"]],
+  "05-04": ["hl. Florian", ["Florian"]],
+  "05-07": ["sel. Gisela", ["Gisela"]],
+  "05-15": ["hl. Isidor der Bauer · hl. Sophie", ["Isidor", "Sophie", "Sofie", "Sophia"]],
+  "05-16": ["hl. Johannes Nepomuk", ["Nepomuk"]],
+  "05-19": ["hl. Cölestin", ["Cölestina", "Cälestine", "Zölestin"]],
+  "05-22": ["hl. Rita", ["Rita", "Ritta"]],
+  "05-25": ["hl. Urban", ["Urban"]],
+  "05-30": ["hl. Ferdinand · hl. Johanna", ["Ferdinand", "Johanna"]],
+  "06-06": ["hl. Norbert", ["Norbert"]],
+  "06-13": ["hl. Antonius von Padua", ["Anton", "Antonius", "Antonia"]],
+  "06-16": ["hl. Benno", ["Benno"]],
+  "06-21": ["hl. Aloisius", ["Alois", "Aloisia"]],
+  "06-24": ["hl. Johannes der Täufer", ["Johann", "Johannes", "Hans", "Hansi", "Baptist"]],
+  "06-29": ["hl. Petrus und Paulus", ["Peter", "Paul"]],
+  "06-30": ["hl. Otto", ["Otto", "Ottokar"]],
+  "07-03": ["hl. Thomas", ["Thomas"]],
+  "07-04": ["hl. Ulrich", ["Ulrich"]],
+  "07-08": ["hl. Kilian", ["Kilian"]],
+  "07-11": ["hl. Benedikt", ["Benedikt", "Benedikta"]],
+  "07-13": ["hl. Heinrich", ["Heinrich", "Heinz", "Heini"]],
+  "07-15": ["hl. Egon", ["Egon"]],
+  "07-20": ["hl. Margareta · hl. Elias", ["Margareth", "Margarethe", "Margaret", "Margret", "Margit", "Elias"]],
+  "07-22": ["hl. Maria Magdalena", ["Magdalena"]],
+  "07-24": ["hl. Christophorus · hl. Christina", ["Christoph", "Christine", "Christina"]],
+  "07-25": ["hl. Jakobus", ["Jakob"]],
+  "07-26": ["hl. Anna und Joachim", ["Anna", "Joachim", "Anitta", "Marianne"]],
+  "07-29": ["hl. Martha", ["Martha", "Marta"]],
+  "07-31": ["hl. Ignatius von Loyola", ["Ignaz"]],
+  "08-01": ["hl. Alfons", ["Alfons"]],
+  "08-03": ["hl. Lydia", ["Lydia", "Lidya"]],
+  "08-05": ["hl. Oswald", ["Oswald"]],
+  "08-07": ["hl. Afra", ["Afra"]],
+  "08-08": ["hl. Dominikus", ["Dominikus", "Dominique"]],
+  "08-10": ["hl. Laurentius", ["Lorenz"]],
+  "08-11": ["hl. Susanna · hl. Philomena", ["Susanna", "Philomena"]],
+  "08-18": ["hl. Helena", ["Helena", "Helene"]],
+  "08-20": ["hl. Bernhard", ["Bernhard"]],
+  "08-21": ["hl. Pius X.", ["Pius"]],
+  "08-23": ["hl. Rosa von Lima · hl. Philipp Benizi", ["Rosa", "Benizi"]],
+  "08-24": ["hl. Bartholomäus, Patrozinium Bartholomäberg", ["Bartholomä", "Bartholomäus", "Bartholmäus", "Bartle", "Bartel"]],
+  "08-25": ["hl. Ludwig", ["Ludwig"]],
+  "08-27": ["hl. Monika · hl. Gebhard", ["Monika", "Gebhard"]],
+  "08-28": ["hl. Augustinus", ["Augustin", "Augustine"]],
+  "08-29": ["hl. Sabina", ["Sabina", "Sabine"]],
+  "09-04": ["hl. Rosalia · hl. Ida", ["Rosalia", "Ida"]],
+  "09-06": ["hl. Magnus", ["Magnus"]],
+  "09-07": ["hl. Regina", ["Regina"]],
+  "09-12": ["Mariä Namen", ["Maria", "Marie"]],
+  "09-13": ["hl. Notburga · hl. Tobias", ["Notburga", "Tobias"]],
+  "09-16": ["hl. Edith", ["Edith"]],
+  "09-17": ["hl. Hildegard · hl. Robert", ["Hildegard", "Hildegart", "Hilde", "Robert"]],
+  "09-21": ["hl. Matthäus", ["Mathäus", "Matthäus"]],
+  "09-22": ["hl. Mauritius", ["Mauritius", "Maurizi"]],
+  "09-24": ["hl. Rupert", ["Rupert"]],
+  "09-29": ["hl. Michael", ["Michael", "Michaela", "Micheal"]],
+  "09-30": ["hl. Hieronymus", ["Hieronymus"]],
+  "10-04": ["hl. Franz von Assisi", ["Franz"]],
+  "10-09": ["hl. Dionysius", ["Dionysius"]],
+  "10-13": ["hl. Eduard", ["Eduard"]],
+  "10-15": ["hl. Theresia von Ávila", ["Theresia", "Theres", "Therese", "Theresa"]],
+  "10-16": ["hl. Hedwig", ["Hedwig"]],
+  "10-20": ["hl. Wendelin", ["Wendelin"]],
+  "10-21": ["hl. Ursula", ["Ursula"]],
+  "10-22": ["hl. Salome", ["Salome"]],
+  "10-31": ["hl. Wolfgang", ["Wolfgang"]],
+  "11-03": ["hl. Hubert", ["Hubert"]],
+  "11-04": ["hl. Karl Borromäus", ["Karl"]],
+  "11-05": ["hl. Emmerich", ["Emerich", "Emmerich"]],
+  "11-07": ["hl. Engelbert", ["Engelbert"]],
+  "11-08": ["hl. Gottfried", ["Gottfried"]],
+  "11-10": ["hl. Leo", ["Leo"]],
+  "11-11": ["hl. Martin", ["Martin"]],
+  "11-12": ["hl. Kunibert", ["Kunibert"]],
+  "11-15": ["hl. Leopold · hl. Albert", ["Leopoldine", "Albert", "Albertina"]],
+  "11-16": ["hl. Otmar", ["Otmar", "Ottmar"]],
+  "11-17": ["hl. Florinus", ["Florinus"]],
+  "11-19": ["hl. Elisabeth von Thüringen", ["Elisabeth"]],
+  "11-20": ["hl. Edmund", ["Edmund"]],
+  "11-22": ["hl. Cäcilia", ["Cäcilia", "Cäzilia", "Cilli"]],
+  "11-25": ["hl. Katharina", ["Katharina"]],
+  "11-26": ["hl. Konrad von Konstanz", ["Konrad"]],
+  "11-30": ["hl. Andreas", ["Andreas", "Andrea"]],
+  "12-03": ["hl. Franz Xaver", ["Xaver"]],
+  "12-04": ["hl. Barbara", ["Barbara"]],
+  "12-06": ["hl. Nikolaus", ["Nikolaus", "Klaus"]],
+  "12-13": ["hl. Odilia · hl. Luzia", ["Ottilie"]],
+  "12-16": ["hl. Adelheid", ["Adelheid"]],
+  "12-23": ["hl. Viktoria", ["Viktoria"]],
+  "12-26": ["hl. Stephanus", ["Stephan", "Stefan"]],
+  "12-31": ["hl. Silvester · hl. Melanie", ["Silvester", "Melanie"]],
+};
+const BAUERNREGELN = {
+  "01-06": "Ist bis Dreikönig kein Winter, kommt keiner mehr dahinter.",
+  "01-20": "Fabian und Sebastian lassen Saft in die Bäume gahn.",
+  "02-02": "Lichtmess: Ist's an Lichtmess hell und rein, wird's ein langer Winter sein.",
+  "02-24": "Matthias bricht's Eis – hat er keins, so macht er eins.",
+  "03-19": "Ist's am Josefstag schön, kann's nur gut weitergehn.",
+  "04-23": "Georgi: Ist's an Georgi warm und schön, wird man noch rauhes Wetter sehn.",
+  "05-04": "Florian: Der Florian, der Florian noch einen Schneehut tragen kann.",
+  "05-12": "Eisheilige (Pankratius, Servatius, Bonifatius, 12.–14. Mai) – vorher ist nichts sicher vor Frost.",
+  "05-15": "Die kalte Sophie macht alles hie.",
+  "05-25": "Wie's Wetter am Urbanstag, so's im Herbst noch kommen mag.",
+  "06-24": "Vor Johanni bitt um Regen, nachher kommt er ungelegen.",
+  "06-27": "Siebenschläfer: Wie das Wetter am Siebenschläfertag, so es sieben Wochen bleiben mag.",
+  "07-25": "Ist's zu Jakobi schön und warm, hat man im Winter Kält und Harm.",
+  "08-10": "Laurentius: Ist es hell am Lorenztag, viel Frucht man sich versprechen mag.",
+  "08-15": "Mariä Himmelfahrt: Hat Unsere Frau gut Wetter, wenn sie zum Himmel fährt, gutes Wetter sie uns bis Mariä Geburt beschert.",
+  "08-24": "Bartholomä: Wie Bartholomä sich hält, so ist der ganze Herbst bestellt.",
+  "09-08": "Mariä Geburt – fliegen die Schwalben furt.",
+  "09-29": "Michaeli: Regnet's an Michaeli ohne Gewitter, kommt ein milder Winter hinterher.",
+  "10-16": "Hedwig: Ist Sankt Hedwig sonnig und klar, folgt ein sanfter Winter dieses Jahr.",
+  "10-28": "Simon und Judä – hängt an die Stauden Schnee.",
+  "11-11": "Martini: Wenn um Martini Nebel sind, wird der Winter meist gelind.",
+  "11-25": "Kathrein stellt den Tanz ein.",
+  "11-30": "Andreasschnee tut dem Korn weh.",
+  "12-04": "Barbara im Klee – Weihnachten im Schnee.",
+  "12-13": "Luzia: Sankt Luzen macht den Tag stutzen.",
+  "12-21": "Thomas: Sankt Thomas bringt die längste Nacht.",
+};
+function tagesMonatTag(datum = new Date()) {
+  const t = new Intl.DateTimeFormat("de-AT", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(datum);
+  const g = (x) => +t.find((p) => p.type === x).value;
+  return { jahr: g("year"), monat: g("month"), tag: g("day"), md: `${String(g("month")).padStart(2, "0")}-${String(g("day")).padStart(2, "0")}` };
+}
+function chrVermutlichLebend(p) {
+  if (!p || p.sterbedatum || p.sterbejahr) return false;
+  const j = chrGebJahr(p);
+  return !!j && j >= new Date().getFullYear() - 105;
+}
+const chrUhr = (d) => d ? d.toLocaleTimeString("de-AT", { timeZone: "Europe/Vienna", hour: "2-digit", minute: "2-digit" }) : "–";
+function mondZeileHtml(m) {
+  const symbol = m.ereignis === "Neumond" ? "🌑" : m.ereignis === "Vollmond" ? "🌕" : m.zunehmend ? "🌔" : "🌖";
+  const phase = m.ereignis || (m.zunehmend ? "zunehmend" : "abnehmend");
+  const wechsel = m.wechsel ? ` · ab ${chrUhr(m.wechsel.zeit)} im ${chrEsc(m.wechsel.nach.name)} ${m.wechsel.nach.symbol}` : "";
+  return `<div class="tb-mond">
+    <p class="tb-mond__haupt">${symbol} <strong>Mond ${chrEsc(phase)}</strong> · ${m.aufsteigend ? "aufsteigend (obsigend)" : "absteigend (nidsigend)"} · im <strong>${chrEsc(m.zeichen.name)} ${m.zeichen.symbol}</strong>${wechsel}</p>
+    <p class="tb-mond__art">${chrEsc(m.zeichen.art)}${m.wechsel ? ` · danach ${chrEsc(m.wechsel.nach.art)}` : ""}</p>
+    <p class="tb-mond__zeiten">Mondaufgang ${chrUhr(m.mondAuf)} · Monduntergang ${chrUhr(m.mondUnter)} · Sonne ${chrUhr(m.sonneAuf)} – ${chrUhr(m.sonneUnter)} <span class="tb-ort">(Bartholomäberg)</span></p>
+  </div>`;
+}
+// Ganzes Tagesblatt. opt: { leser: bool, ich: {id,name}|null, beziehung: (personId) => "Urgroßmutter"|null }
+function tagesblattAuswerten(d, opt = {}) {
+  const heute = tagesMonatTag();
+  const r = { datum: heute, mond: MOND.tag(heute.jahr, heute.monat, heute.tag) };
+  const nt = NAMENSTAGE[heute.md];
+  if (nt) {
+    const namen = new Set(nt[1]);
+    const traeger = d.personen.filter((p) => String(p.vorname || "").split(/\s+/).some((t) => namen.has(t)));
+    r.namenstag = { patron: nt[0], namen: nt[1], anzahl: traeger.length,
+      verwandte: opt.beziehung ? traeger.map((p) => ({ p, rel: opt.beziehung(p.id) })).filter((x) => x.rel).slice(0, 3) : [] };
+  }
+  r.regel = BAUERNREGELN[heute.md] || null;
+  const P = new Map(d.personen.map((p) => [p.id, p]));
+  const ereignisse = [];
+  const md = heute.md;
+  const am = (v) => v && String(v).slice(5, 10) === md;
+  for (const p of d.personen) {
+    if (am(p.geburtsdatum)) ereignisse.push({ art: "geboren", p, jahr: chrJahr(p.geburtsdatum) });
+    if (am(p.sterbedatum)) ereignisse.push({ art: "gestorben", p, jahr: chrJahr(p.sterbedatum) });
+  }
+  for (const f of d.familien) if (f.partner_a_id && f.partner_b_id && String(f.familientyp || "").toLowerCase() !== "eltern" && am(f.beginn))
+    ereignisse.push({ art: "geheiratet", p: P.get(f.partner_a_id), p2: P.get(f.partner_b_id), jahr: chrJahr(f.beginn) });
+  r.ereignisse = ereignisse.filter((x) => x.p && x.jahr && x.jahr <= heute.jahr)
+    .filter((x) => !(opt.leser && x.art === "geboren" && chrVermutlichLebend(x.p)))   // Geburtstage Lebender nicht für Leser
+    .map((x) => {
+      const jahre = heute.jahr - x.jahr;
+      const rund = jahre > 0 && (jahre % 25 === 0 || (jahre >= 100 && jahre % 50 === 0));
+      const rel = opt.beziehung ? (opt.beziehung(x.p.id) || (x.p2 ? opt.beziehung(x.p2.id) : null)) : null;
+      return { ...x, jahre, rund, rel };
+    })
+    .sort((a, b) => (b.rel ? 1 : 0) - (a.rel ? 1 : 0) || (b.rund ? 1 : 0) - (a.rund ? 1 : 0) || a.jahr - b.jahr);
+  return r;
+}
+function tagesblattHtml(r) {
+  const datum = new Date(Date.UTC(r.datum.jahr, r.datum.monat - 1, r.datum.tag, 12)).toLocaleDateString("de-AT", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+  const hochzeit = (j) => j === 25 ? " (Silberne Hochzeit)" : j === 50 ? " (Goldene Hochzeit)" : j === 60 ? " (Diamantene Hochzeit)" : j === 65 ? " (Eiserne Hochzeit)" : "";
+  const zeile = (x) => {
+    const wer = x.rel ? ` <span class="tb-rel">– ${x.rel}</span>` : "";
+    const was = x.art === "geheiratet" ? `heirateten ${chrLink(x.p)} und ${chrLink(x.p2)}${hochzeit(x.jahre)}`
+      : x.art === "geboren" ? `wurde ${chrLink(x.p)} geboren` : `starb ${chrLink(x.p)}`;
+    return `<li class="${x.rund ? "is-rund" : ""}${x.rel ? " is-verwandt" : ""}">${x.rund ? "⭐ " : ""}<b>${x.jahr}</b> · vor ${x.jahre} Jahren ${was}${wer}</li>`;
+  };
+  const nt = r.namenstag;
+  return `<p class="tb-datum">${chrEsc(datum)}</p>
+    ${mondZeileHtml(r.mond)}
+    ${nt ? `<p class="tb-namenstag">😇 <strong>Namenstag:</strong> ${chrEsc(nt.namen.slice(0, 4).join(", "))} <span class="tb-klein">(${chrEsc(nt.patron)})</span>${nt.anzahl ? ` · ${chrZahl(nt.anzahl)} ${nt.anzahl === 1 ? "Person" : "Personen"} im Bestand` : ""}${nt.verwandte.length ? `<br><span class="tb-rel">darunter ${nt.verwandte.map((v) => `${chrLink(v.p)} (${chrEsc(v.rel)})`).join(", ")}</span>` : ""}</p>` : ""}
+    ${r.regel ? `<p class="tb-regel">🌾 <em>${chrEsc(r.regel)}</em></p>` : ""}
+    <h3 class="tb-titel">Heute vor … Jahren</h3>
+    ${r.ereignisse.length ? `<ul class="heute-liste">${r.ereignisse.map(zeile).join("")}</ul>` : '<p class="tb-klein">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>'}
+    <p class="tb-hinweis">Mondangaben berechnet nach altem Mondkalender (Tierkreis wie im Vorarlberger Kalender) – überliefertes Brauchtum, keine Empfehlung.</p>`;
 }

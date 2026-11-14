@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 418
+// Partezettel Archiv – Version 419
+// v419: Tagesblatt beim Start: Mondkalender (Bartholomäberg), Namenstag, Bauernregel, runde Jahrestage, Verwandte zuerst; Geburtstage Lebender nicht für Leser.
 // v418: Stammbaum →, Cousins aus, Leser einfacher, „Das bin ich“, Heute-vor-Jahren, Einführung, Zurück in der Kopfzeile, Vorlesen, Anmeldeprotokoll, Anmeldename merken.
 // v417: Stammbaum – Suchfeld zeigt immer die dargestellte Person (Chronik → Person → Stammbaum zeigte den alten Namen).
 // v416: Stammbaum startet leer mit Hinweis „Person suchen“; keine automatisch gewählte Startperson mehr.
@@ -10034,6 +10035,9 @@ function treeSiblingPath(aId, bId, model) {
   return null;
 }
 
+// v419: „Ururgroßmutter“ statt „UrUrgroßmutter“
+function treeUrVorsilbe(n) { return n > 0 ? "Ur" + "ur".repeat(n - 1) : ""; }
+
 function treeBloodRelationFromDistances(aId, bId, aDistance, bDistance) {
   const target = treePerson(bId);
   const targetGender = treePersonGender(target);
@@ -10048,14 +10052,14 @@ function treeBloodRelationFromDistances(aId, bId, aDistance, bDistance) {
   if (aDistance === 0) {
     if (bDistance === 1) return sourceWord("Vater", "Mutter");
     if (bDistance === 2) return sourceWord("Großvater", "Großmutter");
-    return `${"Ur".repeat(bDistance - 2)}groß${sourceWord("vater", "mutter")}`;
+    return `${treeUrVorsilbe(bDistance - 2)}groß${sourceWord("vater", "mutter")}`;
   }
 
   // A ist direkter Nachkomme von B.
   if (bDistance === 0) {
     if (aDistance === 1) return sourceWord("Sohn", "Tochter");
     if (aDistance === 2) return sourceWord("Enkel", "Enkelin");
-    return `${"Ur".repeat(aDistance - 2)}enkel${sourceGender === "w" ? "in" : ""}`;
+    return `${treeUrVorsilbe(aDistance - 2)}enkel${sourceGender === "w" ? "in" : ""}`;
   }
 
   // Seitenlinie: gleicher gemeinsamer Vorfahr.
@@ -10063,14 +10067,14 @@ function treeBloodRelationFromDistances(aId, bId, aDistance, bDistance) {
     const grade = bDistance - 2;
     if (grade === 0) return sourceWord("Onkel", "Tante");
     if (grade === 1) return sourceWord("Großonkel (1. Grades)", "Großtante (1. Grades)");
-    return sourceWord(`${"Ur".repeat(grade - 1)}großonkel (${grade}. Grades)`, `${"Ur".repeat(grade - 1)}großtante (${grade}. Grades)`);
+    return sourceWord(`${treeUrVorsilbe(grade - 1)}großonkel (${grade}. Grades)`, `${treeUrVorsilbe(grade - 1)}großtante (${grade}. Grades)`);
   }
 
   if (bDistance === 1 && aDistance >= 2) {
     const grade = aDistance - 2;
     if (grade === 0) return sourceWord("Neffe", "Nichte");
     if (grade === 1) return sourceWord("Großneffe (1. Grades)", "Großnichte (1. Grades)");
-    return sourceWord(`${"Ur".repeat(grade - 1)}großneffe (${grade}. Grades)`, `${"Ur".repeat(grade - 1)}großnichte (${grade}. Grades)`);
+    return sourceWord(`${treeUrVorsilbe(grade - 1)}großneffe (${grade}. Grades)`, `${treeUrVorsilbe(grade - 1)}großnichte (${grade}. Grades)`);
   }
 
   if (aDistance >= 2 && bDistance >= 2) {
@@ -11828,7 +11832,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=418");
+      treeModul3D = await import("./tree3d.js?v=419");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13213,6 +13217,19 @@ async function personSucheAufbauen(container, beiWahl, platzhalter = "Namen eing
   return feld;
 }
 
+// v419: Verwandtschaftswort für „dich“ aufbereiten (Geschlecht, ohne vage Angaben)
+function beziehungZuMir(personId, ichId) {
+  if (!personId || !ichId || !treePerson(personId) || !treePerson(ichId)) return null;
+  if (personId === ichId) return { wort: "du", artikel: "" };
+  let rel = null;
+  try { rel = treeRelationshipResult(personId, ichId)?.relation || null; } catch {}
+  if (!rel || /keine gespeicherte|nicht eindeutig|angeheiratet verwandt/i.test(rel)) return null;
+  const g = String(treePerson(personId)?.geschlecht || "").toLowerCase();
+  const w = /^w/.test(g), m = /^m/.test(g);
+  rel = rel.replace("Cousin/Cousine", w ? "Cousine" : m ? "Cousin" : "Cousin/Cousine");
+  return { wort: rel, artikel: w ? "deine" : m ? "dein" : "" };
+}
+
 // ---------- Personenansicht: Für dich · Vorlesen · Das bin ich ----------
 let vorlesenPersonDaten = null;
 function komfortPersonAnsicht(person) {
@@ -13244,13 +13261,10 @@ function komfortPersonAnsicht(person) {
       await treeDatenAktualisieren(600000);
       if (currentPersonViewId !== person.id) return;
       if (!treePerson(ich.id)) return;
-      const r = treeRelationshipResult(person.id, ich.id);
-      const rel = r?.relation;
-      if (!rel || /keine gespeicherte|nicht eindeutig/i.test(rel)) { zeile.textContent = `👤 Keine Verwandtschaft zu dir (${ich.name}) erfasst.`; zeile.classList.add("is-leer"); }
+      const b = beziehungZuMir(person.id, ich.id);
+      if (!b) { zeile.textContent = `👤 Keine nähere Verwandtschaft zu dir (${ich.name}) erfasst.`; zeile.classList.add("is-leer"); }
       else {
-        const g = String(treePerson(person.id)?.geschlecht || "").toLowerCase();
-        const artikel = /^w/.test(g) ? "deine" : /^m/.test(g) ? "dein" : "";
-        zeile.innerHTML = artikel ? `👤 Das ist ${artikel} <strong>${escapeHtml(rel)}</strong>` : `👤 Verwandtschaft zu dir: <strong>${escapeHtml(rel)}</strong>`;
+        zeile.innerHTML = b.artikel ? `👤 Das ist ${b.artikel} <strong>${escapeHtml(b.wort)}</strong>` : `👤 Verwandtschaft zu dir: <strong>${escapeHtml(b.wort)}</strong>`;
         zeile.title = `bezogen auf ${ich.name}`;
       }
       zeile.hidden = false;
@@ -13377,20 +13391,32 @@ let komfortUserId = null;
 function einfuehrungGesehen() { if (komfortUserId) lsSet(KOMFORT.tour + komfortUserId, "1"); }
 
 // ---------- Heute vor … Jahren (einmal am Tag) ----------
-async function heuteVorJahrenZeigen({ auchLeer = false } = {}) {
-  if (typeof chronikDatenLaden !== "function") return;
+async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
+  // v419: Tagesblatt – Mondkalender, Namenstag, Bauernregel, Jahrestage (runde hervorgehoben, Verwandte zuerst)
+  if (typeof chronikDatenLaden !== "function" || typeof tagesblattAuswerten !== "function") return false;
   const d = await chronikDatenLaden(false);
-  const r = chronikAuswerten(d);
-  if (!r.heute?.length && !auchLeer) return false;
-  const jahrJetzt = new Date().getFullYear();
-  const zeile = (x) => x.art === "geheiratet"
-    ? `heirateten ${chrLink(x.p)} und ${chrLink(x.p2)}`
-    : `${x.art === "geboren" ? "wurde" : "starb"} ${chrLink(x.p)}${x.art === "geboren" ? " geboren" : ""}`;
+  const ich = ichPerson();
+  let beziehung = null;
+  if (ich) {
+    try {
+      await treeDatenAktualisieren(600000);
+      if (treePerson(ich.id)) {
+        const cache = new Map();
+        beziehung = (id) => {
+          if (cache.has(id)) return cache.get(id);
+          const b = beziehungZuMir(id, ich.id);
+          const rel = b ? (b.wort === "du" ? "das bist du" : `${b.artikel} ${b.wort}`.trim()) : null;
+          cache.set(id, rel); return rel;
+        };
+      }
+    } catch (e) { debugLog(`⚠️ Tagesblatt Verwandtschaft: ${e.message || e}`); }
+  }
+  const r = tagesblattAuswerten(d, { leser: zugang?.rolle === "leser", ich, beziehung });
+  if (!r.ereignisse.length && !auchLeer) return false;
   const f = komfortFenster(`
     <div class="tour-icon" aria-hidden="true">📅</div>
-    <h2 class="tour-titel">Heute vor … Jahren</h2>
-    <p class="tour-text">${escapeHtml(r.heuteText)}</p>
-    ${r.heute.length ? `<ul class="heute-liste">${r.heute.map((x) => `<li><b>${x.jahr}</b> · vor ${jahrJetzt - x.jahr} Jahren ${zeile(x)}</li>`).join("")}</ul>` : '<p class="tour-text">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>'}
+    <h2 class="tour-titel">Tagesblatt</h2>
+    <div class="tagesblatt">${tagesblattHtml(r)}</div>
     <label class="heute-aus"><input type="checkbox" id="heute-aus-cb" ${lsGet(KOMFORT.heuteAus) ? "checked" : ""}> Nicht mehr automatisch beim Start zeigen</label>
     <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-heute="ok">Schließen</button></div>`, { klasse: "komfort-fenster--heute" });
   f.querySelector("#heute-aus-cb").addEventListener("change", (e) => lsSet(KOMFORT.heuteAus, e.target.checked ? "1" : null));
@@ -13410,7 +13436,7 @@ async function komfortNachStart(session) {
   const heute = new Date().toISOString().slice(0, 10);
   if (lsGet(KOMFORT.heuteAus) || lsGet(KOMFORT.heuteTag) === heute) return;
   lsSet(KOMFORT.heuteTag, heute);
-  try { await heuteVorJahrenZeigen(); } catch (e) { debugLog(`⚠️ Heute vor … Jahren: ${e.message || e}`); }
+  try { await heuteVorJahrenZeigen(); } catch (e) { debugLog(`⚠️ Tagesblatt: ${e.message || e}`); }
 }
 
 // ---------- ← Zurück in der Kopfzeile ----------
@@ -13486,5 +13512,5 @@ document.getElementById("konto-ich-aendern")?.addEventListener("click", () => {
   personSucheAufbauen(box, (p) => { ichSetzen(p.id, treePersonLabel(p.id)); box.hidden = true; box.innerHTML = ""; }, "Deinen Namen eingeben …").then((f) => f?.focus());
 });
 document.getElementById("hilfe-einfuehrung")?.addEventListener("click", () => einfuehrungZeigen(0));
-document.getElementById("hilfe-heute")?.addEventListener("click", () => heuteVorJahrenZeigen({ auchLeer: true }));
+document.getElementById("hilfe-heute")?.addEventListener("click", () => heuteVorJahrenZeigen());
 ichAnzeigeAktualisieren();
