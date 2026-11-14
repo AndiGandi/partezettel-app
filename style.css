@@ -1625,7 +1625,7 @@ select[name*="Year"] {
 #tab-stammbaum .tree-list-controls{display:inline-flex;gap:.4rem}
 #tab-stammbaum .tree-list-controls[hidden]{display:none}
 #tab-stammbaum .tree-list-controls .btn{min-height:40px;padding:.3rem .8rem;font-size:.85rem}
-#tab-stammbaum.tree-view--descendants .tree-zoom-controls > :not(#tree-zurueck),#tab-stammbaum.tree-view--descendants .tree-viewport-bar__hint{display:none}
+#tab-stammbaum.tree-view--descendants .tree-zoom-controls > :not(#tree-zurueck):not(#tree-vor),#tab-stammbaum.tree-view--descendants .tree-viewport-bar__hint{display:none}
 #tab-stammbaum.tree-view--descendants .tree-viewport-bar{justify-content:flex-end}
 .tree-descendants-stage{max-width:780px;margin:0 auto;padding:.3rem .1rem 1rem}
 .tree-descendants-stage[hidden]{display:none}
@@ -1709,7 +1709,7 @@ details[open]>summary.tree-desc__row::before{transform:rotate(90deg)}
 .tree-3d-stage[hidden]{display:none}
 .tree-3d-stage canvas{display:block;width:100%;height:100%;touch-action:none;outline:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 #tab-stammbaum.tree-view--3d .tree-viewport{overflow:hidden;padding:0;height:clamp(420px,66vh,780px);min-height:0;max-height:none}
-#tab-stammbaum.tree-view--3d .tree-zoom-controls > :not(#tree-zurueck),#tab-stammbaum.tree-view--3d .tree-viewport-bar__hint{display:none}
+#tab-stammbaum.tree-view--3d .tree-zoom-controls > :not(#tree-zurueck):not(#tree-vor),#tab-stammbaum.tree-view--3d .tree-viewport-bar__hint{display:none}
 #tab-stammbaum.tree-view--3d .tree-viewport-bar{justify-content:flex-end}
 .tree-3d-stage .tree-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.4rem;padding:1.2rem;text-align:center}
 .tree3d__hud{position:absolute;left:.6rem;right:.6rem;top:.6rem;display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem;pointer-events:none}
@@ -2168,9 +2168,10 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 }
 
 /* v413: Zurück-Pfeil in der Zoom-Leiste */
-.tree-zoom-controls .tree-zurueck { font-size: 1.15rem; padding-right: 10px; margin-right: 2px; border-right: 1px solid var(--line, #d8d2c6); border-radius: 0; }
+.tree-zoom-controls .tree-zurueck { font-size: 1.15rem; padding: 0 8px; margin: 0; border-radius: 0; }
+.tree-zoom-controls .tree-vor { border-right: 1px solid var(--line, #d8d2c6); margin-right: 2px; padding-right: 10px; }
 .tree-zoom-controls .tree-zurueck:disabled { opacity: 0.35; }
-#tab-stammbaum.tree-view--descendants .tree-zoom-controls .tree-zurueck,#tab-stammbaum.tree-view--3d .tree-zoom-controls .tree-zurueck{border-right:0;padding-right:.6rem}
+#tab-stammbaum.tree-view--descendants .tree-zoom-controls .tree-vor,#tab-stammbaum.tree-view--3d .tree-zoom-controls .tree-vor{border-right:0;padding-right:.6rem}
 
 /* v414 */
 .chr-vorbehalt { margin: 6px 0 0; font-size: 0.85rem; color: var(--color-text-muted, #6b6459); max-width: 46rem; line-height: 1.45; }
@@ -2182,3 +2183,40 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .tree-start__text { color: var(--color-text-muted, #6b6459); line-height: 1.55; margin: 0 0 1rem; }
 #tab-stammbaum .tree-viewport:has(.tree-start){padding-left:1.5rem !important;padding-right:1.5rem !important;justify-content:center}
 #tab-stammbaum .tree-viewport:has(.tree-start) > *{flex-shrink:1;width:100%}
+#tree-cousins-open, #tree-cousins-panel { display: none !important; }   /* v418: Cousins & Cousinen ausgeblendet */
+
+/* ===== v418: Komfort ===== */
+.app-zurueck { position: absolute; left: 12px; top: 10px; z-index: 5; padding: .35rem .8rem; border: 1px solid #cfd9cd; border-radius: 999px; background: #fff; color: #24583f; font-size: .95rem; font-weight: 600; cursor: pointer; }
+.detail-header .detail-zurueck { margin: 0 10px 0 0; flex: 0 0 auto; }
+.app-header--familienspuren { position: relative; padding-top: 52px; }
+@media (min-width: 900px) { .app-header--familienspuren { padding-top: 46px; } }
+.pv-komfort { margin-top: 8px; }
+.pv-komfort__ich { margin: 0 0 8px; font-size: 0.98rem; color: var(--color-primary, #174f3b); }
+.pv-komfort__ich.is-leer { color: var(--color-text-muted, #6b6459); font-size: 0.9rem; }
+.pv-komfort__knoepfe { display: flex; flex-wrap: wrap; gap: 8px; }
+.pv-komfort__knoepfe .btn { width: auto; padding: 6px 14px; font-size: 0.92rem; }
+.komfort-overlay { position: fixed; inset: 0; z-index: 9000; background: rgba(20, 30, 25, 0.45); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.komfort-overlay[hidden] { display: none; }
+.komfort-fenster { background: var(--color-surface, #fffdf8); color: var(--color-text, #2b2722); border-radius: 18px; max-width: 34rem; width: 100%; max-height: 88vh; overflow: auto; padding: 26px 24px 20px; box-shadow: 0 12px 40px rgba(0,0,0,.25); text-align: center; }
+.tour-icon { font-size: 3rem; line-height: 1; margin-bottom: 8px; }
+.tour-titel { font: 600 1.35rem/1.25 Georgia, serif; color: var(--color-primary, #174f3b); margin: 0 0 10px; }
+.tour-text { font-size: 1.05rem; line-height: 1.55; margin: 0 0 14px; }
+.tour-punkte { display: flex; justify-content: center; gap: 6px; margin-bottom: 14px; }
+.tour-punkte span { width: 8px; height: 8px; border-radius: 50%; background: #d8d2c6; }
+.tour-punkte span.is-aktiv { background: var(--color-primary, #174f3b); width: 22px; border-radius: 4px; }
+.tour-knoepfe { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; }
+.tour-knoepfe .btn { width: auto; min-width: 8rem; font-size: 1rem; padding: 10px 18px; }
+.tour-ich { min-height: 1.2em; }
+.komfort-suche { text-align: left; margin: 6px 0; }
+.komfort-suche__feld { width: 100%; font-size: 1.05rem; padding: 10px 12px; border: 1px solid var(--line, #d8d2c6); border-radius: 10px; }
+.komfort-suche__treffer { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.komfort-suche__eintrag { text-align: left; padding: 9px 12px; border: 1px solid var(--line, #e3ddd0); border-radius: 10px; background: #fff; font-size: 1rem; cursor: pointer; }
+.komfort-suche__leer { color: var(--color-text-muted, #6b6459); margin: 4px 2px; }
+.heute-liste { text-align: left; padding-left: 1.1rem; line-height: 1.7; margin: 0 0 10px; }
+.heute-aus { display: block; font-size: 0.88rem; color: var(--color-text-muted, #6b6459); margin-top: 6px; }
+.konto-protokoll { margin-top: 8px; max-height: 50vh; overflow: auto; }
+.protokoll-tabelle { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.protokoll-tabelle th, .protokoll-tabelle td { text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line, #e3ddd0); vertical-align: top; }
+@media (prefers-color-scheme: dark) {
+  .komfort-suche__eintrag { background: transparent; color: inherit; }
+}

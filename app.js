@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 416
+// Partezettel Archiv – Version 418
+// v418: Stammbaum →, Cousins aus, Leser einfacher, „Das bin ich“, Heute-vor-Jahren, Einführung, Zurück in der Kopfzeile, Vorlesen, Anmeldeprotokoll, Anmeldename merken.
+// v417: Stammbaum – Suchfeld zeigt immer die dargestellte Person (Chronik → Person → Stammbaum zeigte den alten Namen).
 // v416: Stammbaum startet leer mit Hinweis „Person suchen“; keine automatisch gewählte Startperson mehr.
 // v415: Stammbaum startet mit der zuletzt gewählten Person (sonst Hubert Ganahl *1930) statt mit der ersten Person der Datenbank.
 // v414: Hinweise – keine Verantwortung des Eigentümers mehr, Vorbehalt zu Vollständigkeit/Fehlern, Statistik nur zur Orientierung (auch in der Chronik).
@@ -1181,6 +1183,7 @@ async function zeigeAppWennAngemeldet() {
       appShell.hidden = false;
       debugLog("Angemeldet.");
       if (!warSchonAngemeldet) geheZuBestand();   // v351: nach dem Anmelden immer im Bestand starten
+      if (!warSchonAngemeldet) { anmeldungProtokollieren("start"); setTimeout(() => komfortNachStart(session), 1200); }   // v418
       // v191: Gruppenfotos gleich beim App-Start laden, damit auch die Übersicht
       // und Personendetails nicht mit leeren Platzhaltern erscheinen.
       void ladeGruppenfotoListe().catch(err => debugLog(`⚠️ Gruppenfotos beim Start: ${err.message || err}`));
@@ -1203,12 +1206,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   const loginPassword = document.getElementById("login-password");
   const logoutBtn = document.getElementById("logout-btn");
 
+  try { const gemerkt = localStorage.getItem("fs-login-email"); if (gemerkt && loginEmail && !loginEmail.value) loginEmail.value = gemerkt; } catch {}   // v418
   if (loginForm) {
     loginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       loginMessage.textContent = "Anmeldung …";
       try {
         await anmelden(loginEmail.value.trim(), loginPassword.value);
+        try { localStorage.setItem("fs-login-email", loginEmail.value.trim()); } catch {}   // v418: Anmeldename merken
+        anmeldungProtokollieren("anmeldung", true);
         loginPassword.value = "";
         loginMessage.textContent = "";
         await zeigeAppWennAngemeldet();
@@ -4587,9 +4593,10 @@ function zeigePersonZurueck() {
   const btn = document.getElementById("pv-back");
   if (!btn) return;
   const vorher = personViewVerlauf[personViewVerlauf.length - 1];
-  btn.hidden = !vorher;
-  btn.textContent = vorher ? `← ${vorher.name || "zurück"}` : "";
-  btn.title = vorher ? `Zurück zu ${vorher.name || "der vorherigen Person"}` : "";
+  // v418: „← Zurück“ steht immer da – ohne vorige Person schließt er die Ansicht (wie ✕)
+  btn.hidden = false;
+  btn.textContent = vorher ? `← ${vorher.name || "Zurück"}` : "← Zurück";
+  btn.title = vorher ? `Zurück zu ${vorher.name || "der vorherigen Person"}` : "Ansicht schließen und zurück";
 }
 async function personZurueck() {
   const vorher = personViewVerlauf.pop();
@@ -4810,6 +4817,7 @@ async function openPersonDetail(personId, options = {}) {
       const details = [name];
       // Ledigenname steht immer dabei, wenn vorhanden (auch wenn er dem Nachnamen entspricht).
       const maiden = String(related.Ledigenname || related.ledigenname || related.geburtsname || "").trim();
+      button.dataset.sprechName = maiden ? `${name}, geborene ${maiden}` : name;   // v418: für „Vorlesen“
       if (maiden) details.push(`geb. ${maiden}`);
       if (life) details.push(life);
       // Das Alter wird nur für verstorbene Personen ergänzt. Bei unvollständigen
@@ -5220,12 +5228,13 @@ async function openPersonDetail(personId, options = {}) {
       await openPersonEdit(personId, options);
     };
     overlay.hidden = false; overlay.scrollTop = 0; document.body.classList.add("person-view-open");
+    try { komfortPersonAnsicht(person); } catch (e) { debugLog(`⚠️ Komfort Personenansicht: ${e.message || e}`); }   // v418
   } catch (err) {
     debugLog(`❌ Fehler beim Öffnen der Personenansicht: ${err?.message || err}`);
   }
 }
 
-document.getElementById("pv-back")?.addEventListener("click", () => { void personZurueck(); });
+document.getElementById("pv-back")?.addEventListener("click", () => { if (personViewVerlauf.length) void personZurueck(); else document.getElementById("pv-close")?.click(); });
 document.getElementById("pv-close")?.addEventListener("click", async () => {
   if (personViewVerlauf.length) { await personZurueck(); return; }
   document.getElementById("person-view-overlay").hidden = true;
@@ -9714,29 +9723,32 @@ function initTreeDescendants() {
 }
 
 // v411: Verlauf der Stammbaum-Ansichten – „← Zurück“ führt zur vorigen Ansicht
+// v418: Verlauf mit Zeiger – „←“ zurück und „→“ wieder vor (wie im Browser)
 let treeVerlauf = [];
+let treeVerlaufPos = -1;
 let treeVerlaufWiederherstellen = false;
+const TREE_ANSICHT_NAMEN = { classic: "Familie", cards: "Generationen", pedigree: "Ahnentafel", descendants: "Nachkommen", tree3d: "3D-Baum" };
 function treeVerlaufMerken(rootId) {
   if (treeVerlaufWiederherstellen || !rootId) return;
   const z = { root: rootId, mode: treeViewMode, preset: document.getElementById("tree-line-preset")?.value || "", presetObj: treeActivePreset };
-  const l = treeVerlauf[treeVerlauf.length - 1];
+  const l = treeVerlauf[treeVerlaufPos];
   if (l && l.root === z.root && l.mode === z.mode && l.preset === z.preset) return;
+  treeVerlauf = treeVerlauf.slice(0, treeVerlaufPos + 1);   // neue Ansicht verwirft den „Vor“-Teil
   treeVerlauf.push(z);
   if (treeVerlauf.length > 40) treeVerlauf.shift();
+  treeVerlaufPos = treeVerlauf.length - 1;
   treeZurueckKnopfAktualisieren();
 }
 function treeZurueckKnopfAktualisieren() {
-  const b = document.getElementById("tree-zurueck");
-  if (!b) return;
-  b.disabled = treeVerlauf.length < 2;
-  const v = treeVerlauf[treeVerlauf.length - 2];
-  const namen = { classic: "Familie", cards: "Generationen", pedigree: "Ahnentafel", descendants: "Nachkommen", tree3d: "3D-Baum" };
-  b.title = v ? `Zurück zu: ${namen[v.mode] || ""} · ${treePersonLabel(v.root)}` : "Keine vorige Ansicht";
+  const b = document.getElementById("tree-zurueck"), f = document.getElementById("tree-vor");
+  const v = treeVerlauf[treeVerlaufPos - 1], n = treeVerlauf[treeVerlaufPos + 1];
+  if (b) { b.disabled = !v; b.title = v ? `Zurück zu: ${TREE_ANSICHT_NAMEN[v.mode] || ""} · ${treePersonLabel(v.root)}` : "Keine vorige Ansicht"; }
+  if (f) { f.disabled = !n; f.title = n ? `Wieder vor zu: ${TREE_ANSICHT_NAMEN[n.mode] || ""} · ${treePersonLabel(n.root)}` : "Keine weitere Ansicht"; }
 }
-function treeZurueck() {
-  if (treeVerlauf.length < 2) return;
-  treeVerlauf.pop();
-  const v = treeVerlauf[treeVerlauf.length - 1];
+function treeVerlaufGehe(pos) {
+  const v = treeVerlauf[pos];
+  if (!v) return;
+  treeVerlaufPos = pos;
   treeVerlaufWiederherstellen = true;
   try {
     const sel = document.getElementById("tree-person-select"), such = document.getElementById("tree-person-search"), pre = document.getElementById("tree-line-preset");
@@ -9750,10 +9762,20 @@ function treeZurueck() {
   } finally { treeVerlaufWiederherstellen = false; }
   treeZurueckKnopfAktualisieren();
 }
-document.addEventListener("DOMContentLoaded", () => document.getElementById("tree-zurueck")?.addEventListener("click", treeZurueck));
+function treeZurueck() { if (treeVerlaufPos > 0) treeVerlaufGehe(treeVerlaufPos - 1); }
+function treeVor() { if (treeVerlaufPos < treeVerlauf.length - 1) treeVerlaufGehe(treeVerlaufPos + 1); }
+document.addEventListener("DOMContentLoaded", () => {
+  document.getElementById("tree-zurueck")?.addEventListener("click", treeZurueck);
+  document.getElementById("tree-vor")?.addEventListener("click", treeVor);
+});
 
 function renderStammbaum(rootId) {
   if (!treeFilterAktiv) treeVerlaufMerken(rootId);
+  // v417: Suchfeld zeigt immer die aktuell dargestellte Person (vorher blieb dort der Name der vorigen Person stehen)
+  if (!treeFilterAktiv && rootId) {
+    const such = document.getElementById("tree-person-search");
+    if (such && document.activeElement !== such) { const t = treePersonLabel(rootId); if (t && such.value !== t) such.value = t; }
+  }
   treeCousinsRefreshIfOpen(rootId);
   if (treeActivePreset && !treeFilterAktiv) {
     treeFilterAktiv = true;
@@ -11806,7 +11828,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=416");
+      treeModul3D = await import("./tree3d.js?v=418");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -11831,6 +11853,7 @@ async function renderBaum3D(rootId) {
 }
 
 function setTreeViewMode(mode, rootId = "") {
+  if (zugang?.rolle === "leser" && (mode === "descendants" || mode === "tree3d")) mode = "classic";   // v418: Leser – nur Familie, Generationen, Ahnentafel
   const vorherigeAnsicht = treeViewMode;
   treeViewMode = ["classic", "pedigree", "descendants", "tree3d"].includes(mode) ? mode : "cards";
   if (vorherigeAnsicht === "tree3d" && treeViewMode !== "tree3d" && treeModul3D) treeModul3D.pausieren();
@@ -11897,7 +11920,6 @@ async function loadStammbaum() {
       if (![...select.options].some((o) => o.value === current)) select.appendChild(new Option(treePersonLabel(current), current));
       select.value = current;
     }
-    if (search && select.value && !search.value) search.value = treePersonLabel(select.value);   // v415: zeigen, wer gewählt ist
     renderStammbaum(select.value);
     fillTreeRelationshipSelects();
     message.textContent = "";
@@ -12138,7 +12160,6 @@ function setTreePersonSelection(id, { confirmed = false } = {}) {
   if (confirmed) {
     const message = document.getElementById("tree-message");
     if (message) message.textContent = `Auswahl bestätigt: ${treePersonSearchText(treePerson(id))}`;
-    if (treePersonSearch) treePersonSearch.value = "";
   }
 }
 if (treeSelect) treeSelect.addEventListener("change", () => setTreePersonSelection(treeSelect.value));
@@ -13138,3 +13159,332 @@ function neuerWohnortFormular(personId) {
   });
   return li;
 }
+
+/* =====================================================================
+   v418: Komfort für weniger Geübte
+   – „Das bin ich“ (je Gerät gespeichert, jederzeit änderbar)
+   – Verwandtschaftszeile „Für dich: …“ in der Personenansicht
+   – 🔊 Vorlesen
+   – „Heute vor … Jahren“ einmal täglich beim Start
+   – Einführung beim ersten Anmelden (in der Hilfe jederzeit wieder)
+   – ← Zurück in der Kopfzeile, überall gleich
+   – Anmeldeprotokoll (wann, welches Gerät) für den Eigentümer
+   ===================================================================== */
+const KOMFORT = { ich: "fs-ich", heuteTag: "fs-heute-tag", heuteAus: "fs-heute-aus", tour: "fs-einfuehrung-" };
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch {} }
+
+// ---------- „Das bin ich“ ----------
+function ichPerson() { try { return JSON.parse(lsGet(KOMFORT.ich) || "null"); } catch { return null; } }
+function ichSetzen(id, name) {
+  lsSet(KOMFORT.ich, id ? JSON.stringify({ id, name }) : null);
+  ichAnzeigeAktualisieren();
+  if (currentPersonViewId && !document.getElementById("person-view-overlay")?.hidden) komfortPersonAnsicht({ id: currentPersonViewId });
+}
+function ichAnzeigeAktualisieren() {
+  const ich = ichPerson();
+  const el = document.getElementById("konto-ich-name");
+  if (el) el.textContent = ich ? ich.name : "noch nicht festgelegt";
+  const weg = document.getElementById("konto-ich-weg");
+  if (weg) weg.hidden = !ich;
+}
+
+// Personensuche für „Wer bist du?“ (nutzt die Stammbaumdaten)
+async function personSucheAufbauen(container, beiWahl, platzhalter = "Namen eingeben …") {
+  container.innerHTML = `<input type="search" class="komfort-suche__feld" placeholder="${escapeHtml(platzhalter)}" autocomplete="off" autocapitalize="words"><div class="komfort-suche__treffer" role="listbox"></div>`;
+  const feld = container.querySelector("input"), liste = container.querySelector(".komfort-suche__treffer");
+  try { await treeDatenAktualisieren(600000); } catch {}
+  const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  const zeigen = () => {
+    const q = norm(feld.value).trim();
+    liste.replaceChildren();
+    if (q.length < 2) return;
+    const teile = q.split(/\s+/);
+    const treffer = (treeData.personen || []).filter((p) => { const t = norm(treePersonSearchText(p)); return teile.every((x) => t.includes(x)); }).slice(0, 8);
+    if (!treffer.length) { liste.innerHTML = '<p class="komfort-suche__leer">Niemand gefunden.</p>'; return; }
+    for (const p of treffer) {
+      const b = document.createElement("button"); b.type = "button"; b.className = "komfort-suche__eintrag";
+      b.textContent = treePersonSearchText(p);
+      b.addEventListener("click", () => beiWahl(p));
+      liste.appendChild(b);
+    }
+  };
+  feld.addEventListener("input", zeigen);
+  return feld;
+}
+
+// ---------- Personenansicht: Für dich · Vorlesen · Das bin ich ----------
+let vorlesenPersonDaten = null;
+function komfortPersonAnsicht(person) {
+  if (person?.vorname !== undefined) vorlesenPersonDaten = person;
+  const kopf = document.querySelector("#person-view-overlay .person-view-heading");
+  if (!kopf || !person?.id) return;
+  let box = document.getElementById("pv-komfort");
+  if (!box) { box = document.createElement("div"); box.id = "pv-komfort"; box.className = "pv-komfort"; kopf.appendChild(box); }
+  else kopf.appendChild(box);   // immer ganz unten im Kopf
+  const ich = ichPerson();
+  const istIch = ich?.id === person.id;
+  box.innerHTML = `<p class="pv-komfort__ich" id="pv-ich-zeile" hidden></p>
+    <div class="pv-komfort__knoepfe">
+      <button type="button" class="btn btn--secondary pv-vorlesen" id="pv-vorlesen">🔊 Vorlesen</button>
+      <button type="button" class="btn btn--ghost pv-ich-btn" id="pv-ich-btn">${istIch ? "👤 Das bin nicht ich" : "👤 Das bin ich"}</button>
+    </div>`;
+  box.querySelector("#pv-vorlesen").addEventListener("click", () => vorlesenUmschalten());
+  box.querySelector("#pv-ich-btn").addEventListener("click", () => {
+    if (istIch) { ichSetzen(null); return; }
+    const name = document.getElementById("pv-name")?.textContent?.trim() || "";
+    ichSetzen(person.id, name);
+  });
+  vorlesenStopp();
+  const zeile = box.querySelector("#pv-ich-zeile");
+  if (istIch) { zeile.textContent = "👤 Das bist du."; zeile.hidden = false; return; }
+  if (!ich) return;
+  (async () => {
+    try {
+      await treeDatenAktualisieren(600000);
+      if (currentPersonViewId !== person.id) return;
+      if (!treePerson(ich.id)) return;
+      const r = treeRelationshipResult(person.id, ich.id);
+      const rel = r?.relation;
+      if (!rel || /keine gespeicherte|nicht eindeutig/i.test(rel)) { zeile.textContent = `👤 Keine Verwandtschaft zu dir (${ich.name}) erfasst.`; zeile.classList.add("is-leer"); }
+      else {
+        const g = String(treePerson(person.id)?.geschlecht || "").toLowerCase();
+        const artikel = /^w/.test(g) ? "deine" : /^m/.test(g) ? "dein" : "";
+        zeile.innerHTML = artikel ? `👤 Das ist ${artikel} <strong>${escapeHtml(rel)}</strong>` : `👤 Verwandtschaft zu dir: <strong>${escapeHtml(rel)}</strong>`;
+        zeile.title = `bezogen auf ${ich.name}`;
+      }
+      zeile.hidden = false;
+    } catch (e) { debugLog(`⚠️ Verwandtschaft zu mir: ${e.message || e}`); }
+  })();
+}
+
+// ---------- 🔊 Vorlesen ----------
+let vorlesenAktiv = false;
+function vorlesenStopp() {
+  try { window.speechSynthesis?.cancel(); } catch {}
+  vorlesenAktiv = false;
+  const b = document.getElementById("pv-vorlesen"); if (b) b.textContent = "🔊 Vorlesen";
+}
+function vorlesenText() {
+  const t = (id) => document.getElementById(id)?.textContent?.trim() || "";
+  const sichtbar = (id) => { const e = document.getElementById(id); return e && !e.hidden; };
+  const teile = [];
+  let name = t("pv-name"); if (name) teile.push(name + ".");
+  if (sichtbar("pv-maiden")) teile.push(t("pv-maiden").replace(/^geb\.?/i, "Geboren als") + ".");
+  const p = vorlesenPersonDaten && vorlesenPersonDaten.id === currentPersonViewId ? vorlesenPersonDaten : null;
+  const datum = (iso, jahr) => {
+    if (iso) { const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`); if (!isNaN(d)) return `am ${d.toLocaleDateString("de-AT", { day: "numeric", month: "long", year: "numeric" })}`; }
+    return jahr ? `im Jahr ${jahr}` : "";
+  };
+  if (p) {
+    const geb = datum(p.geburtsdatum, p.geburtsjahr), tod = datum(p.sterbedatum, p.sterbejahr);
+    const w = /^w/i.test(String(p.geschlecht || ""));
+    if (geb) teile.push(`${w ? "Sie" : "Er"} wurde ${geb} geboren.`);
+    if (tod) {
+      const alter = (t("pv-lifetime").match(/(\d+)\s*Jahre/) || [])[1];
+      teile.push(`${w ? "Sie" : "Er"} starb ${tod}${alter ? `, mit ${alter} Jahren` : ""}.`);
+    }
+  } else {
+    const leben = t("pv-lifetime").replace(/\s[–-]\s/g, " bis ").replace(/·/g, ",");
+    if (leben) teile.push(leben + ".");
+  }
+  const namen = (listId) => [...document.querySelectorAll(`#${listId} .person-view-person-link`)].map((b) => b.dataset.sprechName || b.textContent.split("·")[0].trim())
+    .concat([...document.querySelectorAll(`#${listId} .person-view-relation-row--ohne`)].map((r) => (r.firstChild?.textContent || "").trim()))
+    .filter(Boolean);
+  const aufzaehlen = (arr) => arr.length <= 1 ? (arr[0] || "") : `${arr.slice(0, -1).join(", ")} und ${arr[arr.length - 1]}`;
+  const eltern = namen("pv-parents-list"); if (eltern.length) teile.push(`Eltern: ${aufzaehlen(eltern)}.`);
+  const partner = namen("pv-spouse-list");
+  if (partner.length) {
+    const w = /^w/i.test(String(p?.geschlecht || "")), m = /^m/i.test(String(p?.geschlecht || ""));
+    const wort = w ? (partner.length > 1 ? "Ehemänner" : "Ehemann") : m ? (partner.length > 1 ? "Ehefrauen" : "Ehefrau") : "Ehepartner";
+    teile.push(`${wort}: ${aufzaehlen(partner)}.`);
+  }
+  const kinder = namen("pv-children-list"); if (kinder.length) teile.push(`${kinder.length === 1 ? "Ein Kind" : `${kinder.length} Kinder`}: ${aufzaehlen(kinder)}.`);
+  const ichZ = document.getElementById("pv-ich-zeile"); if (ichZ && !ichZ.hidden && !ichZ.classList.contains("is-leer")) teile.push(ichZ.textContent.replace("👤", "").trim() + ".");
+  return teile.join(" ");
+}
+function vorlesenUmschalten() {
+  const synth = window.speechSynthesis;
+  if (!synth || typeof SpeechSynthesisUtterance === "undefined") { alert("Vorlesen wird auf diesem Gerät nicht unterstützt."); return; }
+  if (vorlesenAktiv) { vorlesenStopp(); return; }
+  const u = new SpeechSynthesisUtterance(vorlesenText());
+  const stimmen = synth.getVoices();
+  u.voice = stimmen.find((v) => v.lang === "de-AT") || stimmen.find((v) => v.lang === "de-DE") || stimmen.find((v) => /^de/i.test(v.lang)) || null;
+  u.lang = u.voice?.lang || "de-DE"; u.rate = 0.92;
+  u.onend = u.onerror = () => vorlesenStopp();
+  vorlesenAktiv = true;
+  const b = document.getElementById("pv-vorlesen"); if (b) b.textContent = "⏹ Vorlesen beenden";
+  synth.cancel(); synth.speak(u);
+}
+document.getElementById("pv-close")?.addEventListener("click", vorlesenStopp);
+
+// ---------- Allgemeines Fenster (Einführung, Heute vor …) ----------
+function komfortFenster(inhaltHtml, { klasse = "" } = {}) {
+  let ov = document.getElementById("komfort-overlay");
+  if (!ov) {
+    ov = document.createElement("div"); ov.id = "komfort-overlay"; ov.className = "komfort-overlay";
+    ov.innerHTML = '<div class="komfort-fenster" role="dialog" aria-modal="true"></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", (e) => { if (e.target === ov) komfortFensterZu(); });
+  }
+  const f = ov.querySelector(".komfort-fenster");
+  f.className = `komfort-fenster ${klasse}`; f.innerHTML = inhaltHtml;
+  ov.hidden = false; document.body.classList.add("komfort-offen");
+  return f;
+}
+function komfortFensterZu() {
+  const ov = document.getElementById("komfort-overlay");
+  if (ov) ov.hidden = true;
+  document.body.classList.remove("komfort-offen");
+}
+function komfortFensterOffen() { const ov = document.getElementById("komfort-overlay"); return !!ov && !ov.hidden; }
+
+// ---------- Einführung ----------
+const EINFUEHRUNG = [
+  { icon: "🌳", titel: "Willkommen bei Familienspuren", text: "Hier findest du die Familien vom Innerberg und Bartholomäberg: Menschen, Lebensdaten, Häuser, Fotos und Geschichten. Diese kurze Einführung zeigt dir in wenigen Schritten das Wichtigste." },
+  { icon: "🔍", titel: "Eine Person finden", text: "Im Bereich <strong>Bestand</strong> tippst du oben einen Namen ins Suchfeld, zum Beispiel „Ganahl“ oder „Maria“. Dann tippst du die gewünschte Person an." },
+  { icon: "👤", titel: "Die Personenansicht", text: "Dort siehst du Lebensdaten, Eltern, Ehepartner und Kinder. Tippst du einen Namen an, kommst du zu dieser Person. Mit <strong>🔊 Vorlesen</strong> liest das Gerät die Angaben vor, mit <strong>🌳 Im Stammbaum anzeigen</strong> siehst du die Familie als Baum." },
+  { icon: "🌳", titel: "Der Stammbaum", text: "<strong>Familie</strong> zeigt Eltern, Geschwister und Kinder, <strong>Generationen</strong> mehrere Ebenen, <strong>Ahnentafel</strong> alle Vorfahren. Einmal tippen setzt eine Person in die Mitte, zweimal tippen öffnet sie. Mit <strong>←</strong> und <strong>→</strong> gehst du zur vorigen und nächsten Ansicht." },
+  { icon: "←", titel: "Zurück geht immer", text: "Oben links steht immer <strong>← Zurück</strong>. Damit kommst du einen Schritt zurück, egal wo du gerade bist. Verlaufen kannst du dich also nicht." },
+  { icon: "👋", titel: "Wer bist du?", text: "Wenn du dich selbst auswählst, zeigt die App bei jeder Person, wie sie mit dir verwandt ist, zum Beispiel „Urgroßmutter“. Das kannst du jederzeit ändern, auch wenn du die App jemand anderem zeigst. Du kannst den Schritt auch überspringen.", ich: true },
+];
+function einfuehrungZeigen(schritt = 0) {
+  const s = EINFUEHRUNG[schritt];
+  const letzter = schritt === EINFUEHRUNG.length - 1;
+  const ich = ichPerson();
+  const f = komfortFenster(`
+    <div class="tour-punkte">${EINFUEHRUNG.map((_, i) => `<span class="${i === schritt ? "is-aktiv" : ""}"></span>`).join("")}</div>
+    <div class="tour-icon" aria-hidden="true">${s.icon}</div>
+    <h2 class="tour-titel">${s.titel}</h2>
+    <p class="tour-text">${s.text}</p>
+    ${s.ich ? `<p class="tour-ich">${ich ? `Derzeit gewählt: <strong>${escapeHtml(ich.name)}</strong>` : ""}</p><div class="komfort-suche" id="tour-ich-suche"></div>` : ""}
+    <div class="tour-knoepfe">
+      ${schritt > 0 ? '<button type="button" class="btn btn--ghost" data-tour="zurueck">← Zurück</button>' : '<button type="button" class="btn btn--ghost" data-tour="ende">Überspringen</button>'}
+      <button type="button" class="btn btn--primary" data-tour="${letzter ? "ende" : "weiter"}">${letzter ? "Fertig" : "Weiter →"}</button>
+    </div>`, { klasse: "komfort-fenster--tour" });
+  f.querySelector('[data-tour="weiter"]')?.addEventListener("click", () => einfuehrungZeigen(schritt + 1));
+  f.querySelector('[data-tour="zurueck"]')?.addEventListener("click", () => einfuehrungZeigen(schritt - 1));
+  f.querySelectorAll('[data-tour="ende"]').forEach((b) => b.addEventListener("click", () => { einfuehrungGesehen(); komfortFensterZu(); }));
+  if (s.ich) {
+    personSucheAufbauen(f.querySelector("#tour-ich-suche"), (p) => {
+      ichSetzen(p.id, treePersonLabel(p.id));
+      const z = f.querySelector(".tour-ich"); if (z) z.innerHTML = `✓ Gewählt: <strong>${escapeHtml(treePersonLabel(p.id))}</strong>`;
+      f.querySelector("#tour-ich-suche").innerHTML = "";
+    }, "Deinen Namen eingeben …");
+  }
+}
+let komfortUserId = null;
+function einfuehrungGesehen() { if (komfortUserId) lsSet(KOMFORT.tour + komfortUserId, "1"); }
+
+// ---------- Heute vor … Jahren (einmal am Tag) ----------
+async function heuteVorJahrenZeigen({ auchLeer = false } = {}) {
+  if (typeof chronikDatenLaden !== "function") return;
+  const d = await chronikDatenLaden(false);
+  const r = chronikAuswerten(d);
+  if (!r.heute?.length && !auchLeer) return false;
+  const jahrJetzt = new Date().getFullYear();
+  const zeile = (x) => x.art === "geheiratet"
+    ? `heirateten ${chrLink(x.p)} und ${chrLink(x.p2)}`
+    : `${x.art === "geboren" ? "wurde" : "starb"} ${chrLink(x.p)}${x.art === "geboren" ? " geboren" : ""}`;
+  const f = komfortFenster(`
+    <div class="tour-icon" aria-hidden="true">📅</div>
+    <h2 class="tour-titel">Heute vor … Jahren</h2>
+    <p class="tour-text">${escapeHtml(r.heuteText)}</p>
+    ${r.heute.length ? `<ul class="heute-liste">${r.heute.map((x) => `<li><b>${x.jahr}</b> · vor ${jahrJetzt - x.jahr} Jahren ${zeile(x)}</li>`).join("")}</ul>` : '<p class="tour-text">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>'}
+    <label class="heute-aus"><input type="checkbox" id="heute-aus-cb" ${lsGet(KOMFORT.heuteAus) ? "checked" : ""}> Nicht mehr automatisch beim Start zeigen</label>
+    <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-heute="ok">Schließen</button></div>`, { klasse: "komfort-fenster--heute" });
+  f.querySelector("#heute-aus-cb").addEventListener("change", (e) => lsSet(KOMFORT.heuteAus, e.target.checked ? "1" : null));
+  f.querySelector('[data-heute="ok"]').addEventListener("click", komfortFensterZu);
+  f.querySelectorAll(".chr-link").forEach((b) => b.addEventListener("click", () => komfortFensterZu()));
+  return true;
+}
+
+// ---------- Ablauf nach dem Start ----------
+async function komfortNachStart(session) {
+  komfortUserId = session?.user?.id || null;
+  ichAnzeigeAktualisieren();
+  if (zugang?.vorschau) return;
+  const zugangOffen = !document.getElementById("zugang-overlay")?.hidden;
+  if (zugangOffen) return;
+  if (komfortUserId && !lsGet(KOMFORT.tour + komfortUserId)) { einfuehrungZeigen(0); return; }
+  const heute = new Date().toISOString().slice(0, 10);
+  if (lsGet(KOMFORT.heuteAus) || lsGet(KOMFORT.heuteTag) === heute) return;
+  lsSet(KOMFORT.heuteTag, heute);
+  try { await heuteVorJahrenZeigen(); } catch (e) { debugLog(`⚠️ Heute vor … Jahren: ${e.message || e}`); }
+}
+
+// ---------- ← Zurück in der Kopfzeile ----------
+let tabVerlauf = [];
+let tabWechselDurchZurueck = false;
+document.addEventListener("click", (e) => {
+  const b = e.target.closest?.(".tab-btn");
+  if (!b) return;
+  const vorher = document.querySelector(".tab-btn.is-active")?.dataset.tab;
+  if (!tabWechselDurchZurueck && vorher && vorher !== b.dataset.tab) { tabVerlauf.push(vorher); if (tabVerlauf.length > 30) tabVerlauf.shift(); }
+}, true);
+function appZurueck() {
+  if (komfortFensterOffen()) { komfortFensterZu(); return; }
+  const sichtbar = (id) => { const e = document.getElementById(id); return e && !e.hidden; };
+  if (sichtbar("konto-overlay")) { document.getElementById("konto-schliessen")?.click(); return; }
+  if (sichtbar("detail-overlay")) { document.getElementById("detail-close-btn")?.click(); return; }
+  if (sichtbar("person-view-overlay")) { document.getElementById("pv-close")?.click(); return; }
+  const aktiv = document.querySelector(".tab-btn.is-active")?.dataset.tab;
+  if (aktiv === "stammbaum" && treeVerlaufPos > 0) { treeZurueck(); return; }
+  const ziel = tabVerlauf.pop() || (aktiv !== "liste" ? "liste" : null);
+  if (!ziel) return;
+  tabWechselDurchZurueck = true;
+  try { document.querySelector(`.tab-btn[data-tab="${ziel}"]`)?.click(); } finally { tabWechselDurchZurueck = false; }
+}
+document.getElementById("app-zurueck")?.addEventListener("click", appZurueck);
+
+// ---------- Anmeldeprotokoll ----------
+function geraetBeschreibung() {
+  const ua = navigator.userAgent || "";
+  const touchMac = /Macintosh/.test(ua) && navigator.maxTouchPoints > 1;
+  const geraet = /iPad/.test(ua) || touchMac ? "iPad" : /iPhone/.test(ua) ? "iPhone" : /Android/.test(ua) ? (/Mobile/.test(ua) ? "Android-Handy" : "Android-Tablet")
+    : /Windows/.test(ua) ? "Windows-PC" : /Macintosh/.test(ua) ? "Mac" : /Linux/.test(ua) ? "Linux" : "unbekannt";
+  const browser = /EdgA?\//.test(ua) ? "Edge" : /CriOS|Chrome\//.test(ua) ? "Chrome" : /FxiOS|Firefox\//.test(ua) ? "Firefox" : /Safari\//.test(ua) ? "Safari" : "anderer Browser";
+  const app = window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true;
+  return { geraet, browser, app };
+}
+async function anmeldungProtokollieren(art, sofort = false) {
+  try {
+    if (zugang?.vorschau) return;
+    if (!sofort) {   // App-Starts höchstens alle 30 Minuten je Gerät
+      const letzt = Number(lsGet("fs-protokoll-zeit") || 0);
+      if (Date.now() - letzt < 30 * 60 * 1000) return;
+    }
+    lsSet("fs-protokoll-zeit", String(Date.now()));
+    const g = geraetBeschreibung();
+    const version = (document.getElementById("app-version")?.textContent || "").replace(/\D/g, "");
+    const { error } = await sb.from("anmeldeprotokoll").insert({ art, geraet: g.geraet, browser: g.browser, als_app: g.app, app_version: version });
+    if (error) debugLog(`ℹ️ Anmeldeprotokoll: ${error.message}`);
+  } catch (e) { debugLog(`ℹ️ Anmeldeprotokoll: ${e.message || e}`); }
+}
+async function anmeldeprotokollZeigen() {
+  const ziel = document.getElementById("konto-protokoll");
+  if (!ziel) return;
+  ziel.hidden = false; ziel.textContent = "Wird geladen …";
+  const [pr, bp] = await Promise.all([
+    sb.from("anmeldeprotokoll").select("zeit, art, geraet, browser, als_app, app_version, user_id").order("zeit", { ascending: false }).limit(150),
+    sb.from("benutzerprofil").select("user_id, anzeigename"),
+  ]);
+  if (pr.error) { ziel.textContent = /does not exist|relation|schema cache/i.test(pr.error.message) ? "Das Anmeldeprotokoll ist noch nicht eingerichtet (SQL Paket 10 ausführen)." : `Fehler: ${pr.error.message}`; return; }
+  const namen = new Map((bp.data || []).map((x) => [x.user_id, x.anzeigename || "?"]));
+  if (!pr.data?.length) { ziel.textContent = "Noch keine Einträge."; return; }
+  const zahl = new Map(); for (const x of pr.data) zahl.set(x.user_id, (zahl.get(x.user_id) || 0) + 1);
+  ziel.innerHTML = `<p class="capture-status">Letzte ${pr.data.length} Einträge · ${[...zahl].map(([u, n]) => `${escapeHtml(namen.get(u) || "?")}: ${n}`).join(" · ")}</p>
+    <table class="protokoll-tabelle"><thead><tr><th>Wann</th><th>Wer</th><th>Was</th><th>Gerät</th><th>Version</th></tr></thead><tbody>
+    ${pr.data.map((x) => `<tr><td>${new Date(x.zeit).toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })}</td><td>${escapeHtml(namen.get(x.user_id) || "?")}</td><td>${x.art === "anmeldung" ? "🔑 Anmeldung" : "▶︎ geöffnet"}</td><td>${escapeHtml(`${x.geraet || ""} · ${x.browser || ""}${x.als_app ? " (App)" : ""}`)}</td><td>${escapeHtml(x.app_version || "")}</td></tr>`).join("")}
+    </tbody></table>`;
+}
+document.getElementById("konto-protokoll-btn")?.addEventListener("click", anmeldeprotokollZeigen);
+document.getElementById("konto-ich-weg")?.addEventListener("click", () => ichSetzen(null));
+document.getElementById("konto-ich-aendern")?.addEventListener("click", () => {
+  const box = document.getElementById("konto-ich-suche"); if (!box) return;
+  box.hidden = false;
+  personSucheAufbauen(box, (p) => { ichSetzen(p.id, treePersonLabel(p.id)); box.hidden = true; box.innerHTML = ""; }, "Deinen Namen eingeben …").then((f) => f?.focus());
+});
+document.getElementById("hilfe-einfuehrung")?.addEventListener("click", () => einfuehrungZeigen(0));
+document.getElementById("hilfe-heute")?.addEventListener("click", () => heuteVorJahrenZeigen({ auchLeer: true }));
+ichAnzeigeAktualisieren();

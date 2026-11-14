@@ -3,7 +3,7 @@
 // und Version gespeichert. Ändert sich der Text inhaltlich, bitte die Version unten ändern:
 // dann muss jeder Benutzer den neuen Text noch einmal bestätigen.
 window.HINWEIS = {
-  version: "2026-11-14.1",
+  version: "2026-11-14.2",
   titel: "Vertraulichkeit und Hinweise",
   einleitung: "Familienspuren ist ein privates Archiv für die Familiengeschichte: Partezettel, Fotos, Aufnahmen und Erinnerungen. Der Zugang ist auf einen kleinen, persönlich eingeladenen Kreis beschränkt. Bitte nimm dir kurz Zeit für diese Hinweise.",
   abschnitte: [
@@ -52,7 +52,8 @@ window.HINWEIS = {
       punkte: [
         "Familienspuren ist eine private, nicht gewerbliche Sammlung für die Familie. Für die Richtigkeit und Vollständigkeit der Inhalte wird keine Gewähr übernommen.",
         "Wünsche zur Berichtigung oder Löschung von Angaben gehen an den Eigentümer.",
-        "Die Daten, Fotos und Aufnahmen werden bei einem Cloud-Anbieter gespeichert. Sicherungskopien (Backups) legt der Eigentümer an und bewahrt sie sicher auf."
+        "Die Daten, Fotos und Aufnahmen werden bei einem Cloud-Anbieter gespeichert. Sicherungskopien (Backups) legt der Eigentümer an und bewahrt sie sicher auf.",
+        "Die App vermerkt, wann sie geöffnet wurde und mit welchem Gerätetyp (zum Beispiel iPad oder Android-Handy). Standort oder Internetadresse werden nicht gespeichert. Diese Liste sieht nur der Eigentümer."
       ]
     }
   ],
