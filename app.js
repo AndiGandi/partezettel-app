@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 428
+// Partezettel Archiv – Version 429
+// v429: Chronik – „Alles durchsuchen“ (Namen, Todesumstand, Notizen, Häuser, Jahre, Zeitgeschehen); Hochwasser 1910.
 // v428: Gruppenfoto – Person öffnet nur einmal, sofort sichtbar, springt nicht mehr ins Foto zurück.
 // v427: Bestandssuche schneller – ein Suchlauf nach dem Tippen statt fünf pro Buchstabe, Karten außerhalb des Bildschirms werden nicht gezeichnet.
 // v426: ✕ in allen Suchfeldern zum Löschen des ganzen Suchtextes.
@@ -11865,7 +11866,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=428");
+      treeModul3D = await import("./tree3d.js?v=429");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

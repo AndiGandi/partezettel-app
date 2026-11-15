@@ -81,6 +81,7 @@ const ZEITGESCHEHEN = [
   [1894, "Gründung der Feuerwehr Bartholomäberg (erster Kommandant Johann Josef Köberle)", "B"],
   [1903, "Maria Anna Drinkwälder geb. Galehr vermacht dem Armenfonds 27.000 Kronen; 1905/06 wird das Armenhaus gebaut (Zimmermeister Johann Josef Mangeng)", "B"],
   [1905, "Eröffnung der Montafonerbahn Bludenz–Schruns"],
+  [1910, "14./15. Juni: Jahrhunderthochwasser – im Montafon werden alle Brücken weggerissen, die Ill zerstört zwei Drittel der Montafonerbahn, Teile von Schruns werden evakuiert; in Vandans denkt man sogar an eine Aussiedlung nach Bosnien"],
   [1912, "Gründung des Viehzuchtvereins Bartholomäberg (18. November)", "B"],
   [1914, "Im Ersten Weltkrieg fallen 31 Männer aus Bartholomäberg (bis 1918)", "B"],
   [1914, "Beginn des Ersten Weltkriegs"],
@@ -942,3 +943,156 @@ function namenstagZeileHtml(nt) {
   if (!nt) return "";
   return `<p class="tb-namenstag">😇 <strong>Namenstag:</strong> ${chrEsc(nt.namen.slice(0, 6).join(", "))}${nt.patron ? ` <span class="tb-klein">(${chrEsc(nt.patron)})</span>` : ""}${nt.anzahl ? ` · ${chrZahl(nt.anzahl)} ${nt.anzahl === 1 ? "Person" : "Personen"} im Bestand` : ""}</p>`;
 }
+
+/* ===================== v429: Allgemeine Suche („Alles durchsuchen“) ===================== */
+// Durchsucht Namen, Todesumstand, Notizen, Häuser, Lebensjahre und das Zeitgeschehen.
+// Intelligent: Umlaute/Groß-Klein egal, verwandte Begriffe (gefallen → Krieg, vermisst …),
+// Jahre („1910“), Jahrzehnte („1910er“), Zeiträume („1914-1918“), „geboren 1880“, „gestorben 1954“, „Frauen“/„Männer“.
+const ALLG_BEGRIFFE = [
+  ["gefallen", "gefallen", "gefall", "krieg", "weltkrieg", "front", "soldat", "kaiserjager", "kriegsopfer", "vermisst", "verschollen", "gefangenschaft"],
+  ["vermisst", "vermisst", "verschollen", "abgangig"],
+  ["lawine", "lawine", "lawinen", "verschuttet", "schneebrett"],
+  ["verunglückt", "verunglu", "unfall", "abgesturzt", "absturz", "todlich", "ertrunken", "ertrank", "erfroren", "blitz"],
+  ["ertrunken", "ertrunken", "ertrank", "hochwasser"],
+  ["hochwasser", "hochwasser", "uberschwemmung", "mure", "murgang"],
+  ["ausgewandert", "ausgewandert", "auswanderung", "amerika", "usa", "kanada", "argentinien", "brasilien", "zog nach"],
+  ["krankheit", "krankheit", "pest", "cholera", "typhus", "grippe", "seuche", "pocken", "tuberkulose"],
+  ["kirche", "pfarrer", "priester", "kaplan", "pater", "kloster", "ordensschwester", "mesmer"],
+  ["schule", "schule", "lehrer", "lehrerin", "schulhaus"],
+  ["hochzeit", "getraut", "hochzeit", "oo", "trauung", "geheiratet", "heiratete"],
+  ["ledig", "ledig", "unverheiratet"]
+].map((g) => g.map((w) => (typeof PersonSuche !== "undefined" ? PersonSuche.normalisiere(w) : w.toLowerCase())));
+
+function allgVarianten(t) {
+  const v = new Set([t]);
+  if (t.length >= 4) for (const g of ALLG_BEGRIFFE) if (g.some((w) => w.startsWith(t) || (w.length >= 4 && t.startsWith(w)))) g.forEach((w) => v.add(w));
+  return [...v];
+}
+const allgNorm = (x) => PersonSuche.normalisiere(x);
+
+// Normalisiert vergleichen („Frauen“ wird durch die ue→u-Regel zu „fraun“)
+const ALLG_FRAU = new Set(["frau", "frauen", "weiblich", "tochter", "tochtern", "töchter"].map((w) => PersonSuche.normalisiere(w)));
+const ALLG_MANN = new Set(["mann", "männer", "männlich", "sohn", "söhne", "buben"].map((w) => PersonSuche.normalisiere(w)));
+function allgemeineSuche(d, eingabe, { leser = false } = {}) {
+  let roh = String(eingabe || "").trim();
+  const erg = { personen: [], haeuser: [], ereignisse: [], hinweise: [] };
+  if (!roh) return erg;
+  // Zeiträume und Jahrzehnte vor dem Normalisieren erkennen
+  let von = null, bis = null;
+  roh = roh.replace(/\b(1[0-9]{3}|20[0-9]{2})\s*[-–]\s*(1[0-9]{3}|20[0-9]{2})\b/, (_, a, b) => { von = +a; bis = +b; return " "; });
+  roh = roh.replace(/\b(1[0-9]{3}|20[0-9]{2})(?:er|er jahre)\b/i, (_, a) => { von = +a - (+a % 10); bis = von + 9; return " "; });
+  let tokens = allgNorm(roh).split(" ").filter(Boolean);
+  let nur = null; // "geb" | "gest"
+  let geschlecht = null;
+  tokens = tokens.filter((t) => {
+    if (/^(geb|geboren|geburt|geburtsjahr)$/.test(t)) { nur = "geb"; return false; }
+    if (/^(gest|gestorben|tod|todesjahr|starb|verstorben)$/.test(t)) { nur = "gest"; return false; }
+    if (ALLG_FRAU.has(t)) { geschlecht = "w"; return false; }
+    if (ALLG_MANN.has(t)) { geschlecht = "m"; return false; }
+    if (/^(im|in|am|von|der|die|das|und|mit|jahr|jahre)$/.test(t)) return false;
+    return true;
+  });
+  // einzelnes Jahr als Zeitraum behandeln
+  tokens = tokens.filter((t) => { if (/^(1[0-9]{3}|20[0-9]{2})$/.test(t) && von === null) { von = bis = +t; return false; } return true; });
+  if (!tokens.length && von === null && !geschlecht) return erg;
+
+  const imZeitraum = (j) => j && von !== null && j >= von && j <= bis;
+  const haus = new Map(d.haeuser.map((h) => [h.id, h]));
+  const hausText = (h) => [h.ort, h.nummer, h.name].filter(Boolean).join(" ");
+  const hausVon = new Map();
+  for (const st of d.stationen) { const h = haus.get(st.haus_id); if (!h) continue; if (!hausVon.has(st.personen_id)) hausVon.set(st.personen_id, []); hausVon.get(st.personen_id).push(h); }
+  const variantenListe = tokens.map(allgVarianten);
+  const trifftWort = (text, v) => v.some((w) => (/^\d{1,3}$/.test(w) ? new RegExp(`(^|\\D)${w}(\\D|$)`).test(text) : w.length <= 3 ? new RegExp(`(^|[^a-z0-9])${w}([^a-z0-9]|$)`).test(text) : text.includes(w)));   // kurze Wörter nur als ganzes Wort
+
+  for (const p of d.personen) {
+    if (geschlecht && String(p.geschlecht || "").charAt(0).toLowerCase() !== geschlecht) continue;   // „weiblich“ / „männlich“
+    const gj = chrGebJahr(p), tj = chrTodJahr(p);
+    const gebZaehlt = !(leser && chrVermutlichLebend(p));
+    if (von !== null) {
+      const ok = nur === "geb" ? (gebZaehlt && imZeitraum(gj)) : nur === "gest" ? imZeitraum(tj) : ((gebZaehlt && imZeitraum(gj)) || imZeitraum(tj));
+      if (!ok) continue;
+    }
+    const felder = [
+      ["Name", allgNorm([p.vorname, p.nachname, p.Ledigenname].filter(Boolean).join(" ")), [p.vorname, p.nachname, p.Ledigenname && `geb. ${p.Ledigenname}`].filter(Boolean).join(" "), 3],
+      ["Todesumstand", allgNorm(typeof todesumstandText === "function" ? todesumstandText(p) : [p.todesumstand, p.todesumstand_text].join(" ")), typeof todesumstandText === "function" ? todesumstandText(p) : "", 3],
+      ["Notiz", allgNorm(p.Notiz || ""), String(p.Notiz || ""), 2],
+      ["Haus", allgNorm((hausVon.get(p.id) || []).map(hausText).join(" · ")), (hausVon.get(p.id) || []).map(hausText).join(" · "), 2]
+    ];
+    let punkte = 0; const fundstellen = [];
+    let alle = true;
+    for (const v of variantenListe) {
+      let gefunden = false;
+      for (const [lab, norm, orig, gew] of felder) {
+        if (norm && trifftWort(norm, v)) { gefunden = true; punkte += gew + (v[0] && norm.includes(v[0]) ? 1 : 0); if (!fundstellen.some((f) => f.lab === lab)) fundstellen.push({ lab, orig, v }); }
+      }
+      if (!gefunden) { alle = false; break; }
+    }
+    if (!alle) continue;
+    if (von !== null) { punkte += 1; if (!tokens.length) fundstellen.push({ lab: nur === "gest" || (!imZeitraum(gj) && imZeitraum(tj)) ? "gestorben" : "geboren", orig: String(nur === "gest" || (!imZeitraum(gj) && imZeitraum(tj)) ? tj : gj), v: [] }); }
+    erg.personen.push({ p, punkte, fundstellen, gj, tj });
+  }
+  erg.personen.sort((a, b) => b.punkte - a.punkte || (a.gj || a.tj || 9999) - (b.gj || b.tj || 9999));
+
+  if (!nur && !geschlecht) {
+    for (const [j, text, q] of ZEITGESCHEHEN) {
+      if (von !== null && !imZeitraum(j)) continue;
+      const n = allgNorm(text);
+      if (variantenListe.every((v) => trifftWort(n, v))) erg.ereignisse.push({ jahr: j, text, quelle: q });
+    }
+    if (tokens.length) for (const h of d.haeuser) {
+      const n = allgNorm([hausText(h), h.notiz].join(" "));
+      if (variantenListe.every((v) => trifftWort(n, v))) erg.haeuser.push(h);
+    }
+  }
+  const erkannt = [];
+  if (von !== null) erkannt.push(von === bis ? `Jahr ${von}` : `${von}–${bis}`);
+  if (nur) erkannt.push(nur === "geb" ? "nur Geburt" : "nur Tod");
+  if (geschlecht) erkannt.push(geschlecht === "w" ? "nur Frauen" : "nur Männer");
+  variantenListe.forEach((v) => { if (v.length > 1) erkannt.push(`„${v[0]}“ inkl. ${v.slice(1, 5).join(", ")}${v.length > 5 ? " …" : ""}`); });
+  erg.hinweise = erkannt;
+  return erg;
+}
+
+function allgAusschnitt(orig, v) {
+  const text = String(orig || "").replace(/\s+/g, " ").trim();
+  if (!text) return "";
+  const norm = allgNorm(text);
+  let pos = -1, len = 0;
+  for (const w of v) { const i = norm.indexOf(w); if (i >= 0 && (pos < 0 || i < pos)) { pos = i; len = w.length; } }
+  // Normalisierung kann Längen ändern (ß→ss, ae→a); Ausschnitt deshalb großzügig und ohne exakte Markierung, wenn unsicher
+  if (pos < 0 || norm.length !== text.length) return chrEsc(text.length > 120 ? text.slice(0, 117) + " …" : text);
+  const a = Math.max(0, pos - 45), b = Math.min(text.length, pos + len + 60);
+  return `${a > 0 ? "… " : ""}${chrEsc(text.slice(a, pos))}<mark>${chrEsc(text.slice(pos, pos + len))}</mark>${chrEsc(text.slice(pos + len, b))}${b < text.length ? " …" : ""}`;
+}
+
+function allgSucheRendern(erg, ziel, eingabe) {
+  if (!String(eingabe || "").trim()) { ziel.innerHTML = ""; return; }
+  const n = erg.personen.length, e = erg.ereignisse.length, h = erg.haeuser.length;
+  const teile = [n && `${chrZahl(n)} ${n === 1 ? "Person" : "Personen"}`, h && `${h} ${h === 1 ? "Haus" : "Häuser"}`, e && `${e} ${e === 1 ? "Ereignis" : "Ereignisse"}`].filter(Boolean);
+  const MAX = 150;
+  ziel.innerHTML = `
+    <p class="chr-suche-summe">${teile.length ? teile.join(" · ") : "Nichts gefunden."}${erg.hinweise.length ? `<br><small>Gesucht: ${chrEsc(erg.hinweise.join(" · "))}</small>` : ""}</p>
+    ${n ? `<ul class="chr-suche-liste">${erg.personen.slice(0, MAX).map((r) => `<li>${chrLink(r.p)}${r.fundstellen.filter((f) => f.lab !== "Name").map((f) => `<div class="chr-suche-fund"><span>${chrEsc(f.lab)}:</span> ${f.v.length ? allgAusschnitt(f.orig, f.v) : chrEsc(f.orig)}</div>`).join("")}</li>`).join("")}</ul>${n > MAX ? `<p class="chr-suche-summe"><small>Die ersten ${MAX} von ${chrZahl(n)} – Suche genauer eingrenzen, z. B. mit einem Jahr.</small></p>` : ""}` : ""}
+    ${h ? `<h4>Häuser</h4><ul class="chr-suche-liste">${erg.haeuser.map((x) => `<li>🏠 ${chrEsc([x.ort, x.nummer].filter(Boolean).join(" "))}${x.name ? ` – ${chrEsc(x.name)}` : ""}</li>`).join("")}</ul>` : ""}
+    ${e ? `<h4>Zeitgeschehen</h4><ul class="chr-suche-liste">${erg.ereignisse.map((x) => `<li><b>${x.jahr}</b> ${x.quelle === "B" ? "⛪ " : ""}${chrEsc(x.text)}</li>`).join("")}</ul>` : ""}`;
+}
+
+(function allgSucheEinrichten() {
+  const feld = document.getElementById("chr-suche-feld");
+  const ziel = document.getElementById("chr-suche-ergebnis");
+  const inhalt = document.getElementById("chronik-inhalt");
+  if (!feld || !ziel) return;
+  let timer = null, lauf = 0;
+  const suchen = async () => {
+    const q = feld.value, nr = ++lauf;
+    if (inhalt) inhalt.hidden = !!q.trim();
+    if (!q.trim()) { ziel.innerHTML = ""; return; }
+    try {
+      const d = await chronikDatenLaden(false);
+      if (nr !== lauf) return;
+      allgSucheRendern(allgemeineSuche(d, q, { leser: typeof zugang !== "undefined" && zugang?.rolle === "leser" }), ziel, q);
+    } catch (err) { ziel.innerHTML = `<p class="chr-suche-summe">Suche nicht möglich: ${chrEsc(err.message || err)}</p>`; }
+  };
+  feld.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(suchen, feld.value ? 220 : 0); });
+  document.querySelectorAll(".chr-suche-chip").forEach((b) => b.addEventListener("click", () => { feld.value = b.dataset.q; feld.dispatchEvent(new Event("input", { bubbles: true })); }));
+})();

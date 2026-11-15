@@ -2274,3 +2274,18 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .person-view-overlay.pv-laedt #pv-maiden, .person-view-overlay.pv-laedt #pv-lifetime { visibility: hidden; }
 .person-view-overlay.pv-laedt .person-view-heading::after { content: "wird geladen …"; display: block; color: var(--ink-soft); font-size: .9rem; margin-top: .3rem; }
 .detail-photo-viewer__legend-item, .detail-photo-viewer__legend-name { touch-action: manipulation; }
+/* v429: Allgemeine Suche in der Chronik */
+.chr-suche{background:var(--surface,#fff);border:1px solid var(--line,#dfe6dc);border-radius:16px;padding:1rem 1.1rem;margin:0 0 1rem}
+.chr-suche-titel{display:block;font-weight:700;color:var(--green-dark,#2f5e47);margin-bottom:.45rem}
+.chr-suche-chips{display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0 .3rem}
+.chr-suche-chip{border:1px solid var(--line,#dfe6dc);background:#f3f7f1;color:var(--green-dark,#2f5e47);border-radius:999px;padding:.3rem .75rem;font-size:.88rem;cursor:pointer;touch-action:manipulation}
+.chr-suche-chip:active{background:#e3ede0}
+.chr-suche-tipp{font-size:.82rem;color:var(--ink-soft,#6b7068);margin:.3rem 0 0}
+.chr-suche-ergebnis:not(:empty){margin-top:.8rem;border-top:1px solid var(--line,#dfe6dc);padding-top:.6rem}
+.chr-suche-summe{margin:.2rem 0 .5rem;font-weight:600}
+.chr-suche-summe small{font-weight:400;color:var(--ink-soft,#6b7068)}
+.chr-suche-liste{list-style:none;margin:0 0 .8rem;padding:0}
+.chr-suche-liste li{padding:.45rem 0;border-bottom:1px solid #eef2ec}
+.chr-suche-fund{font-size:.86rem;color:var(--ink-soft,#5d6259);margin-top:.15rem;padding-left:.2rem}
+.chr-suche-fund span{font-weight:600}
+.chr-suche-fund mark{background:#fbeeb8;color:inherit;border-radius:3px;padding:0 1px}

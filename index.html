@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 428 -->
+    <!-- Version 429 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=428">
+<link rel="stylesheet" href="style.css?v=429">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 428</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 429</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -690,6 +690,13 @@
       <div><h2>Chronik &amp; Statistik</h2><p id="chronik-status" class="capture-status">Wird beim Öffnen berechnet.</p><p class="chr-vorbehalt">ℹ️ Berechnet aus dem aktuellen, unvollständigen Datenbestand (Lebensdaten und Wohnorte fehlen teilweise). Alle Zahlen dienen nur der Orientierung, nicht als gesicherte Tatsachen.</p></div>
       <button type="button" id="chronik-neu" class="btn btn--secondary">⟳ Neu berechnen</button>
     </div>
+    <div class="chr-suche">
+      <label for="chr-suche-feld" class="chr-suche-titel">🔎 Alles durchsuchen</label>
+      <input type="search" id="chr-suche-feld" placeholder="z. B. gefallen, Lawine, 1910, Innerberg 21, Amerika …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
+      <div class="chr-suche-chips"><button type="button" class="chr-suche-chip" data-q="gefallen">gefallen</button><button type="button" class="chr-suche-chip" data-q="Lawine">Lawine</button><button type="button" class="chr-suche-chip" data-q="verunglückt">verunglückt</button><button type="button" class="chr-suche-chip" data-q="ausgewandert">ausgewandert</button><button type="button" class="chr-suche-chip" data-q="1910">1910</button><button type="button" class="chr-suche-chip" data-q="1914-1918">1914-1918</button><button type="button" class="chr-suche-chip" data-q="geboren 1880er">geboren 1880er</button><button type="button" class="chr-suche-chip" data-q="Frauen gestorben 1918">Frauen gestorben 1918</button><button type="button" class="chr-suche-chip" data-q="Innerberg 21">Innerberg 21</button></div>
+      <p class="chr-suche-tipp">Durchsucht Namen, Todesumstand, Notizen, Häuser, Lebensjahre und das Zeitgeschehen. Verwandte Begriffe werden mitgesucht (z. B. „gefallen“ findet auch „vermisst“ und „Krieg“).</p>
+      <div id="chr-suche-ergebnis" class="chr-suche-ergebnis"></div>
+    </div>
     <div id="chronik-inhalt" class="chr-raster"></div>
   </section>
 
@@ -1048,8 +1055,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=428"></script>
-<script src="app.js?v=428"></script>
-<script src="chronik.js?v=428"></script>
+<script src="hinweise.js?v=429"></script>
+<script src="app.js?v=429"></script>
+<script src="chronik.js?v=429"></script>
 </body>
 </html>
