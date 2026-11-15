@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 427
+// Partezettel Archiv – Version 428
+// v428: Gruppenfoto – Person öffnet nur einmal, sofort sichtbar, springt nicht mehr ins Foto zurück.
 // v427: Bestandssuche schneller – ein Suchlauf nach dem Tippen statt fünf pro Buchstabe, Karten außerhalb des Bildschirms werden nicht gezeichnet.
 // v426: ✕ in allen Suchfeldern zum Löschen des ganzen Suchtextes.
 // v425: Verwandtschaftssatz schreibt Großmutter, Cousine usw. groß.
@@ -4626,14 +4627,25 @@ async function openPersonDetail(personId, options = {}) {
   // Eine Rückkehr bleibt nur beim Öffnen aus dem Gruppenfoto und beim Weiterklicken zu Verwandten erhalten.
   if (!options.vonGruppenfoto && !options.behalteRueckkehr) rueckkehrNachPerson = null;
   currentPersonViewId = personId;
+  // v428: Ansicht sofort öffnen (Name aus dem Bestand), statt auf die Datenbank zu warten
+  const pvSofort = document.getElementById("person-view-overlay");
+  const ausBestand = (personenCache || []).find((x) => x.id === personId);
+  if (pvSofort && ausBestand) {
+    if (pvSofort.hidden) { pvSofort.hidden = false; pvSofort.scrollTop = 0; document.body.classList.add("person-view-open"); }
+    pvSofort.dataset.geoeffnetUm = String(Date.now());
+    pvSofort.classList.add("pv-laedt");
+    const n = document.getElementById("pv-name"); if (n) n.textContent = [ausBestand.vorname, ausBestand.nachname].filter(Boolean).join(" ") || "Unbekannte Person";
+  }
   try {
     await ensureSession();
     const { data: person, error } = await sb.from("personen").select("*").eq("id", personId).single();
+    pvSofort?.classList.remove("pv-laedt");
     if (error || !person) {
       debugLog(`❌ Fehler beim Laden der Person: ${error?.message || "Person nicht gefunden"}`);
       return;
     }
     const overlay = document.getElementById("person-view-overlay");
+    if (overlay && overlay.hidden) overlay.dataset.geoeffnetUm = String(Date.now());
     // Detailansicht sofort öffnen: nachgelagerte Foto-, Familien- oder Audioabfragen
     // dürfen das Öffnen der Person auf iPhone/iPad nicht blockieren.
     if (overlay) {
@@ -5238,6 +5250,7 @@ async function openPersonDetail(personId, options = {}) {
     try { komfortPersonAnsicht(person); } catch (e) { debugLog(`⚠️ Komfort Personenansicht: ${e.message || e}`); }   // v418
   } catch (err) {
     debugLog(`❌ Fehler beim Öffnen der Personenansicht: ${err?.message || err}`);
+    document.getElementById("person-view-overlay")?.classList.remove("pv-laedt");
   }
 }
 
@@ -5250,6 +5263,7 @@ document.getElementById("pv-close")?.addEventListener("click", async () => {
 });
 document.getElementById("person-view-overlay")?.addEventListener("click", (event) => {
   if (event.target.id === "person-view-overlay") {
+    if (Date.now() - Number(event.currentTarget.dataset.geoeffnetUm || 0) < 900) return;   // v428: Safari-Nachklick ignorieren
     personViewVerlauf = [];
     event.currentTarget.hidden = true;
     document.body.classList.remove("person-view-open");
@@ -6799,12 +6813,13 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
         if (auswahl) auswahl.input.focus();
       };
       name.addEventListener("click", openChooser);
-      name.addEventListener("pointerup", (event) => { if (event.pointerType === "touch") openChooser(event); });
       legend.style.cursor = "pointer";
     } else {
       const openPerson = async (event) => {
         event.preventDefault();
         event.stopPropagation();
+        if (Date.now() - (window.__gfOeffnetUm || 0) < 800) return;   // v428: zweites Auslösen ignorieren
+        window.__gfOeffnetUm = Date.now();
         const personId = row.personen_id;
         // v355: merken, woher man kam, damit das ✕ der Personenansicht wieder ins Gruppenfoto führt
         const personOverlay = document.getElementById("person-view-overlay");
@@ -6823,10 +6838,7 @@ function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
           debugLog(`❌ Person aus Gruppenfoto öffnen: ${err.message || err}`);
         }
       };
-      name.addEventListener("click", openPerson);
-      name.addEventListener("pointerup", (event) => {
-        if (event.pointerType === "touch") openPerson(event);
-      });
+      name.addEventListener("click", openPerson);   // v428: nur click – pointerup + click öffnete doppelt
       legend.addEventListener("click", (event) => {
         if (event.target === name) return;
         openPerson(event);
@@ -11853,7 +11865,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=427");
+      treeModul3D = await import("./tree3d.js?v=428");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

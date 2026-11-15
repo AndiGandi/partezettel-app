@@ -2269,3 +2269,8 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .suche-x > #tab-liste #search-input, #tab-liste .suche-x > #search-input{padding-right:2.9rem}
 /* v427: Karten außerhalb des sichtbaren Bereichs nicht zeichnen – die Liste bleibt beim Tippen flüssig */
 #personen-list > li { content-visibility: auto; contain-intrinsic-size: auto 76px; }
+/* v428: Personenansicht öffnet sofort; bis die Daten da sind, ist der alte Inhalt ausgeblendet */
+.person-view-overlay.pv-laedt .person-view-sheet > :not(.person-view-header),
+.person-view-overlay.pv-laedt #pv-maiden, .person-view-overlay.pv-laedt #pv-lifetime { visibility: hidden; }
+.person-view-overlay.pv-laedt .person-view-heading::after { content: "wird geladen …"; display: block; color: var(--ink-soft); font-size: .9rem; margin-top: .3rem; }
+.detail-photo-viewer__legend-item, .detail-photo-viewer__legend-name { touch-action: manipulation; }
