@@ -1,4 +1,7 @@
-// Partezettel Archiv – Version 423
+// Partezettel Archiv – Version 426
+// v426: ✕ in allen Suchfeldern zum Löschen des ganzen Suchtextes.
+// v425: Verwandtschaftssatz schreibt Großmutter, Cousine usw. groß.
+// v424: Zwei-Finger-Zoom auch in „Verwandtschaft ermitteln“ (Gebirge-Grafik).
 // v423: iPad – Seitenzoom beim Tippen auf + / − verhindert, Zwei-Finger-Zoom vergrößert nur den Stammbaum, Eingabefelder 16px (kein Auto-Zoom).
 // v422: Tagesblatt erscheint um Mitternacht auch ohne Neustart (überall in der App); Tagesdatum nach österreichischer Zeit statt UTC.
 // v421: Dunkelmodus-Regeln entfernt (App ist immer hell) – Mondkasten im Tagesblatt war auf iPads im Dunkelmodus unlesbar.
@@ -10464,17 +10467,23 @@ function treeRelationshipMountain(aId, path) {
       <line x1="${PAD - 6}" y1="${basisY}" x2="${breite - PAD + 6}" y2="${basisY}" class="tree-mtn-basis"/>${linien}</svg>${karten}</div></div></div>
     <div class="tree-mtn-legende"><span><i class="tree-mtn-l tree-mtn-l--gipfel"></i>gemeinsame Vorfahren</span><span><i class="tree-mtn-l tree-mtn-l--ehe"></i>∞ Ehe</span><span>Höhe = Generation · gestrichelt = Generation von Person 1</span></div></div>`;
 }
+// v424: Gebirge-Zoom gemeinsam für + / − und Zwei-Finger-Geste
+function mtnZoomLesen() { let z = 1; try { z = Number(localStorage.getItem("fs-mtn-zoom")) || 1; } catch {} return z; }
+function mtnZoomSetzen(rahmen, zoom, { merken = true } = {}) {
+  zoom = Math.min(1.6, Math.max(0.4, +(+zoom).toFixed(2)));
+  const skala = rahmen?.querySelector(".tree-mtn-skala"), mtn = rahmen?.querySelector(".tree-mtn");
+  if (merken) { try { localStorage.setItem("fs-mtn-zoom", String(zoom)); } catch {} }
+  if (skala && mtn) { mtn.style.transform = `scale(${zoom})`; skala.style.width = `${skala.dataset.b * zoom}px`; skala.style.height = `${skala.dataset.h * zoom}px`; }
+  const w = rahmen?.querySelector(".tree-mtn-zoomwert"); if (w) w.textContent = `${Math.round(zoom * 100)} %`;
+  return zoom;
+}
 document.addEventListener("click", (e) => {
   const k = e.target.closest?.("[data-rel-person]");
   if (k) { e.preventDefault(); openPersonDetail(k.dataset.relPerson, { fromTree: true }); return; }
   const z = e.target.closest?.("[data-mtn-zoom]");
   if (z) {
     const rahmen = z.closest(".tree-mtn-rahmen"), skala = rahmen?.querySelector(".tree-mtn-skala"), mtn = rahmen?.querySelector(".tree-mtn");
-    let zoom = 1; try { zoom = Number(localStorage.getItem("fs-mtn-zoom")) || 1; } catch {}
-    zoom = Math.min(1.6, Math.max(0.4, Math.round((zoom + (z.dataset.mtnZoom === "+" ? 0.1 : -0.1)) * 10) / 10));
-    try { localStorage.setItem("fs-mtn-zoom", String(zoom)); } catch {}
-    if (skala && mtn) { mtn.style.transform = `scale(${zoom})`; skala.style.width = `${skala.dataset.b * zoom}px`; skala.style.height = `${skala.dataset.h * zoom}px`; }
-    const w = rahmen?.querySelector(".tree-mtn-zoomwert"); if (w) w.textContent = `${Math.round(zoom * 100)} %`;
+    mtnZoomSetzen(rahmen, Math.round((mtnZoomLesen() + (z.dataset.mtnZoom === "+" ? 0.1 : -0.1)) * 10) / 10);
     return;
   }
   const pk = e.target.closest?.("[data-mtn-partner]");
@@ -10531,7 +10540,9 @@ function treeRelationshipSentence(aId, bId, relation) {
   const a = treePersonLabel(aId);
   const b = treePersonLabel(bId);
   if (!relation || relation === "dieselbe Person") return relation ? `${a} und ${b} sind dieselbe Person.` : "";
-  return `${a} ist ${relation.toLowerCase()} von ${b}.`;
+  // v425: Hauptwörter (Großmutter, Cousine …) groß lassen; Eigenschaftswörter als „ist mit … angeheiratet verwandt“
+  if (/^[a-zäöü]/.test(relation)) return `${a} ist mit ${b} ${relation.replace(/\s+(mit|von)$/, "")}.`;
+  return `${a} ist ${relation} von ${b}.`;
 }
 
 function treeRelationshipResult(aId, bId) {
@@ -11843,7 +11854,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=423");
+      treeModul3D = await import("./tree3d.js?v=426");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13540,8 +13551,13 @@ ichAnzeigeAktualisieren();
 
 // v423: Zwei-Finger-Zoom im Stammbaum vergrößert den Stammbaum, nicht die ganze Seite (iPad/Safari)
 (function treeGestenZoom() {
-  let start = 1;
+  let start = 1, mtnRahmen = null;
   const imBaum = (e) => e.target?.closest?.("#tree-viewport, .tree-zoom-controls, .tree-viewport-bar");
+  // v424: auch im Fenster „Verwandtschaft ermitteln“ (Gebirge) – dort zoomt die Geste die Grafik
+  const imGebirge = (e) => e.target?.closest?.(".tree-mtn-rahmen");
+  document.addEventListener("gesturestart", (e) => { const r = imGebirge(e); if (!r) return; e.preventDefault(); e.stopImmediatePropagation(); mtnRahmen = r; start = mtnZoomLesen(); }, { passive: false, capture: true });
+  document.addEventListener("gesturechange", (e) => { if (!mtnRahmen || !imGebirge(e)) return; e.preventDefault(); e.stopImmediatePropagation(); mtnZoomSetzen(mtnRahmen, start * e.scale, { merken: false }); }, { passive: false, capture: true });
+  document.addEventListener("gestureend", (e) => { if (!mtnRahmen) return; e.preventDefault(); e.stopImmediatePropagation(); mtnZoomSetzen(mtnRahmen, start * (e.scale || 1)); mtnRahmen = null; }, { passive: false, capture: true });
   const ist3d = () => document.getElementById("tree-viewport")?.closest(".tab-panel")?.querySelector(".tree-3d-stage:not([hidden])");
   document.addEventListener("gesturestart", (e) => { if (!imBaum(e)) return; e.preventDefault(); start = treeZoom; }, { passive: false });
   document.addEventListener("gesturechange", (e) => {
@@ -13553,3 +13569,35 @@ ichAnzeigeAktualisieren();
   }, { passive: false });
   document.addEventListener("gestureend", (e) => { if (imBaum(e)) e.preventDefault(); }, { passive: false });
 })();
+
+// v426: ✕ in allen Suchfeldern – löscht den ganzen Suchtext mit einem Tipp (wie bei der Personenauswahl)
+function sucheXAnbringen(input) {
+  if (!input || input.dataset.sucheX || input.closest(".person-picker")) return;
+  input.dataset.sucheX = "1";
+  const wrap = document.createElement("span");
+  wrap.className = "suche-x";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+  const x = document.createElement("button");
+  x.type = "button"; x.className = "suche-x__knopf"; x.textContent = "✕";
+  x.setAttribute("aria-label", "Suchtext löschen"); x.title = "Suchtext löschen";
+  wrap.appendChild(x);
+  const sync = () => { x.hidden = !input.value; };
+  input.addEventListener("input", sync);
+  input.addEventListener("change", sync);
+  // auch wenn das Programm den Wert setzt (z. B. Stammbaum-Suche übernimmt die Person)
+  const desc = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+  Object.defineProperty(input, "value", { configurable: true, get() { return desc.get.call(this); }, set(v) { desc.set.call(this, v); sync(); } });
+  x.addEventListener("pointerdown", (e) => e.preventDefault());   // Tastatur bleibt offen
+  x.addEventListener("click", () => {
+    input.value = "";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("search", { bubbles: true }));
+    input.focus();
+  });
+  sync();
+}
+function sucheXAlle(wurzel = document) { wurzel.querySelectorAll?.('input[type="search"]').forEach(sucheXAnbringen); }
+sucheXAlle();
+new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches?.('input[type="search"]')) sucheXAnbringen(n); else sucheXAlle(n); } })
+  .observe(document.body, { childList: true, subtree: true });
