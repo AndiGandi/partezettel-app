@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 421
+// Partezettel Archiv – Version 423
+// v423: iPad – Seitenzoom beim Tippen auf + / − verhindert, Zwei-Finger-Zoom vergrößert nur den Stammbaum, Eingabefelder 16px (kein Auto-Zoom).
+// v422: Tagesblatt erscheint um Mitternacht auch ohne Neustart (überall in der App); Tagesdatum nach österreichischer Zeit statt UTC.
 // v421: Dunkelmodus-Regeln entfernt (App ist immer hell) – Mondkasten im Tagesblatt war auf iPads im Dunkelmodus unlesbar.
 // v420: Tagesblatt ohne Personalisierung, mit Symbolen (🎂 🕯 💍) und Mond-Bildzeichen; Gruppenfoto: Namen erst beim Suchen, Hochladen nur Bearbeiter.
 // v419: Tagesblatt beim Start: Mondkalender (Bartholomäberg), Namenstag, Bauernregel, runde Jahrestage, Verwandte zuerst; Geburtstage Lebender nicht für Leser.
@@ -11841,7 +11843,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=421");
+      treeModul3D = await import("./tree3d.js?v=423");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13410,7 +13412,7 @@ async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
     <div class="tb-kalenderblatt" aria-hidden="true"><span>${new Date().toLocaleDateString("de-AT", { month: "short", timeZone: "Europe/Vienna" }).replace(".", "").toUpperCase()}</span><b>${new Date().toLocaleDateString("de-AT", { day: "numeric", timeZone: "Europe/Vienna" }).replace(".", "")}</b></div>
     <h2 class="tour-titel">Tagesblatt</h2>
     <div class="tagesblatt">${tagesblattHtml(r)}</div>
-    <label class="heute-aus"><input type="checkbox" id="heute-aus-cb" ${lsGet(KOMFORT.heuteAus) ? "checked" : ""}> Nicht mehr automatisch beim Start zeigen</label>
+    <label class="heute-aus"><input type="checkbox" id="heute-aus-cb" ${lsGet(KOMFORT.heuteAus) ? "checked" : ""}> Nicht mehr automatisch zeigen (beim Start und um Mitternacht)</label>
     <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-heute="ok">Schließen</button></div>`, { klasse: "komfort-fenster--heute" });
   f.querySelector("#heute-aus-cb").addEventListener("change", (e) => lsSet(KOMFORT.heuteAus, e.target.checked ? "1" : null));
   f.querySelector('[data-heute="ok"]').addEventListener("click", komfortFensterZu);
@@ -13426,11 +13428,39 @@ async function komfortNachStart(session) {
   const zugangOffen = !document.getElementById("zugang-overlay")?.hidden;
   if (zugangOffen) return;
   if (komfortUserId && !lsGet(KOMFORT.tour + komfortUserId)) { einfuehrungZeigen(0); return; }
-  const heute = new Date().toISOString().slice(0, 10);
+  komfortTagGestartet = true; komfortTagZuletzt = wienerTag();
+  const heute = wienerTag();
   if (lsGet(KOMFORT.heuteAus) || lsGet(KOMFORT.heuteTag) === heute) return;
   lsSet(KOMFORT.heuteTag, heute);
   try { await heuteVorJahrenZeigen(); } catch (e) { debugLog(`⚠️ Tagesblatt: ${e.message || e}`); }
 }
+
+// ---------- v422: Tageswechsel um Mitternacht, auch ohne Neustart ----------
+// Datum nach österreichischer Zeit (vorher UTC – zwischen 0 und 1 Uhr galt noch der Vortag)
+function wienerTag(d = new Date()) {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: "Europe/Vienna", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+let komfortTagGestartet = false;
+let komfortTagZuletzt = null;
+async function tageswechselPruefen() {
+  if (!komfortTagGestartet || zugang?.vorschau) return;
+  const heute = wienerTag();
+  if (komfortTagZuletzt === heute) return;
+  komfortTagZuletzt = heute;
+  // Chronik-Karte „Heute vor … Jahren“ mitziehen, falls sie gerade offen ist
+  try { if (document.getElementById("tab-chronik")?.classList.contains("is-active") && typeof zeigeChronik === "function") zeigeChronik(false); } catch {}
+  if (lsGet(KOMFORT.heuteAus) || lsGet(KOMFORT.heuteTag) === heute) return;
+  if (!document.getElementById("zugang-overlay")?.hidden) return;              // nicht über der Anmeldung
+  const ov = document.getElementById("komfort-overlay");
+  const fensterOffen = ov && !ov.hidden;
+  if (fensterOffen && !ov.querySelector(".komfort-fenster--heute")) return;    // Einführung o. Ä. nicht unterbrechen
+  lsSet(KOMFORT.heuteTag, heute);
+  try { await heuteVorJahrenZeigen(); } catch (e) { debugLog(`⚠️ Tagesblatt: ${e.message || e}`); }
+}
+setInterval(tageswechselPruefen, 30000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) tageswechselPruefen(); });
+window.addEventListener("focus", tageswechselPruefen);
+window.addEventListener("pageshow", tageswechselPruefen);
 
 // ---------- ← Zurück in der Kopfzeile ----------
 let tabVerlauf = [];
@@ -13507,3 +13537,19 @@ document.getElementById("konto-ich-aendern")?.addEventListener("click", () => {
 document.getElementById("hilfe-einfuehrung")?.addEventListener("click", () => einfuehrungZeigen(0));
 document.getElementById("hilfe-heute")?.addEventListener("click", () => heuteVorJahrenZeigen());
 ichAnzeigeAktualisieren();
+
+// v423: Zwei-Finger-Zoom im Stammbaum vergrößert den Stammbaum, nicht die ganze Seite (iPad/Safari)
+(function treeGestenZoom() {
+  let start = 1;
+  const imBaum = (e) => e.target?.closest?.("#tree-viewport, .tree-zoom-controls, .tree-viewport-bar");
+  const ist3d = () => document.getElementById("tree-viewport")?.closest(".tab-panel")?.querySelector(".tree-3d-stage:not([hidden])");
+  document.addEventListener("gesturestart", (e) => { if (!imBaum(e)) return; e.preventDefault(); start = treeZoom; }, { passive: false });
+  document.addEventListener("gesturechange", (e) => {
+    if (!imBaum(e)) return;
+    e.preventDefault();
+    if (ist3d()) return;
+    const z = Math.max(0.6, Math.min(1.5, +(start * e.scale).toFixed(2)));
+    if (z !== treeZoom) { treeZoom = z; updateTreeZoom(); }
+  }, { passive: false });
+  document.addEventListener("gestureend", (e) => { if (imBaum(e)) e.preventDefault(); }, { passive: false });
+})();

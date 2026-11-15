@@ -2249,3 +2249,8 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .tb-kalenderblatt { width: 58px; margin: 0 auto 8px; border-radius: 9px; overflow: hidden; border: 1px solid #ddd6c8; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); text-align: center; }
 .tb-kalenderblatt span { display: block; background: #2f6b4a; color: #fff; font: 700 .7rem/1.6 system-ui, sans-serif; letter-spacing: .06em; }
 .tb-kalenderblatt b { display: block; font: 700 1.6rem/1.5 Georgia, serif; color: #2b2722; }
+/* v423: iPad – kein Seiten-Zoom durch schnelles Doppeltippen auf Knöpfe; Eingabefelder 16px, damit Safari beim Antippen nicht die ganze Seite vergrößert */
+button, .btn, .tab-btn, select, label, .tree-zoom-controls, .tree-zoom-controls * { touch-action: manipulation; }
+@supports (-webkit-touch-callout: none) {
+  input[type=text], input[type=search], input[type=email], input[type=password], input[type=number], input:not([type]), select, textarea { font-size: 16px; }
+}
