@@ -2267,3 +2267,5 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .suche-x > .gruppenfoto-personen-suche{margin-bottom:0}
 .suche-x:has(> .gruppenfoto-personen-suche){margin-bottom:.55rem}
 .suche-x > #tab-liste #search-input, #tab-liste .suche-x > #search-input{padding-right:2.9rem}
+/* v427: Karten außerhalb des sichtbaren Bereichs nicht zeichnen – die Liste bleibt beim Tippen flüssig */
+#personen-list > li { content-visibility: auto; contain-intrinsic-size: auto 76px; }

@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 426
+// Partezettel Archiv – Version 427
+// v427: Bestandssuche schneller – ein Suchlauf nach dem Tippen statt fünf pro Buchstabe, Karten außerhalb des Bildschirms werden nicht gezeichnet.
 // v426: ✕ in allen Suchfeldern zum Löschen des ganzen Suchtextes.
 // v425: Verwandtschaftssatz schreibt Großmutter, Cousine usw. groß.
 // v424: Zwei-Finger-Zoom auch in „Verwandtschaft ermitteln“ (Gebirge-Grafik).
@@ -4216,6 +4217,7 @@ const personenSortButton=document.getElementById("personen-sort-richtung");
 // hängt die Suche nicht davon ab, ob iPadOS einen zuvor registrierten
 // Event-Listener nach einem View-/PWA-Wechsel noch korrekt ausführt.
 let personenSucheLauf = 0;
+let personenSucheZuletzt = null;   // v427
 
 function normalizePersonenSuchtext(value) {
   return PersonSuche.normalisiere(value);
@@ -4262,6 +4264,7 @@ function pruefFilterPasst(p) {
 function wendePersonenSucheAn(suchwert) {
   const q = normalizePersonenSuchtext(suchwert);
   const tokens = q ? q.split(" ").filter(Boolean) : [];
+  const suchTokens = PersonSuche.zerlege(suchwert);   // v427: einmal statt für jede Person neu
   const list = document.getElementById("personen-list");
   const empty = document.getElementById("list-empty");
 
@@ -4290,8 +4293,8 @@ function wendePersonenSucheAn(suchwert) {
     // Mehrwortsuche: Jeder Suchbegriff muss als Teilstring im gemeinsamen
     // Namens-Suchraum vorkommen. Dadurch ist die Reihenfolge egal:
     // "Ganahl Alois" findet "Alois Ganahl" und umgekehrt.
-    const sichtbar = (tokens.length === 0 || personenSuchTreffer(p, q)) && pruefFilterPasst(p);
-    karte.li.hidden = !sichtbar;
+    const sichtbar = (suchTokens.length === 0 || PersonSuche.trifft(p, suchTokens)) && pruefFilterPasst(p);
+    if (karte.li.hidden === sichtbar) karte.li.hidden = !sichtbar;   // v427: nur ändern, wenn nötig
     if (sichtbar) treffer++;
   }
 
@@ -4312,6 +4315,7 @@ function wendePersonenSucheAn(suchwert) {
 // Öffentliche Funktion für den direkten oninput/onkeyup-Handler im HTML.
 window.partezettelPersonenSuche = function (suchwert) {
   personenSucheLauf++;
+  personenSucheZuletzt = String(suchwert ?? "");
   return wendePersonenSucheAn(suchwert);
 };
 
@@ -4337,28 +4341,23 @@ function registriereEgressSuchSchrittNachSuche(suchwert) {
   }, 800);
 }
 
+// v427: Beim Tippen nur EIN Suchlauf, kurz nach dem letzten Tastendruck. Vorher liefen pro Buchstabe
+// bis zu fünf Suchläufe (oninput, onkeyup, zwei Listener, Dokument-Listener) – das blockierte die Tastatur.
+let personenSucheTippTimer = null;
+window.partezettelPersonenSucheTippen = function (wert) {
+  wert = String(wert ?? "");
+  clearTimeout(personenSucheTippTimer);
+  personenSucheTippTimer = setTimeout(() => {
+    if (wert === personenSucheZuletzt) return;
+    personenSucheZuletzt = wert;
+    window.partezettelPersonenSuche(wert);
+    registriereEgressSuchSchrittNachSuche(wert);
+  }, wert ? 180 : 60);
+};
 const personenSuchfeld = document.getElementById("search-input");
 if (personenSuchfeld) {
-  personenSuchfeld.addEventListener("input", () => {
-    window.partezettelPersonenSuche(personenSuchfeld.value);
-    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
-  });
-  personenSuchfeld.addEventListener("search", () => {
-    window.partezettelPersonenSuche(personenSuchfeld.value);
-    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
-  });
-  personenSuchfeld.addEventListener("keyup", () => {
-    window.partezettelPersonenSuche(personenSuchfeld.value);
-    registriereEgressSuchSchrittNachSuche(personenSuchfeld.value);
-  });
+  for (const art of ["input", "search", "keyup"]) personenSuchfeld.addEventListener(art, () => window.partezettelPersonenSucheTippen(personenSuchfeld.value));
 }
-
-document.addEventListener("input", (event) => {
-  if (event.target?.id === "search-input") {
-    window.partezettelPersonenSuche(event.target.value);
-    registriereEgressSuchSchrittNachSuche(event.target.value);
-  }
-});
 
 // v332: Standardrichtung je Sortierfeld (Zuletzt erfasst = neueste zuerst), Richtungstaste beschriftet.
 const PERSONEN_SORT_STANDARDRICHTUNG = { name: 1, alter: 1, geburtsjahr: 1, sterbejahr: 1, erstellt: -1, familie: 1 };
@@ -11854,7 +11853,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=426");
+      treeModul3D = await import("./tree3d.js?v=427");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
