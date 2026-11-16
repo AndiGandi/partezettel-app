@@ -1,4 +1,6 @@
-// Partezettel Archiv – Version 430
+// Partezettel Archiv – Version 432
+// v432: „Wie sind wir verwandt?“ landet beim Verwandtschaftsfenster statt im Familienstammbaum.
+// v431: Neue oder geänderte Personen sind sofort nach dem Speichern überall greifbar (ohne Aktualisieren).
 // v430: Personenansicht ohne „Das bin ich“-Knopf, dafür „Wie sind wir verwandt?“ (Stammbaum); im Verwandtschaftsfenster „👤 Ich“ als Schnellauswahl.
 // v429: Chronik – „Alles durchsuchen“ (Namen, Todesumstand, Notizen, Häuser, Jahre, Zeitgeschehen); Hochwasser 1910.
 // v428: Gruppenfoto – Person öffnet nur einmal, sofort sichtbar, springt nicht mehr ins Foto zurück.
@@ -2029,6 +2031,7 @@ form.addEventListener("submit", async (e) => {
     if (result.ok) {
       formMessage.textContent = "Gespeichert ✓";
       resetForm();
+      void personenNachSpeichern(eintrag.id);   // v431
     } else {
       await queueEintrag(eintrag);
       formMessage.textContent = `Fehler: ${result.error} — In Warteschlange gespeichert, wird später erneut versucht.`;
@@ -2379,7 +2382,7 @@ async function flushQueue() {
 
   for (const eintrag of queue) {
     const result = await sendEintrag(eintrag);
-    if (result.ok) await removeFromQueue(eintrag.id);
+    if (result.ok) { await removeFromQueue(eintrag.id); void personenNachSpeichern(eintrag.id); }
   }
 
   const remaining = await getQueue();
@@ -3749,6 +3752,30 @@ async function loadPersonen(force = false) {
   } finally {
     personenLadePromise = null;
   }
+}
+
+// v431: Nach dem Speichern sofort überall verfügbar (Bestand, Suche, Stammbaum, Personenauswahl, Chronik).
+// Bisher prüfte der Abgleich nur einmal pro Sitzung auf Änderungen – neue Personen erschienen erst nach „Aktualisieren“.
+let personenNachSpeichernLauf = null;
+async function personenNachSpeichern(neueId = null) {
+  if (personenNachSpeichernLauf) await personenNachSpeichernLauf.catch(() => {});
+  personenNachSpeichernLauf = (async () => {
+    syncPruefungSeitCacheLaden = false;
+    try { await loadPersonen(); } catch (e) { debugLog(`⚠️ Bestand nach Speichern: ${e.message || e}`); }
+    // Sicherheitsnetz: fehlt die neue Person noch, direkt holen und einfügen
+    if (neueId && !personenCache.some((x) => x.id === neueId)) {
+      try {
+        const { data } = await sb.from("personen").select("*").eq("id", neueId).maybeSingle();
+        if (data) { personenCache.push(data); await renderPersonenList(personenCache); }
+      } catch (e) { debugLog(`⚠️ Neue Person nachladen: ${e.message || e}`); }
+    }
+    treeDataGeladenAm = 0;
+    try { if (typeof chronikCache !== "undefined") chronikCache = null; } catch {}
+    if (treeData.personen.length) {
+      try { await loadStammbaumData(); } catch (e) { debugLog(`⚠️ Stammbaum nach Speichern: ${e.message || e}`); }
+    }
+  })();
+  return personenNachSpeichernLauf;
 }
 
 function invalidierePersonenCache() {
@@ -5385,7 +5412,7 @@ document.getElementById("detail-close-btn").addEventListener("click", async () =
     if (select && returnTreePersonId) select.value = returnTreePersonId;
     try { await loadStammbaum(); } catch (err) { debugLog(`⚠️ Stammbaum nach Rückkehr: ${err.message || err}`); }
   } else {
-    loadPersonen();
+    void personenNachSpeichern();   // v431
     const zurueckZu = bearbeitenAusAnsicht;
     bearbeitenAusAnsicht = null;
     if (zurueckZu) { try { await openPersonDetail(zurueckZu, { zurueck: true, behalteRueckkehr: true }); } catch (err) { debugLog(`⚠️ Rückkehr zur Ansicht: ${err.message || err}`); } }
@@ -5588,6 +5615,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
 
   if (rolleIstEigentuemer()) kbUebersichtLaden();   // v412: Kirchenbuch-Übersicht aktualisieren
   msg.textContent = "Gespeichert ✓";
+  void personenNachSpeichern();   // v431: geänderte Namen/Daten sofort überall
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
   aktualisiereLinkButton("d-trauungsbuch-open", document.getElementById("d-trauungsbuch-link").value.trim());
   aktualisiereLinkButton("d-sterbebuch-open", document.getElementById("d-sterbebuch-link").value.trim());
@@ -7135,7 +7163,7 @@ async function ohneZuDatenblatt(zeile, art) {
     if (le) debugLog(`⚠️ Liste ${spalte}: ${le.message}`);
     setzeDetailSauber();
     zeigeToast(`Datenblatt für „${name}“ angelegt`);
-    try { loadPersonen(); } catch {}
+    void personenNachSpeichern(neueId);   // v431
     await openPersonEdit(neueId);
   } catch (err) {
     alert(`Das Datenblatt konnte nicht angelegt werden: ${err.message || err}`);
@@ -11867,7 +11895,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=430");
+      treeModul3D = await import("./tree3d.js?v=432");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13623,13 +13651,18 @@ async function verwandtschaftImStammbaum(aId, bId) {
   document.body.classList.remove("person-view-open");
   document.querySelector('.tab-btn[data-tab="stammbaum"]')?.click();
   await loadStammbaum();
-  setTreePersonSelection(aId);
+  // v432: Person setzen, ohne dass der Stammbaum die Seite zu sich scrollt (sonst landet man im Familienstammbaum)
+  if (treeSelect && treePerson(aId)) { treeSelect.value = aId; treePresetZuruecksetzen(); renderStammbaum(aId); treeLinieMittigZeigen(aId, { seite: false }); }
   document.getElementById("tree-relationship-open")?.click();
   treeRelationSetPerson("a", aId);
   treeRelationSetPerson("b", bId);
   document.getElementById("tree-relationship-calc")?.click();
   // nach dem Neuzeichnen des Stammbaums zum Fenster mit Ergebnis und Gebirge scrollen
-  setTimeout(() => document.getElementById("tree-relationship-panel")?.scrollIntoView({ block: "start", behavior: "auto" }), 150);
+  const zumFenster = () => document.getElementById("tree-relationship-panel")?.scrollIntoView({ block: "start", behavior: "auto" });
+  const timer = [150, 500, 1000].map((ms) => setTimeout(zumFenster, ms));   // auch auf langsameren iPads
+  zumFenster();
+  // wischt man selbst, nicht mehr nachziehen
+  window.addEventListener("touchstart", () => timer.forEach(clearTimeout), { once: true, passive: true });
 }
 
 // „👤 Ich“ neben Person 1 und Person 2: setzt die unter „Das bin ich“ gewählte Person ein
