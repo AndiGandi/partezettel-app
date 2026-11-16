@@ -2295,3 +2295,4 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .tree-relation-ich:active{background:#e3ede0}
 .tree-relation-ich[hidden],.pv-ich-weg[hidden]{display:none}
 #tree-relationship-panel{scroll-margin-top:96px}
+#tree-relationship-result .tree-relationship-path, #tree-relationship-result .tree-mtn-rahmen, #tree-relationship-result{scroll-margin-top:84px}

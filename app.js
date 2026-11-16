@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 432
+// Partezettel Archiv – Version 433
+// v433: „Wie sind wir verwandt?“ springt direkt zum Gebirge (So ergibt sich die Beziehung).
 // v432: „Wie sind wir verwandt?“ landet beim Verwandtschaftsfenster statt im Familienstammbaum.
 // v431: Neue oder geänderte Personen sind sofort nach dem Speichern überall greifbar (ohne Aktualisieren).
 // v430: Personenansicht ohne „Das bin ich“-Knopf, dafür „Wie sind wir verwandt?“ (Stammbaum); im Verwandtschaftsfenster „👤 Ich“ als Schnellauswahl.
@@ -11895,7 +11896,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=432");
+      treeModul3D = await import("./tree3d.js?v=433");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13658,7 +13659,14 @@ async function verwandtschaftImStammbaum(aId, bId) {
   treeRelationSetPerson("b", bId);
   document.getElementById("tree-relationship-calc")?.click();
   // nach dem Neuzeichnen des Stammbaums zum Fenster mit Ergebnis und Gebirge scrollen
-  const zumFenster = () => document.getElementById("tree-relationship-panel")?.scrollIntoView({ block: "start", behavior: "auto" });
+  // v433: direkt zum Ergebnis mit „So ergibt sich die Beziehung“ und dem Gebirge
+  const zumFenster = () => {
+    const ziel = document.querySelector("#tree-relationship-result .tree-relationship-path")
+      || document.querySelector("#tree-relationship-result .tree-mtn-rahmen")
+      || document.getElementById("tree-relationship-result")
+      || document.getElementById("tree-relationship-panel");
+    ziel?.scrollIntoView({ block: "start", behavior: "auto" });
+  };
   const timer = [150, 500, 1000].map((ms) => setTimeout(zumFenster, ms));   // auch auf langsameren iPads
   zumFenster();
   // wischt man selbst, nicht mehr nachziehen
