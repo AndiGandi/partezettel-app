@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 429
+// Partezettel Archiv – Version 430
+// v430: Personenansicht ohne „Das bin ich“-Knopf, dafür „Wie sind wir verwandt?“ (Stammbaum); im Verwandtschaftsfenster „👤 Ich“ als Schnellauswahl.
 // v429: Chronik – „Alles durchsuchen“ (Namen, Todesumstand, Notizen, Häuser, Jahre, Zeitgeschehen); Hochwasser 1910.
 // v428: Gruppenfoto – Person öffnet nur einmal, sofort sichtbar, springt nicht mehr ins Foto zurück.
 // v427: Bestandssuche schneller – ein Suchlauf nach dem Tippen statt fünf pro Buchstabe, Karten außerhalb des Bildschirms werden nicht gezeichnet.
@@ -11866,7 +11867,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=429");
+      treeModul3D = await import("./tree3d.js?v=430");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13275,17 +13276,14 @@ function komfortPersonAnsicht(person) {
   else kopf.appendChild(box);   // immer ganz unten im Kopf
   const ich = ichPerson();
   const istIch = ich?.id === person.id;
+  // v430: kein „Das bin ich“-Knopf mehr bei jeder Person (festlegen unter Konto); stattdessen Sprung zur Verwandtschaft im Stammbaum
   box.innerHTML = `<p class="pv-komfort__ich" id="pv-ich-zeile" hidden></p>
     <div class="pv-komfort__knoepfe">
       <button type="button" class="btn btn--secondary pv-vorlesen" id="pv-vorlesen">🔊 Vorlesen</button>
-      <button type="button" class="btn btn--ghost pv-ich-btn" id="pv-ich-btn">${istIch ? "👤 Das bin nicht ich" : "👤 Das bin ich"}</button>
+      <button type="button" class="btn btn--ghost pv-ich-weg" id="pv-ich-weg" hidden>↔ Wie sind wir verwandt?</button>
     </div>`;
   box.querySelector("#pv-vorlesen").addEventListener("click", () => vorlesenUmschalten());
-  box.querySelector("#pv-ich-btn").addEventListener("click", () => {
-    if (istIch) { ichSetzen(null); return; }
-    const name = document.getElementById("pv-name")?.textContent?.trim() || "";
-    ichSetzen(person.id, name);
-  });
+  box.querySelector("#pv-ich-weg").addEventListener("click", () => { if (ich) void verwandtschaftImStammbaum(ich.id, person.id); });
   vorlesenStopp();
   const zeile = box.querySelector("#pv-ich-zeile");
   if (istIch) { zeile.textContent = "👤 Das bist du."; zeile.hidden = false; return; }
@@ -13296,6 +13294,7 @@ function komfortPersonAnsicht(person) {
       if (currentPersonViewId !== person.id) return;
       if (!treePerson(ich.id)) return;
       const b = beziehungZuMir(person.id, ich.id);
+      const weg = box.querySelector("#pv-ich-weg"); if (weg && treePerson(person.id)) weg.hidden = false;
       if (!b) { zeile.textContent = `👤 Keine nähere Verwandtschaft zu dir (${ich.name}) erfasst.`; zeile.classList.add("is-leer"); }
       else {
         zeile.innerHTML = b.artikel ? `👤 Das ist ${b.artikel} <strong>${escapeHtml(b.wort)}</strong>` : `👤 Verwandtschaft zu dir: <strong>${escapeHtml(b.wort)}</strong>`;
@@ -13394,7 +13393,7 @@ const EINFUEHRUNG = [
   { icon: "👤", titel: "Die Personenansicht", text: "Dort siehst du Lebensdaten, Eltern, Ehepartner und Kinder. Tippst du einen Namen an, kommst du zu dieser Person. Mit <strong>🔊 Vorlesen</strong> liest das Gerät die Angaben vor, mit <strong>🌳 Im Stammbaum anzeigen</strong> siehst du die Familie als Baum." },
   { icon: "🌳", titel: "Der Stammbaum", text: "<strong>Familie</strong> zeigt Eltern, Geschwister und Kinder, <strong>Generationen</strong> mehrere Ebenen, <strong>Ahnentafel</strong> alle Vorfahren. Einmal tippen setzt eine Person in die Mitte, zweimal tippen öffnet sie. Mit <strong>←</strong> und <strong>→</strong> gehst du zur vorigen und nächsten Ansicht." },
   { icon: "←", titel: "Zurück geht immer", text: "Oben links steht immer <strong>← Zurück</strong>. Damit kommst du einen Schritt zurück, egal wo du gerade bist. Verlaufen kannst du dich also nicht." },
-  { icon: "👋", titel: "Wer bist du?", text: "Wenn du dich selbst auswählst, zeigt die App bei jeder Person, wie sie mit dir verwandt ist, zum Beispiel „Urgroßmutter“. Das kannst du jederzeit ändern, auch wenn du die App jemand anderem zeigst. Du kannst den Schritt auch überspringen.", ich: true },
+  { icon: "👋", titel: "Wer bist du?", text: "Wenn du dich selbst auswählst, zeigt die App bei jeder Person, wie sie mit dir verwandt ist, zum Beispiel „Urgroßmutter“ – und mit <strong>↔ Wie sind wir verwandt?</strong> den Weg dorthin im Stammbaum. Ändern kannst du es jederzeit unter ⚙ Konto, auch wenn du die App jemand anderem zeigst. Du kannst den Schritt auch überspringen.", ich: true },
 ];
 function einfuehrungZeigen(schritt = 0) {
   const s = EINFUEHRUNG[schritt];
@@ -13613,3 +13612,38 @@ function sucheXAlle(wurzel = document) { wurzel.querySelectorAll?.('input[type="
 sucheXAlle();
 new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches?.('input[type="search"]')) sucheXAnbringen(n); else sucheXAlle(n); } })
   .observe(document.body, { childList: true, subtree: true });
+
+
+// ---------- v430: Verwandtschaft zu „Das bin ich“ im Stammbaum zeigen ----------
+async function verwandtschaftImStammbaum(aId, bId) {
+  rueckkehrNachPerson = null;
+  personViewVerlauf = [];
+  const ov = document.getElementById("person-view-overlay");
+  if (ov) ov.hidden = true;
+  document.body.classList.remove("person-view-open");
+  document.querySelector('.tab-btn[data-tab="stammbaum"]')?.click();
+  await loadStammbaum();
+  setTreePersonSelection(aId);
+  document.getElementById("tree-relationship-open")?.click();
+  treeRelationSetPerson("a", aId);
+  treeRelationSetPerson("b", bId);
+  document.getElementById("tree-relationship-calc")?.click();
+  // nach dem Neuzeichnen des Stammbaums zum Fenster mit Ergebnis und Gebirge scrollen
+  setTimeout(() => document.getElementById("tree-relationship-panel")?.scrollIntoView({ block: "start", behavior: "auto" }), 150);
+}
+
+// „👤 Ich“ neben Person 1 und Person 2: setzt die unter „Das bin ich“ gewählte Person ein
+function verwandtschaftIchKnoepfe() {
+  const ich = ichPerson();
+  document.querySelectorAll(".tree-relation-ich").forEach((k) => {
+    const da = !!(ich && treePerson(ich.id));
+    k.hidden = !da;
+    if (da) k.title = `${ich.name} einsetzen`;
+  });
+}
+document.querySelectorAll(".tree-relation-ich").forEach((k) => k.addEventListener("click", () => {
+  const ich = ichPerson();
+  if (!ich || !treePerson(ich.id)) return;
+  treeRelationSetPerson(k.dataset.seite, ich.id);
+}));
+document.getElementById("tree-relationship-open")?.addEventListener("click", verwandtschaftIchKnoepfe);

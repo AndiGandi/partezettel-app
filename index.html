@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 429 -->
+    <!-- Version 430 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=429">
+<link rel="stylesheet" href="style.css?v=430">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -41,7 +41,7 @@
       <button type="button" id="konto-passwort-speichern" class="btn btn--primary">Passwort ändern</button>
       <p id="konto-meldung" class="form-message"></p>
       <h3>Das bin ich</h3>
-      <p class="capture-status">Auf diesem Gerät: <strong id="konto-ich-name">noch nicht festgelegt</strong>. Damit zeigt die App bei jeder Person, wie sie mit dir verwandt ist. Zum Vorführen einfach vorübergehend jemand anderen wählen.</p>
+      <p class="capture-status">Auf diesem Gerät: <strong id="konto-ich-name">noch nicht festgelegt</strong>. Damit zeigt die App bei jeder Person, wie sie mit dir verwandt ist, und bei „Verwandtschaft ermitteln“ setzt <strong>👤 Ich</strong> dich mit einem Tipp ein. Zum Vorführen einfach vorübergehend jemand anderen wählen.</p>
       <p class="hilfe-knoepfe"><button type="button" id="konto-ich-aendern" class="btn btn--secondary">👤 Ändern</button> <button type="button" id="konto-ich-weg" class="btn btn--ghost" hidden>Entfernen</button></p>
       <div id="konto-ich-suche" class="komfort-suche" hidden></div>
       <h3>Weiteres</h3>
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 429</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 430</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -427,7 +427,7 @@
           <div class="tree-suggest-wrap"><label class="field"><span>Person 1</span>
             <input type="search" id="tree-relation-search-a" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
           </label></div>
-          <small id="tree-relation-hint-a" class="tree-relation-hint" aria-live="polite"></small>
+          <div class="tree-relation-unter"><small id="tree-relation-hint-a" class="tree-relation-hint" aria-live="polite"></small><button type="button" class="tree-relation-ich" data-seite="a" hidden>👤 Ich</button></div>
           <select id="tree-relation-person-a" aria-label="Person 1" hidden><option value="">— Person auswählen —</option></select>
         </div>
         <button type="button" id="tree-relation-swap" class="btn btn--ghost tree-relation-swap" aria-label="Person 1 und Person 2 tauschen" title="Personen tauschen">⇄</button>
@@ -435,7 +435,7 @@
           <div class="tree-suggest-wrap"><label class="field"><span>Person 2</span>
             <input type="search" id="tree-relation-search-b" placeholder="Name oder Geburtsjahr eingeben …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
           </label></div>
-          <small id="tree-relation-hint-b" class="tree-relation-hint" aria-live="polite"></small>
+          <div class="tree-relation-unter"><small id="tree-relation-hint-b" class="tree-relation-hint" aria-live="polite"></small><button type="button" class="tree-relation-ich" data-seite="b" hidden>👤 Ich</button></div>
           <select id="tree-relation-person-b" aria-label="Person 2" hidden><option value="">— Person auswählen —</option></select>
         </div>
       </div>
@@ -1055,8 +1055,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=429"></script>
-<script src="app.js?v=429"></script>
-<script src="chronik.js?v=429"></script>
+<script src="hinweise.js?v=430"></script>
+<script src="app.js?v=430"></script>
+<script src="chronik.js?v=430"></script>
 </body>
 </html>
