@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 433
+// Partezettel Archiv – Version 434
+// v434: Chronik „Längste Ehen“ nur mit bekannten Sterbedaten beider Partner.
 // v433: „Wie sind wir verwandt?“ springt direkt zum Gebirge (So ergibt sich die Beziehung).
 // v432: „Wie sind wir verwandt?“ landet beim Verwandtschaftsfenster statt im Familienstammbaum.
 // v431: Neue oder geänderte Personen sind sofort nach dem Speichern überall greifbar (ohne Aktualisieren).
@@ -11896,7 +11897,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=433");
+      treeModul3D = await import("./tree3d.js?v=434");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

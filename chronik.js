@@ -236,9 +236,11 @@ function chronikAuswerten(d) {
     const a = P.get(f.partner_a_id), b = P.get(f.partner_b_id); if (!a || !b) continue;
     const beginn = chrDatum(f.beginn);
     if (beginn) {
-      const enden = [chrDatum(f.ende), chrDatum(a.sterbedatum), chrDatum(b.sterbedatum)].filter((x) => x && x > beginn);
+      // v434: Ehedauer nur, wenn von BEIDEN Partnern das Sterbedatum bekannt ist (sonst ist das Eheende unsicher)
+      const ta = chrDatum(a.sterbedatum), tb = chrDatum(b.sterbedatum);
+      const enden = [chrDatum(f.ende), ta, tb].filter((x) => x && x > beginn);
       const jungBeiHeirat = [a, b].some((x) => { const g = chrDatum(x.geburtsdatum); return g && chrJahre(g, beginn) < 16; });
-      if (enden.length && (a.sterbedatum || f.ende) && (b.sterbedatum || f.ende)) eheDauer.push({ a, b, jahre: chrJahre(beginn, new Date(Math.min(...enden))), beginn, verdacht: jungBeiHeirat });
+      if (ta && tb && ta > beginn && tb > beginn && enden.length) eheDauer.push({ a, b, jahre: chrJahre(beginn, new Date(Math.min(...enden))), beginn, verdacht: jungBeiHeirat });
       for (const x of [a, b]) { const g = chrDatum(x.geburtsdatum); if (g) heirat.push({ p: x, alter: chrJahre(g, beginn), jahr: beginn.getFullYear() }); }
     }
     const ga = chrGebJahr(a), gb = chrGebJahr(b);
@@ -496,7 +498,7 @@ function chronikRendern(r, ziel) {
       <p class="chr-sub">${chrZahl(z.frauen)} Frauen · ${chrZahl(z.maenner)} Männer · ${chrZahl(z.hausblatt)} aus Hausblättern (davon ${chrZahl(z.geprueft)} geprüft) · ${chrZahl(z.eigen)} selbst erfasst · ${chrZahl(z.nurName)} „nur Name“</p>
       ${z.generationenStart ? `<p class="chr-sub">Längste Linie: ${z.generationen} Generationen, beginnend mit ${chrLink(z.generationenStart)}</p>` : ""}`),
     karte("🎂 Älteste Personen", liste(r.aelteste, (x) => `${chrLink(x.p)} – <b>${Math.floor(x.alter)} Jahre</b>`)),
-    karte("💍 Längste Ehen", liste(r.ehen, (x) => `${chrLink(x.a)} und ${chrLink(x.b)} – <b>${Math.floor(x.jahre)} Jahre</b> (ab ${x.beginn.getFullYear()})${pruef(x)}`)),
+    karte("💍 Längste Ehen", liste(r.ehen, (x) => `${chrLink(x.a)} und ${chrLink(x.b)} – <b>${Math.floor(x.jahre)} Jahre</b> (ab ${x.beginn.getFullYear()})${pruef(x)}`) + `<p class="chr-hinweis">Nur Ehen, bei denen Hochzeitsdatum und die Sterbedaten beider Partner bekannt sind.</p>`),
     karte("👶 Meiste Kinder", `<h4>Mütter</h4>${liste(r.mutterMeiste, (x) => `${chrLink(x.p)} – <b>${x.n}</b>`)}<h4>Väter</h4>${liste(r.vaterMeiste, (x) => `${chrLink(x.p)} – <b>${x.n}</b>`)}<h4>Paare</h4>${liste(r.paarMeiste, (x) => `${chrLink(x.a)} und ${chrLink(x.b)} – <b>${x.n}</b>`)}`),
     karte("👩‍👧 Alter der Eltern bei der Geburt", `<h4>Jüngste Mütter</h4>${liste(r.juengsteMutter, (x) => `${chrLink(x.e)} – ${chrRund(x.alter)} Jahre bei ${chrLink(x.kind)}${pruef(x)}`)}
       <h4>Älteste Mütter</h4>${liste(r.aeltesteMutter, (x) => `${chrLink(x.e)} – ${chrRund(x.alter)} Jahre bei ${chrLink(x.kind)}${pruef(x)}`)}
