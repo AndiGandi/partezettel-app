@@ -1,4 +1,5 @@
-// Partezettel Archiv – Version 434
+// Partezettel Archiv – Version 435
+// v435: Hinweis „Neue Version verfügbar“ + „Neu in dieser Version“; vor 1920 Geborene gelten als verstorben; Tagesblatt und Kurzhilfe in der Chronik; Hilfetexte aktualisiert.
 // v434: Chronik „Längste Ehen“ nur mit bekannten Sterbedaten beider Partner.
 // v433: „Wie sind wir verwandt?“ springt direkt zum Gebirge (So ergibt sich die Beziehung).
 // v432: „Wie sind wir verwandt?“ landet beim Verwandtschaftsfenster statt im Familienstammbaum.
@@ -4425,7 +4426,7 @@ document.getElementById("refresh-btn").addEventListener("click", () => loadPerso
   }
 
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch((e) => console.error("SW-Fehler:", e));
+    navigator.serviceWorker.register("sw.js").then((reg) => versionsPruefungStarten(reg)).catch((e) => console.error("SW-Fehler:", e));
   }
 })();
 
@@ -4490,6 +4491,15 @@ function personViewAlter(person, bisDatum = null, endeExakt = true) {
   return dauerText(birth, end, !!person.geburtsdatum && endeExakt);
 }
 
+// v435: Gemeinsame Regel – wer vor 1920 geboren ist und kein Sterbedatum hat, gilt als vermutlich verstorben
+// (keine Altersangabe „106 Jahre alt“, kein Schutz als „lebend“ für Leser, Statistik zählt sie nicht als lebend).
+const LEBEND_AB_JAHR = 1920;
+function personVermutlichLebend(p) {
+  if (!p || p.sterbedatum || p.sterbejahr || (typeof todesumstandText === "function" && todesumstandText(p))) return false;
+  const j = Number(String(p.geburtsdatum || p.geburtsjahr || "").slice(0, 4));
+  return Number.isFinite(j) && j >= LEBEND_AB_JAHR;
+}
+
 // v359: Lebenszeile der Personenansicht in verständlichem Wortlaut
 //  gestorben:           „02.04.1920 – 15.01.1990 · wurde 69 Jahre alt“
 //  vermutlich lebend:   „geboren 02.04.1961 · 65 Jahre alt“ (kein Hinweis auf ein fehlendes Sterbedatum)
@@ -4514,7 +4524,7 @@ function personViewLebenszeileBasis(person) {
   if (tod) return `gestorben ${todText}`;
   if (geb) {
     const gebJahr = Number(String(person.geburtsdatum || person.geburtsjahr).slice(0, 4));
-    if (Number.isFinite(gebJahr) && new Date().getFullYear() - gebJahr > 110) return `geboren ${gebText} · Sterbedatum unbekannt`;
+    if (Number.isFinite(gebJahr) && gebJahr < LEBEND_AB_JAHR) return `geboren ${gebText} · Sterbedatum unbekannt`;   // v435: vor 1920 geboren = vermutlich verstorben
     return [`geboren ${gebText}`, alter ? `${alter} alt` : ""].filter(Boolean).join(" · ");
   }
   return "";
@@ -11897,7 +11907,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=434");
+      treeModul3D = await import("./tree3d.js?v=435");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13479,8 +13489,10 @@ async function komfortNachStart(session) {
   if (zugang?.vorschau) return;
   const zugangOffen = !document.getElementById("zugang-overlay")?.hidden;
   if (zugangOffen) return;
-  if (komfortUserId && !lsGet(KOMFORT.tour + komfortUserId)) { einfuehrungZeigen(0); return; }
+  if (komfortUserId && !lsGet(KOMFORT.tour + komfortUserId)) { try { localStorage.setItem(VERSION_GESEHEN_KEY, String(APP_VERSION)); } catch {} einfuehrungZeigen(0); return; }
   komfortTagGestartet = true; komfortTagZuletzt = wienerTag();
+  const neu = neuerungenZeigen();   // v435: nach einem Update zuerst kurz zeigen, was neu ist
+  if (neu) await neu;
   const heute = wienerTag();
   if (lsGet(KOMFORT.heuteAus) || lsGet(KOMFORT.heuteTag) === heute) return;
   lsSet(KOMFORT.heuteTag, heute);
@@ -13588,6 +13600,7 @@ document.getElementById("konto-ich-aendern")?.addEventListener("click", () => {
 });
 document.getElementById("hilfe-einfuehrung")?.addEventListener("click", () => einfuehrungZeigen(0));
 document.getElementById("hilfe-heute")?.addEventListener("click", () => heuteVorJahrenZeigen());
+document.getElementById("chronik-tagesblatt")?.addEventListener("click", () => heuteVorJahrenZeigen());   // v435: Tagesblatt in der Chronik
 ichAnzeigeAktualisieren();
 
 // v423: Zwei-Finger-Zoom im Stammbaum vergrößert den Stammbaum, nicht die ganze Seite (iPad/Safari)
@@ -13689,3 +13702,59 @@ document.querySelectorAll(".tree-relation-ich").forEach((k) => k.addEventListene
   treeRelationSetPerson(k.dataset.seite, ich.id);
 }));
 document.getElementById("tree-relationship-open")?.addEventListener("click", verwandtschaftIchKnoepfe);
+
+
+// ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
+const APP_VERSION = 435;   // bei jeder Version mit hochzählen
+// Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
+const APP_NEUERUNGEN = [
+  [435, ["📅 Tagesblatt und eine Kurzanleitung („ⓘ So funktioniert die Chronik“) jetzt in der Chronik", "Wer vor 1920 geboren ist und kein Sterbedatum hat, gilt als verstorben", "Hinweis, wenn eine neue Version bereitsteht"]],
+  [434, ["Chronik „Längste Ehen“: nur noch Ehen mit bekannten Sterbedaten beider Partner"]],
+  [431, ["Neue oder geänderte Personen sind sofort nach dem Speichern überall auffindbar"]],
+  [430, ["↔ Wie sind wir verwandt? – in der Personenansicht, führt direkt zum Gebirge im Stammbaum", "👤 Ich – bei „Verwandtschaft ermitteln“ setzt dich mit einem Tipp ein"]],
+  [429, ["🔎 Alles durchsuchen in der Chronik (z. B. „gefallen“, „Lawine“, „1910“)"]],
+  [428, ["Gruppenfoto: Personen öffnen schneller und springen nicht mehr zurück"]],
+  [427, ["Suche im Bestand deutlich schneller"]],
+  [426, ["✕ in allen Suchfeldern löscht den Suchtext mit einem Tipp"]]
+];
+const VERSION_GESEHEN_KEY = "fs-version-gesehen";
+
+function neueVersionHinweis() {
+  if (document.getElementById("version-hinweis")) return;
+  const el = document.createElement("div");
+  el.id = "version-hinweis"; el.className = "version-hinweis"; el.setAttribute("role", "status");
+  el.innerHTML = `<span>✨ Neue Version verfügbar</span><button type="button" class="btn btn--primary" id="version-laden">Jetzt laden</button><button type="button" class="btn btn--ghost" id="version-spaeter" aria-label="Später">Später</button>`;
+  document.body.appendChild(el);
+  el.querySelector("#version-laden").addEventListener("click", () => location.reload());
+  el.querySelector("#version-spaeter").addEventListener("click", () => el.remove());
+}
+
+function versionsPruefungStarten(reg) {
+  if (!reg || !navigator.serviceWorker) return;
+  const hatteSteuerung = !!navigator.serviceWorker.controller;   // beim allerersten Start kein Hinweis
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hatteSteuerung) neueVersionHinweis(); });
+  const pruefen = () => { try { reg.update(); } catch {} };
+  setInterval(pruefen, 30 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) pruefen(); });
+}
+
+function neuerungenZeigen() {
+  // liefert ein Promise, das sich beim Schließen erfüllt (danach darf das Tagesblatt kommen)
+  let gesehen = 0;
+  try { gesehen = Number(localStorage.getItem(VERSION_GESEHEN_KEY)) || 0; } catch {}
+  try { localStorage.setItem(VERSION_GESEHEN_KEY, String(APP_VERSION)); } catch {}
+  if (!gesehen || gesehen >= APP_VERSION) return null;   // Erststart oder nichts Neues
+  const punkte = APP_NEUERUNGEN.filter(([v]) => v > gesehen && v <= APP_VERSION).flatMap(([, p]) => p).slice(0, 8);
+  if (!punkte.length) return null;
+  return new Promise((fertig) => {
+    const f = komfortFenster(`
+      <h2 class="tour-titel">✨ Neu in Version ${APP_VERSION}</h2>
+      <ul class="neuerungen-liste">${punkte.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}</ul>
+      <p class="neuerungen-klein">Mehr dazu unter <strong>Hilfe / Kurzanleitung</strong>.</p>
+      <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-neu="ok">Verstanden</button></div>`, { klasse: "komfort-fenster--neu" });
+    f.querySelector('[data-neu="ok"]').addEventListener("click", () => { komfortFensterZu(); fertig(); });
+    const ov = document.getElementById("komfort-overlay");
+    const beobachter = new MutationObserver(() => { if (ov.hidden) { beobachter.disconnect(); fertig(); } });
+    beobachter.observe(ov, { attributes: true, attributeFilter: ["hidden"] });
+  });
+}

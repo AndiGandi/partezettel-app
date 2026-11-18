@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 434 -->
+    <!-- Version 435 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=434">
+<link rel="stylesheet" href="style.css?v=435">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 434</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 435</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -529,7 +529,6 @@
         <button type="button" id="konto-oeffnen" class="btn btn--secondary">Mein Konto und Passwort</button>
         <button type="button" id="hinweise-oeffnen" class="btn btn--secondary">Vertraulichkeit und Hinweise</button>
         <button type="button" id="hilfe-einfuehrung" class="btn btn--primary">▶︎ Einführung ansehen</button>
-        <button type="button" id="hilfe-heute" class="btn btn--secondary">📅 Tagesblatt (Mond, Namenstag, heute vor … Jahren)</button>
       </p>
     </div>
 
@@ -585,7 +584,7 @@
           <li><strong>Antippen im Stammbaum:</strong> Einmal tippen (Maus: Klick) macht die Person zur Mitte. Zweimal schnell tippen (Maus: Doppelklick) öffnet ihre Personenansicht im Bestand. Tippen auf die Person, die schon in der Mitte steht, öffnet sie direkt.</li>
           <li><strong>3D-Baum:</strong> Wurzelbaum zum Drehen und Zoomen. Tippen wählt eine Person, <em>Doppeltippen</em> (Maus: Doppelklick) öffnet sie. Der Knopf „?“ zeigt die Bedienung.</li>
         </ul>
-        <p>Mit den Stammlinien (Gawatsch, Reinhard, Fall) blendest du Linien ein. <strong>Verwandtschaft ermitteln</strong> zeigt, wie zwei Personen verwandt sind. <strong>Cousins &amp; Cousinen</strong> listet sie nach Onkel und Tante, mit Anzahl väterlicherseits und mütterlicherseits. Sind Onkel und Tante verheiratet, stehen die Kinder einmal und sind als Doppelcousins gekennzeichnet. Verheiratete Frauen erscheinen neben ihrem Mann kurz als „Luise (geb. Mangeng)“.</p>
+        <p>Mit den Stammlinien (z. B. Mangeng – Schrunser Linie und Bartholomäberg Linie) blendest du Linien ein. <strong>Verwandtschaft ermitteln</strong> zeigt, wie zwei Personen verwandt sind; <strong>👤 Ich</strong> setzt dich mit einem Tipp als Person 1 oder 2 ein. Die Gebirge-Grafik lässt sich mit + / − oder mit zwei Fingern vergrößern. Verheiratete Frauen erscheinen neben ihrem Mann kurz als „Luise (geb. Mangeng)“.</p>
       </details>
       <details>
         <summary><strong>Ersteingabe</strong></summary>
@@ -602,7 +601,9 @@
       <details data-rolle="eigentuemer">
         <summary><strong>Verlauf und Lücken &amp; Inseln (nur Eigentümer)</strong></summary>
         <p><strong>Verlauf:</strong> zeigt, wer wann was angelegt, geändert oder gelöscht hat, je Person und gesamt. <strong>Lücken &amp; Inseln</strong> (im Stammbaum) zeigt Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen.</p>
-        <p><strong>Chronik:</strong> Der Reiter „Chronik“ rechnet aus dem Bestand Zahlen und Rekorde aus (älteste Personen, längste Ehen, meiste Kinder, Alter der Eltern, Namen, Lebensdauer, Todesumstände, Wanderungen, Häuser, Verwandtschaft) und zeigt „Heute vor … Jahren“ sowie das Zeitgeschehen. Namen sind anklickbar. „bitte prüfen“ markiert unwahrscheinliche Angaben. In der Personenansicht steht unter „Zeitgeschehen“, was während ihres Lebens geschah.</p>
+        <p><strong>Chronik:</strong> Zahlen und Rekorde aus dem Bestand, das Zeitgeschehen, das <strong>📅 Tagesblatt</strong> und <strong>🔎 Alles durchsuchen</strong>. Eine Kurzanleitung steht direkt in der Chronik unter „ⓘ So funktioniert die Chronik“.</p>
+        <p><strong>Das bin ich:</strong> Unter ⚙ Konto legst du fest, wer du im Stammbaum bist. Dann steht bei jeder Person, wie sie mit dir verwandt ist („Das ist deine Großmutter“), und <strong>↔ Wie sind wir verwandt?</strong> zeigt den Weg im Stammbaum.</p>
+        <p><strong>Suchen:</strong> Es genügen die ersten Buchstaben, Umlaute und Groß-/Kleinschreibung sind egal. Das <strong>✕</strong> im Suchfeld löscht den Suchtext mit einem Tipp. Neue oder geänderte Personen sind gleich nach dem Speichern überall auffindbar.</p>
         <p><strong>Weiterklicken und zurück:</strong> Öffnest du aus einer Person heraus ein Kind, einen Elternteil oder Ehepartner, steht oben „← Name“. Damit oder mit ✕ geht es zur vorherigen Person zurück (auch nach dem Bearbeiten), erst danach in den Bestand. Unter jedem Kind steht klein der Ehepartner (∞), bei mehreren Ehen nummeriert; Personen im Bestand sind anklickbar. Personen ganz ohne Lebensdaten tragen im Bestand den Hinweis „nur Name“ und lassen sich über „Anzeigen“ ausblenden.</p>
         <p><strong>Todesumstand:</strong> In „Bearbeiten“ unter dem Sterbedatum lässt sich „gefallen“, „vermisst“, „verunglückt“ oder „in der Lawine umgekommen“ wählen, mit einem kurzen Zusatz (z. B. „in Galizien“ oder „seit 1960“). Angezeigt wird das in der Personenansicht und auf der Karte im Bestand, z. B. „⚔ gefallen in Galizien“.</p>
         <p><strong>Ehe nur mit Jahr:</strong> Ist von einer Hochzeit nur das Jahr bekannt, einfach nur das Jahr auswählen und Tag/Monat leer lassen. Angezeigt wird dann z. B. „Hochzeit: 1802 · ca. 17 Jahre“. Dasselbe gilt für das Ende einer Partnerschaft.</p>
@@ -632,7 +633,8 @@
     <div class="field-group hilfe-karte">
       <h3>Wenn etwas nicht klappt</h3>
       <ul class="hilfe-liste">
-        <li>Eine Änderung fehlt scheinbar: In „Bestand“ auf <em>Aktualisieren</em> tippen und die Verbindung prüfen, bevor du etwas erneut eingibst.</li>
+        <li>Eine Änderung fehlt scheinbar: Änderungen erscheinen sofort nach dem Speichern. Fehlt trotzdem etwas, in „Bestand“ auf <em>Aktualisieren</em> tippen und die Verbindung prüfen, bevor du etwas erneut eingibst.</li>
+        <li><strong>Neue Version:</strong> Gibt es eine neue Version, erscheint unten der Hinweis „Neue Version verfügbar“. Ein Tipp auf <em>Jetzt laden</em> genügt; danach zeigt die App kurz, was neu ist.</li>
         <li>„Keine Personen sichtbar“: Dein Konto ist vermutlich noch nicht freigeschaltet. Melde dich beim Eigentümer.</li>
         <li>Bleibt es unklar: Im Bereich <em>Ersteingabe</em> ganz unten das <em>Technische Protokoll</em> öffnen, auf „Protokoll kopieren“ tippen und es dem Eigentümer schicken.</li>
       </ul>
@@ -688,8 +690,22 @@
   <section id="tab-chronik" class="tab-panel">
     <div class="chr-kopf">
       <div><h2>Chronik &amp; Statistik</h2><p id="chronik-status" class="capture-status">Wird beim Öffnen berechnet.</p><p class="chr-vorbehalt">ℹ️ Berechnet aus dem aktuellen, unvollständigen Datenbestand (Lebensdaten und Wohnorte fehlen teilweise). Alle Zahlen dienen nur der Orientierung, nicht als gesicherte Tatsachen.</p></div>
-      <button type="button" id="chronik-neu" class="btn btn--secondary">⟳ Neu berechnen</button>
+      <div class="chr-kopf-knoepfe">
+        <button type="button" id="chronik-tagesblatt" class="btn btn--primary">📅 Tagesblatt heute</button>
+        <button type="button" id="chronik-neu" class="btn btn--secondary">⟳ Neu berechnen</button>
+      </div>
     </div>
+    <details class="chr-hilfe">
+      <summary>ⓘ So funktioniert die Chronik</summary>
+      <ul>
+        <li><strong>📅 Tagesblatt:</strong> erscheint einmal am Tag von selbst (beim Start und um Mitternacht) mit Mond nach dem Vorarlberger Kalender, Namenstag, Bauernregel und „heute vor … Jahren“. Mit dem Knopf oben kannst du es jederzeit öffnen. Abschalten geht im Tagesblatt unten.</li>
+        <li><strong>🔎 Alles durchsuchen:</strong> sucht in Namen, Todesumstand, Notizen, Häusern, Lebensjahren und im Zeitgeschehen. Verwandte Begriffe werden mitgesucht („gefallen“ findet auch „vermisst“). Jahre („1910“), Jahrzehnte („1880er“), Zeiträume („1914-1918“), „geboren 1900“, „gestorben 1954“, „Frauen“ oder „Männer“ grenzen ein.</li>
+        <li><strong>Zahlen und Rekorde:</strong> älteste Personen, längste Ehen (nur wenn Hochzeit und beide Sterbedaten bekannt sind), meiste Kinder, Namen, Todesumstände, Wanderungen, Häuser. „bitte prüfen“ markiert unwahrscheinliche Angaben.</li>
+        <li><strong>Lebend oder nicht:</strong> Wer vor 1920 geboren ist und kein Sterbedatum hat, gilt als vermutlich verstorben.</li>
+        <li><strong>Zeitgeschehen:</strong> Ereignisse aus Montafon, Vorarlberg und der Welt (⛪ = Bartholomäberg). In der Personenansicht steht, was während ihres Lebens geschah.</li>
+        <li>Alle Zahlen stammen aus dem Bestand. Er ist unvollständig, die Auswertungen sind deshalb nur eine Orientierung.</li>
+      </ul>
+    </details>
     <div class="chr-suche">
       <label for="chr-suche-feld" class="chr-suche-titel">🔎 Alles durchsuchen</label>
       <input type="search" id="chr-suche-feld" placeholder="z. B. gefallen, Lawine, 1910, Innerberg 21, Amerika …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
@@ -1055,8 +1071,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=434"></script>
-<script src="app.js?v=434"></script>
-<script src="chronik.js?v=434"></script>
+<script src="hinweise.js?v=435"></script>
+<script src="app.js?v=435"></script>
+<script src="chronik.js?v=435"></script>
 </body>
 </html>

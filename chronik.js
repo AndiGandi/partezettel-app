@@ -861,10 +861,10 @@ function tagesMonatTag(datum = new Date()) {
   const g = (x) => +t.find((p) => p.type === x).value;
   return { jahr: g("year"), monat: g("month"), tag: g("day"), md: `${String(g("month")).padStart(2, "0")}-${String(g("day")).padStart(2, "0")}` };
 }
-function chrVermutlichLebend(p) {
+function chrVermutlichLebend(p) {   // v435: gleiche Regel wie in der App – ab 1920 geboren und ohne Sterbedatum
   if (!p || p.sterbedatum || p.sterbejahr) return false;
   const j = chrGebJahr(p);
-  return !!j && j >= new Date().getFullYear() - 105;
+  return !!j && j >= (typeof LEBEND_AB_JAHR !== "undefined" ? LEBEND_AB_JAHR : 1920);
 }
 const chrUhr = (d) => d ? d.toLocaleTimeString("de-AT", { timeZone: "Europe/Vienna", hour: "2-digit", minute: "2-digit" }) : "–";
 function mondZeileHtml(m) {   // v420: Symbole wie im Vorarlberger Kalender, jeweils mit Text
