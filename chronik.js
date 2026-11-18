@@ -1,5 +1,5 @@
 // Familienspuren – Chronik & Statistik (v381)
-// Rechnet alle Auswertungen direkt aus der Datenbank (keine KI). Wird nach app.js geladen
+// Rechnet alle Auswertungen direkt aus der Datenbank (keine KI). Wird nach den App-Dateien (js/…) geladen
 // und nutzt dessen globale Hilfen (sb, alleZeilenLaden, openPersonDetail, debugLog, todesumstandText).
 
 /* ---------- Zeitgeschehen: Jahresliste (Montafon, Vorarlberg, Österreich, Welt) ---------- */

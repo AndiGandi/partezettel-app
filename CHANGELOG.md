@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v437: Aufräumen Stufe 1 – app.js in acht Dateien im Ordner js/ aufgeteilt (grundlagen, erfassung, bestand, person, export, stammbaum, import, komfort); Funktion unverändert.
 - v436: Papierkorb – Gelöschtes 30 Tage wiederherstellbar (Supabase Paket 11), Dateien erst danach endgültig entfernt.
 - v435: Hinweis „Neue Version verfügbar“ + „Neu in dieser Version“; vor 1920 Geborene gelten als verstorben; Tagesblatt und Kurzhilfe in der Chronik; Hilfetexte aktualisiert.
 - v434: Chronik „Längste Ehen“ nur mit bekannten Sterbedaten beider Partner.
