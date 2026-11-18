@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 437
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 438
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -468,7 +468,7 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 437;   // bei jeder Version mit hochzählen
+const APP_VERSION = 438;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
   [436, ["🗑️ Papierkorb: Gelöschtes kann der Eigentümer 30 Tage lang wiederherstellen (Verlauf → Papierkorb)"]],
