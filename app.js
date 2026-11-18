@@ -1,106 +1,14 @@
-// Partezettel Archiv – Version 435
-// v435: Hinweis „Neue Version verfügbar“ + „Neu in dieser Version“; vor 1920 Geborene gelten als verstorben; Tagesblatt und Kurzhilfe in der Chronik; Hilfetexte aktualisiert.
-// v434: Chronik „Längste Ehen“ nur mit bekannten Sterbedaten beider Partner.
-// v433: „Wie sind wir verwandt?“ springt direkt zum Gebirge (So ergibt sich die Beziehung).
-// v432: „Wie sind wir verwandt?“ landet beim Verwandtschaftsfenster statt im Familienstammbaum.
-// v431: Neue oder geänderte Personen sind sofort nach dem Speichern überall greifbar (ohne Aktualisieren).
-// v430: Personenansicht ohne „Das bin ich“-Knopf, dafür „Wie sind wir verwandt?“ (Stammbaum); im Verwandtschaftsfenster „👤 Ich“ als Schnellauswahl.
-// v429: Chronik – „Alles durchsuchen“ (Namen, Todesumstand, Notizen, Häuser, Jahre, Zeitgeschehen); Hochwasser 1910.
-// v428: Gruppenfoto – Person öffnet nur einmal, sofort sichtbar, springt nicht mehr ins Foto zurück.
-// v427: Bestandssuche schneller – ein Suchlauf nach dem Tippen statt fünf pro Buchstabe, Karten außerhalb des Bildschirms werden nicht gezeichnet.
-// v426: ✕ in allen Suchfeldern zum Löschen des ganzen Suchtextes.
-// v425: Verwandtschaftssatz schreibt Großmutter, Cousine usw. groß.
-// v424: Zwei-Finger-Zoom auch in „Verwandtschaft ermitteln“ (Gebirge-Grafik).
-// v423: iPad – Seitenzoom beim Tippen auf + / − verhindert, Zwei-Finger-Zoom vergrößert nur den Stammbaum, Eingabefelder 16px (kein Auto-Zoom).
-// v422: Tagesblatt erscheint um Mitternacht auch ohne Neustart (überall in der App); Tagesdatum nach österreichischer Zeit statt UTC.
-// v421: Dunkelmodus-Regeln entfernt (App ist immer hell) – Mondkasten im Tagesblatt war auf iPads im Dunkelmodus unlesbar.
-// v420: Tagesblatt ohne Personalisierung, mit Symbolen (🎂 🕯 💍) und Mond-Bildzeichen; Gruppenfoto: Namen erst beim Suchen, Hochladen nur Bearbeiter.
-// v419: Tagesblatt beim Start: Mondkalender (Bartholomäberg), Namenstag, Bauernregel, runde Jahrestage, Verwandte zuerst; Geburtstage Lebender nicht für Leser.
-// v418: Stammbaum →, Cousins aus, Leser einfacher, „Das bin ich“, Heute-vor-Jahren, Einführung, Zurück in der Kopfzeile, Vorlesen, Anmeldeprotokoll, Anmeldename merken.
-// v417: Stammbaum – Suchfeld zeigt immer die dargestellte Person (Chronik → Person → Stammbaum zeigte den alten Namen).
-// v416: Stammbaum startet leer mit Hinweis „Person suchen“; keine automatisch gewählte Startperson mehr.
-// v415: Stammbaum startet mit der zuletzt gewählten Person (sonst Hubert Ganahl *1930) statt mit der ersten Person der Datenbank.
-// v414: Hinweise – keine Verantwortung des Eigentümers mehr, Vorbehalt zu Vollständigkeit/Fehlern, Statistik nur zur Orientierung (auch in der Chronik).
-// v413: Stammbaum – „←“ (zurück zur vorigen Ansicht) sitzt jetzt in der Zoom-Leiste neben − / + / ↺.
-// v412: Kirchenbuch-Kurzanzeige für Eigentümer (Personenansicht oben, Bestandsliste T/Tr/S, Filter „Kirchenbuch fehlt“).
-// v411: Stammbaum – „← Zurück“ zur vorigen Ansicht; unbekannte Vorfahren/Partner werden nicht mehr als Platzhalter gezeigt.
-// v410: Einheitliche Eingabe – Trauungsbuch in der Ehe wie Tauf-/Sterbebuch, ✏️ bei Kirchenbüchern in der Personenansicht, Ehe-Angaben mit gemeinsamem „Speichern“, Hinweise je Abschnitt.
-// v409: Stammlinien (Schrunser / Bartholomäberg Linie): Kürzel S/B, Zeile in der Personenansicht, Bestand-Filter, Stammbaum-Vorlagen, Chronik-Karte.
-// v408: Zeitgeschehen – Eintrag 1812 Russlandfeldzug Napoleons ergänzt.
-// v407: neues Logo (Baum im Bogen) als App-Icon, Anmelde- und Kopfzeilen-Logo.
-// v406: Eltern-Felder – das Geschlecht wurde für die Anzeige nicht mitgeladen, deshalb wirkte v405 nicht.
-// v405: Bearbeiten – bei nur einem Elternteil (oder vertauschter Reihenfolge) entscheidet das Geschlecht, ob Vater oder Mutter.
-// v404: Gruppenfoto austauschen (bessere Qualität/koloriert) – Personen und Markierungen bleiben erhalten.
-// v403: 📷-Schalter blendet die Schlüsselfotos auch in der Ahnentafel aus.
-// v402: Personenansicht neu geordnet – Eltern, Ehepartner, Kinder, Notizen, dann Wohnorte, Kirchenbücher, Fotos, Links, Zeitgeschehen, Sprachnotizen, Verlauf.
-// v401: Jede gewählte Person (antippen, Suche, Ansichtswechsel) steht mittig im Stammbaum.
-// v400: Stammlinie wählen – Stammbaum wird sofort ins Bild geholt und die Linie mittig gezeigt.
-// v399: Lücken & Inseln – Liste aller erfassten Namen; alle Listen nach Nachname, Vorname oder Geburtsdatum sortierbar.
-// v398: Kinder ohne eigenes Datenblatt; „↗ Datenblatt“ macht aus einem Nur-Namen-Eintrag eine richtige Person samt Verbindung.
-// v397: Ehepartner ohne eigenes Datenblatt (nur Name) – Eingabe in Bearbeiten, Anzeige bei der Person und unter den Kindern (Paket 8).
-// v396: Eigentümer kann im Konto die Ansicht als Bearbeiter oder Leser ausprobieren (Vorschau-Leiste oben).
-// v395: Stammbaum – Schlüsselfotos werden wieder angezeigt (Abfrage war bei vielen Personen zu lang).
-// v394: Chronik – neuer Abschnitt „Schicksalsschläge“ (automatisch aus den Lebensdaten).
-// v393: Wohnorte – Geburtshaus, Elternhaus, dann nach Jahr; Stammbaum – Schlüsselfotos ein-/ausblendbar (📷).
-// v392: Ehedauer – gleiches Hochzeitsdatum zweier Ehen ergibt nicht mehr „unter 1 Tag“; Hinweis, wenn ein Partner vor der Hochzeit starb.
-// v391: Gebirge – Zoom +/−, Ehepartner ein-/ausblendbar, Geschwister immer mit gemeinsamen Eltern als Gipfel (auch „nicht erfasst“).
-// v390: Ahnentafel – Spalte „Kinder“ links neben der Ausgangsperson (antippen = eine Generation nach links).
-// v389: Gebirge-Darstellung zeigt den Geburtsnamen („geb. …“), auch beim Partner am Gipfel.
-// v388: Import-Assistent übernimmt einen eigenen Herkunftstext je Person (Feld „quelle“), z. B. für das Mangeng-Sippenbuch.
-// v387: Kirchenbücher – Fundstelle (Pfarre · Buch · Bild) wird aus dem Matricula-Link gelesen und angezeigt.
-// v386: Verwandtschaft ermitteln – neue Darstellung „Gebirge“ (Höhe = Generation, Gipfel = gemeinsame Vorfahren, ∞-Brücke = Ehe), umschaltbar auf Liste.
-// v385: Stammbaum – Doppeltippen auf iPad öffnet die Personenansicht (Zustand übersteht das Neuzeichnen); Tippen auf die Mitte öffnet direkt.
-// v384: Stammbaum „Generationen“: Ehepaare als Paar (∞ Jahr, Mann links) mit „Eltern von …“.
-// v383: Stammbaum „Familie“: Linien sitzen bei jedem Zoom richtig; Ehepaar steht nebeneinander, gestrichelt mit der Ausgangsperson verbunden.
-// v382: Zeitgeschehen um die Dorfchronik Bartholomäberg erweitert (68 Einträge, ⛪ markiert).
-// v381: Reiter „Chronik & Statistik“ (chronik.js) und „Zeitgeschehen“ in der Personenansicht.
-// v380: Verwandtschaftsweg nennt zu jedem Elternteil auch den zweiten Elternteil (∞) und bei Geschwistern die gemeinsamen Eltern.
-// v379: Ehepartner unter den Kindern – Ehefrauen mit Ledigenname statt Ehenamen.
-// v379: Ehepartner unter den Kindern mit Geburtsnamen (Ledigenname) statt Ehenamen.
-// v378: Ehepartner unter Kindern, Zurück zur vorherigen Person (auch nach Bearbeiten), „nur Name“ + Filter, grauer Punkt für eigene Einträge, Suchleiste fest oben.
-// v377: Feld „Todesumstand“ (gefallen/vermisst/verunglückt/Lawine/anderes + Zusatz) in Bearbeiten, Personenansicht und Bestandskarte (Paket 7).
-// v376: Ehe/Partnerschaft auch mit nur bekanntem Jahr (beginn_jahr/ende_jahr, Paket 6); Import übernimmt Heiratsjahre.
-// v375: Vater/Mutter in „Person bearbeiten“ auswählen speichert sofort; nur das Entfernen braucht „Eltern speichern“.
-// v374: Sicherung und Import laden seitenweise mit eindeutiger Reihenfolge (zusätzlich nach id) – vorher konnten bei gleichem Nachnamen Personen doppelt kommen oder fehlen.
-// v373: Gespeicherte Personenliste aus älteren Versionen (bei 1000 abgeschnitten) wird erkannt und einmal vollständig neu geladen; Anzahl wird beim Start mit der Datenbank verglichen.
-// v372: Kinder aus Familien mit nur einem Elternteil erscheinen in der Personenansicht und in der Zählung im Bestand.
-// v371: Listen über 1000 Einträge werden seitenweise geladen (Supabase liefert pro Abfrage höchstens 1000 Zeilen).
-// v370: Wohnorte mit „Geburtshaus“/„Elternhaus“, Hinweis „Haus des Ehepartners“, Bearbeiten (Art, Jahr, entfernen, hinzufügen).
-// v369: Kirchenbuch-Quellen mit „Seite“ (links/rechts) bei Taufe, Trauung, Tod und Ehe-Quelle; ohne Paket 4 wird ohne Seite gespeichert.
-// v368: „Import rückgängig“ prüft Foto-Markierungen jetzt über die richtige Spalte (personen_id).
-// v367: Wohnorte (Hausnummern) in der Personenansicht; Prüf-Punkt, Herkunftsvermerk und Filter nur für den Eigentümer; Filter „aus Hausblatt · alle“ und „selbst erfasst“.
-// v366: Hausblätter-Import: zweiter Durchgang für evtl. lebende Personen (eigene Import-Kennung, eigenes Rückgängig); Zuordnung zum ersten Import.
-// v365: Prüf-Punkt (orange = ungeprüft, grün = geprüft) bei importierten Personen in Liste, Personenansicht und Stammbaum; Filter „Anzeigen“ im Bestand.
-// v364: Lebensalter/Ehedauer unter 1 Jahr in Monaten, unter 1 Monat in Tagen (nie „0 Jahre“); nach Import/Rückgängig vollständig neu laden.
-// v363: Hausblätter-Import Stufe 2: Vorschau, Import (Personen, Familien, Häuser, Stationen) mit Import-Kennung, „Rückgängig“; Vermerk „aus Hausblatt · ungeprüft“; Backup enthält Häuser/Stationen/Importe.
-// v362: Hausblätter-Import Stufe 1 (Export / Sicherung, nur Eigentümer): Import-Datei laden, Abweichungen entscheiden, „Gleiche Person?“ bestätigen.
-// v361: Trauungsbuch-Quelle einer Ehe lässt sich entfernen (Feld leeren + speichern); alte Personenfelder gelten nur eindeutig für eine Ehe; keine Doppelzeile in „Kirchenbücher“.
-// Partezettel Archiv – Version 321
-// Partezettel Archiv – Version 320
-// v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
-// v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
-// v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
-// v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
-// v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
-// v288: iPhone-Suche mobil angeordnet; Personenkarten per Touch/Tastatur zuverlässig öffnen.
-// v302: Integrierte Hilfeseite und Kurzanleitung für alle Hauptbereiche.
-// v294: Diktiergerät direkt in der großen Bestandsansicht.
-// v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
-// v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
-// v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
-// v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
-// v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
-// v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
+// Familienspuren (Partezettel Archiv) – Version 436
+// Änderungsgeschichte: siehe CHANGELOG.md (nicht im Browser geladen).
+
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
-
-
 // ======================================================================
-// v340: Gemeinsames Modul für Namenssuche, Anzeige und Sortierung.
 // Alle Personenfelder (Bestand, Stammbaum, Verwandtschaft, Gruppenfoto, Foto-Personen,
 // Eltern-/Partner-/Kind-Auswahl) nutzen dieselben Regeln – auf iPad, iPhone, Mac und Android gleich.
 // ======================================================================
+
 const PersonSuche = (() => {
   // Vereinheitlicht Eingabe und Daten: Groß/Klein, Umlaute, ß, ae/oe/ue, Bindestriche, Apostrophe.
   function normalisiere(wert) {
@@ -1300,7 +1208,7 @@ document.querySelectorAll(".tab-btn").forEach((btn) => {
     // Scrollposition der vorherigen Ansicht.
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
     if (btn.dataset.tab === "liste") await loadPersonen();
-    if (btn.dataset.tab === "verlauf") await ladeVerlaufTab(false);
+    if (btn.dataset.tab === "verlauf") { void papierkorbLaden(); await ladeVerlaufTab(false); }
     if (btn.dataset.tab === "fotos") {
       // Beim direkten Wechsel auf „Fotos“ zuerst die Personen laden,
       // damit die Auswahl nicht leer bleibt, wenn der Cache noch nicht gefüllt ist.
@@ -1329,7 +1237,6 @@ const fotoInputGalerie = document.getElementById("foto-input-galerie");
 const fotoStatus = document.getElementById("foto-status");
 const fotoPreview = document.getElementById("foto-preview");
 
-let fotoEditorQueue = [];
 let fotoEditorResolve = null;
 let fotoEditorImage = null;
 let fotoEditorRotation = 0;
@@ -1752,11 +1659,6 @@ function setDatumElemente(t,m,y,value) {
   y.value=/^\d{4}$/.test(yy) ? yy : "";
   m.value=/^\d{2}$/.test(mm) ? mm : "";
   t.value=/^\d{2}$/.test(dd) ? dd : "";
-}
-function setDatumJahr(prefix, jahr) {
-  const t=document.getElementById(prefix+"-tag"),m=document.getElementById(prefix+"-monat"),y=document.getElementById(prefix+"-jahr");
-  if(!t||!m||!y) return;
-  setDatumJahrElemente(t,m,y,jahr);
 }
 function setDatumJahrElemente(t,m,y,jahr) {
   t.value="";
@@ -2396,9 +2298,17 @@ async function flushQueue() {
   }
 }
 
-// v178: Keine automatische Queue-Übermittlung. Dadurch kann kein paralleler online-
-// Handler die gerade bereinigten Alt-Einträge wieder in der Diagnose erscheinen lassen.
-// Die Queue bleibt für neue, ausdrücklich erzeugte Offline-Einträge verfügbar.
+// v436: Offline gespeicherte Ersteingaben werden wieder automatisch gesendet – beim Start und sobald
+// die Verbindung zurück ist. Seit v178 war das abgeschaltet, die Einträge blieben im Gerät liegen.
+// Eine Sperre verhindert parallele Läufe (der Grund für die damalige Abschaltung).
+let queueLaeuft = false;
+async function flushQueueSicher() {
+  if (queueLaeuft || !navigator.onLine) return;
+  queueLaeuft = true;
+  try { await flushQueue(); } catch (e) { debugLog(`⚠️ Warteschlange senden: ${e.message || e}`); }
+  finally { queueLaeuft = false; }
+}
+window.addEventListener("online", () => { void flushQueueSicher(); });
 
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("queue-diagnostic-btn");
@@ -2679,14 +2589,6 @@ function ehejahreAnzeige(familie, lookup = personenCache, allePartnerschaften = 
   if (monatsTagEnde < monatsTagStart) jahre--;
   return jahre >= 0 ? dauerText(start, end, true) : "";
 }
-
-function partnerschaftEndeAnzeige(familie, lookup = personenCache) {
-  if (familie?.ende) return `Ende: ${datumAnzeige(familie.ende)}`;
-  const tod = partnerschaftTodesende(familie, lookup);
-  if (!tod) return "Ende: offen";
-  return tod.exakt ? `Ende: ${datumAnzeige(tod.datum)} · Tod` : `Ende: Tod ${tod.jahr}`;
-}
-
 // ---------- Persistenter Personen-Cache (IndexedDB) ----------
 // v170: Der Personen-/Auswahlcache bleibt über einen Safari-Neustart erhalten.
 // Die zentrale Tabelle sync_aenderungen hält den letzten Synchronisationsstand.
@@ -4100,8 +4002,8 @@ async function ladeBestandsSprachnotizen(personId, panel) {
     del.addEventListener("click", async (event) => {
       event.stopPropagation();
       if (!darfLoeschen("Sprachnotizen löschen")) return;
-      if (!confirm("Diese Sprachnotiz unwiderruflich löschen?")) return;
-      const { error: storageError } = await sb.storage.from(BUCKET_AUDIO).remove([item.dateipfad]);
+      if (!confirm(papierkorbAktiv ? "Diese Sprachnotiz in den Papierkorb legen? (30 Tage wiederherstellbar)" : "Diese Sprachnotiz unwiderruflich löschen?")) return;
+      const { error: storageError } = papierkorbAktiv ? { error: null } : await sb.storage.from(BUCKET_AUDIO).remove([item.dateipfad]);
       if (storageError) { status.textContent = `Fehler beim Löschen: ${storageError.message}`; return; }
       const { error: dbError } = await sb.from("sprachnotizen").delete().eq("id", item.id);
       if (dbError) { status.textContent = `Fehler beim Löschen: ${dbError.message}`; return; }
@@ -4255,12 +4157,6 @@ let personenSucheZuletzt = null;   // v427
 function normalizePersonenSuchtext(value) {
   return PersonSuche.normalisiere(value);
 }
-
-function personenSuchtext(p, extra = "") {
-  const e = PersonSuche.eintrag(p || {});
-  return extra ? `${e.search} ${PersonSuche.normalisiere(extra)}` : e.search;
-}
-
 function personenSuchTreffer(person, suchwert, extra = "") {
   return PersonSuche.trifft(person || {}, suchwert, extra);
 }
@@ -4351,12 +4247,6 @@ window.partezettelPersonenSuche = function (suchwert) {
   personenSucheZuletzt = String(suchwert ?? "");
   return wendePersonenSucheAn(suchwert);
 };
-
-// Fallback für programmatische Änderungen und ältere Ansichten.
-function filterePersonenListeLokal() {
-  const feld = document.getElementById("search-input");
-  return window.partezettelPersonenSuche(feld?.value || "");
-}
 
 async function aktualisierePersonenSortierung() {
   aktualisierePersonenCacheStatus();
@@ -5854,7 +5744,7 @@ async function loadDetailFotos(personId) {
         const istEigentuemer = foto.personen_id === personId;
         if (!verbleibend.length && istEigentuemer) {
           if (rolleIstEigentuemer()) {
-            await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
+            if (!papierkorbAktiv) { await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad); }
             await sb.from("fotos").delete().eq("id", foto.id);
           } else {
             alert("Die Verknüpfung wurde entfernt. Das Foto selbst bleibt im Archiv, Dateien löscht nur der Eigentümer.");
@@ -5862,7 +5752,7 @@ async function loadDetailFotos(personId) {
         }
       } else {
         if (!darfLoeschen("Fotos löschen")) return;
-        await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad);
+        if (!papierkorbAktiv) { await sb.storage.from(BUCKET_FOTOS).remove([foto.dateipfad]); await loescheFotoAusBrowserCache(foto.dateipfad); }
         await sb.from("fotos").delete().eq("id", foto.id);
       }
       await loadDetailFotos(personId);
@@ -6339,26 +6229,6 @@ fotoPersonSuchergebnisse?.addEventListener("click", async (event) => {
   renderFotoMarkierungen();
   fotoPersonenMessage.textContent = "Person hinzugefügt ✓";
 });
-
-async function migriereAlteFotoPositionen() {
-  if (!fotoMarkierbildWrap || !fotoMarkierbild.naturalWidth) return;
-  const legacy = fotoMarkierungen.filter(r => (r.position_format || "flaeche") !== "bild");
-  if (!legacy.length) return;
-
-  const bildRect = fotoMarkierbild.getBoundingClientRect();
-  const flaechenRect = fotoMarkierflaeche.getBoundingClientRect();
-  if (!bildRect.width || !bildRect.height || !flaechenRect.width || !flaechenRect.height) return;
-
-  for (const row of legacy) {
-    const oldXpx = flaechenRect.left + (Number(row.position_x ?? 50) / 100) * flaechenRect.width;
-    const oldYpx = flaechenRect.top + (Number(row.position_y ?? 50) / 100) * flaechenRect.height;
-    const x = Math.max(0, Math.min(100, ((oldXpx - bildRect.left) / bildRect.width) * 100));
-    const y = Math.max(0, Math.min(100, ((oldYpx - bildRect.top) / bildRect.height) * 100));
-    const { error } = await sb.from("foto_personen").update({ position_x: x, position_y: y, position_format: "bild" }).eq("id", row.id);
-    if (!error) { row.position_x = x; row.position_y = y; row.position_format = "bild"; }
-  }
-}
-
 function renderFotoMarkierungen() {
   fotoMarkierungenEl.innerHTML = "";
   fotoPersonenListe.innerHTML = "";
@@ -6975,7 +6845,7 @@ async function loadDetailAudio(personId) {
 
     div.querySelector(".del-btn").addEventListener("click", async () => {
       if (!darfLoeschen("Sprachnotizen löschen")) return;
-      const { error: storageError } = await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
+      const { error: storageError } = papierkorbAktiv ? { error: null } : await sb.storage.from(BUCKET_AUDIO).remove([note.dateipfad]);
       if (storageError) {
         debugLog(`⚠️ Sprachnotiz-Datei konnte nicht gelöscht werden: ${storageError.message}`);
         return;
@@ -7032,11 +6902,6 @@ document.getElementById("d-audio-record-btn").addEventListener("click", async ()
 });
 
 // ---- Familie im Detail ----
-function personNameById(id) {
-  const p = personenCache.find((x) => x.id === id);
-  return p ? `${p.vorname} ${p.nachname}` : "(unbekannte Person)";
-}
-
 function familiePartnerIds(familie, personId) {
   return [familie.partner_a_id, familie.partner_b_id].filter((id) => id && id !== personId);
 }
@@ -8408,7 +8273,9 @@ document.getElementById("d-add-kind-btn").addEventListener("click", async () => 
 document.getElementById("d-delete-person-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-delete-message");
   if (!darfLoeschen("Personen löschen")) return;
-  if (!confirm("Diese Person inkl. aller Fotos, Sprachnotizen und Beziehungen unwiderruflich löschen?")) return;
+  if (!confirm(papierkorbAktiv
+    ? "Diese Person inkl. aller Fotos, Sprachnotizen und Beziehungen in den Papierkorb legen?\n\nDer Eigentümer kann sie 30 Tage lang wiederherstellen (Verlauf → Papierkorb)."
+    : "Diese Person inkl. aller Fotos, Sprachnotizen und Beziehungen unwiderruflich löschen?")) return;
   msg.textContent = "Lösche …";
 
   try {
@@ -8445,7 +8312,7 @@ document.getElementById("d-delete-person-btn").addEventListener("click", async (
     if (fotoFetchError) throw fotoFetchError;
 
     for (const f of fotos || []) {
-      if (f.dateipfad) { await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]); await loescheFotoAusBrowserCache(f.dateipfad); }
+      if (f.dateipfad && !papierkorbAktiv) { await sb.storage.from(BUCKET_FOTOS).remove([f.dateipfad]); await loescheFotoAusBrowserCache(f.dateipfad); }
       const { error } = await sb.from("fotos").delete().eq("id", f.id);
       if (error) throw error;
     }
@@ -8455,7 +8322,7 @@ document.getElementById("d-delete-person-btn").addEventListener("click", async (
     if (audioFetchError) throw audioFetchError;
 
     for (const a of audios || []) {
-      if (a.dateipfad) await sb.storage.from(BUCKET_AUDIO).remove([a.dateipfad]);
+      if (a.dateipfad && !papierkorbAktiv) await sb.storage.from(BUCKET_AUDIO).remove([a.dateipfad]);
       const { error } = await sb.from("sprachnotizen").delete().eq("id", a.id);
       if (error) throw error;
     }
@@ -11907,7 +11774,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=435");
+      treeModul3D = await import("./tree3d.js?v=436");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -13486,6 +13353,8 @@ async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
 async function komfortNachStart(session) {
   komfortUserId = session?.user?.id || null;
   ichAnzeigeAktualisieren();
+  void papierkorbPruefen();   // v436
+  void flushQueueSicher();   // v436: offline gespeicherte Einträge nachsenden
   if (zugang?.vorschau) return;
   const zugangOffen = !document.getElementById("zugang-overlay")?.hidden;
   if (zugangOffen) return;
@@ -13599,7 +13468,6 @@ document.getElementById("konto-ich-aendern")?.addEventListener("click", () => {
   personSucheAufbauen(box, (p) => { ichSetzen(p.id, treePersonLabel(p.id)); box.hidden = true; box.innerHTML = ""; }, "Deinen Namen eingeben …").then((f) => f?.focus());
 });
 document.getElementById("hilfe-einfuehrung")?.addEventListener("click", () => einfuehrungZeigen(0));
-document.getElementById("hilfe-heute")?.addEventListener("click", () => heuteVorJahrenZeigen());
 document.getElementById("chronik-tagesblatt")?.addEventListener("click", () => heuteVorJahrenZeigen());   // v435: Tagesblatt in der Chronik
 ichAnzeigeAktualisieren();
 
@@ -13705,9 +13573,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 435;   // bei jeder Version mit hochzählen
+const APP_VERSION = 436;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [436, ["🗑️ Papierkorb: Gelöschtes kann der Eigentümer 30 Tage lang wiederherstellen (Verlauf → Papierkorb)"]],
   [435, ["📅 Tagesblatt und eine Kurzanleitung („ⓘ So funktioniert die Chronik“) jetzt in der Chronik", "Wer vor 1920 geboren ist und kein Sterbedatum hat, gilt als verstorben", "Hinweis, wenn eine neue Version bereitsteht"]],
   [434, ["Chronik „Längste Ehen“: nur noch Ehen mit bekannten Sterbedaten beider Partner"]],
   [431, ["Neue oder geänderte Personen sind sofort nach dem Speichern überall auffindbar"]],
@@ -13757,4 +13626,166 @@ function neuerungenZeigen() {
     const beobachter = new MutationObserver(() => { if (ov.hidden) { beobachter.disconnect(); fertig(); } });
     beobachter.observe(ov, { attributes: true, attributeFilter: ["hidden"] });
   });
+}
+
+
+// ---------- v436: Papierkorb (Supabase Paket 11) ----------
+// Die Datenbank legt vor jedem Löschen eine Kopie in „papierkorb“ ab. Der Eigentümer sieht sie im Reiter „Verlauf“,
+// kann ganze Aktionen wiederherstellen oder endgültig löschen. Nach 30 Tagen räumt die App beim Start des Eigentümers auf;
+// erst dann werden Foto- und Audiodateien aus dem Speicher entfernt.
+let papierkorbAktiv = false;
+const PAPIERKORB_TAGE = 30;
+const PK_AUFRAEUMEN_KEY = "fs-papierkorb-aufgeraeumt";
+
+async function papierkorbPruefen() {
+  papierkorbAktiv = false;
+  if (!rolleIstEigentuemer()) return false;
+  try {
+    const { error } = await sb.from("papierkorb").select("id", { count: "exact", head: true });
+    papierkorbAktiv = !error;
+  } catch { papierkorbAktiv = false; }
+  const box = document.getElementById("papierkorb-box");
+  if (box) box.hidden = !papierkorbAktiv;
+  if (papierkorbAktiv) void papierkorbAufraeumen();
+  return papierkorbAktiv;
+}
+
+// Dateien endgültig aus dem Speicher entfernen – aber nur, wenn kein vorhandenes Foto/keine Sprachnotiz sie noch nutzt
+async function papierkorbDateienEntfernen(zeilen) {
+  const fotos = zeilen.filter((z) => z.tabelle === "fotos" && z.daten?.dateipfad).map((z) => z.daten.dateipfad);
+  const audio = zeilen.filter((z) => z.tabelle === "sprachnotizen" && z.daten?.dateipfad).map((z) => z.daten.dateipfad);
+  if (fotos.length) {
+    const { data: noch } = await sb.from("fotos").select("dateipfad").in("dateipfad", fotos);
+    const genutzt = new Set((noch || []).map((x) => x.dateipfad));
+    const weg = fotos.filter((x) => !genutzt.has(x));
+    if (weg.length) { await sb.storage.from(BUCKET_FOTOS).remove(weg); for (const x of weg) { try { await loescheFotoAusBrowserCache(x); } catch {} } }
+  }
+  if (audio.length) {
+    const { data: noch } = await sb.from("sprachnotizen").select("dateipfad").in("dateipfad", audio);
+    const genutzt = new Set((noch || []).map((x) => x.dateipfad));
+    const weg = audio.filter((x) => !genutzt.has(x));
+    if (weg.length) await sb.storage.from(BUCKET_AUDIO).remove(weg);
+  }
+}
+
+async function papierkorbEndgueltig(ids) {
+  const { data: zeilen, error } = await sb.from("papierkorb").select("id, tabelle, daten").in("id", ids);
+  if (error) throw error;
+  await papierkorbDateienEntfernen(zeilen || []);
+  const { error: e2 } = await sb.from("papierkorb").delete().in("id", ids);
+  if (e2) throw e2;
+}
+
+async function papierkorbAufraeumen() {
+  // höchstens einmal am Tag
+  const heute = new Date().toISOString().slice(0, 10);
+  try { if (localStorage.getItem(PK_AUFRAEUMEN_KEY) === heute) return; } catch {}
+  try {
+    const grenze = new Date(Date.now() - PAPIERKORB_TAGE * 86400000).toISOString();
+    const { data, error } = await sb.from("papierkorb").select("id").lt("geloescht_am", grenze).limit(1000);
+    if (error) return;
+    if ((data || []).length) { await papierkorbEndgueltig(data.map((x) => x.id)); debugLog(`🗑️ Papierkorb: ${data.length} Einträge älter als ${PAPIERKORB_TAGE} Tage endgültig gelöscht`); }
+    try { localStorage.setItem(PK_AUFRAEUMEN_KEY, heute); } catch {}
+  } catch (e) { debugLog(`⚠️ Papierkorb aufräumen: ${e.message || e}`); }
+}
+
+// Einträge zu „Aktionen“ bündeln: gleicher Benutzer, höchstens 20 Sekunden Abstand
+function papierkorbGruppieren(zeilen) {
+  const gruppen = [];
+  for (const z of zeilen) {   // neueste zuerst
+    const t = new Date(z.geloescht_am).getTime();
+    const g = gruppen[gruppen.length - 1];
+    if (g && g.von === z.geloescht_von && g.letzte - t <= 20000) { g.zeilen.push(z); g.letzte = t; }
+    else gruppen.push({ von: z.geloescht_von, zeit: t, letzte: t, zeilen: [z] });
+  }
+  return gruppen;
+}
+
+const PK_ART = {
+  personen: ["👤", "Person", "Personen"], familien: ["💍", "Ehe/Familie", "Ehen/Familien"], familien_kinder: ["👶", "Kind-Zuordnung", "Kind-Zuordnungen"],
+  fotos: ["🖼️", "Foto", "Fotos"], foto_personen: ["🏷️", "Foto-Markierung", "Foto-Markierungen"], sprachnotizen: ["🎙️", "Sprachnotiz", "Sprachnotizen"],
+  beziehung: ["🔗", "Beziehung", "Beziehungen"], haeuser: ["🏠", "Haus", "Häuser"], person_stationen: ["📍", "Wohnstation", "Wohnstationen"],
+  familien_trauungsbuch_quellen: ["📖", "Trauungsbuch-Quelle", "Trauungsbuch-Quellen"]
+};
+function pkPersonName(id, zeilen) {
+  const ausKorb = zeilen.find((z) => z.tabelle === "personen" && String(z.daten?.id) === String(id))?.daten;
+  const p = ausKorb || (personenCache || []).find((x) => x.id === id) || (typeof treePerson === "function" ? treePerson(id) : null);
+  if (!p) return "unbekannte Person";
+  return [p.vorname, p.nachname].filter(Boolean).join(" ") || "ohne Namen";
+}
+function papierkorbTitel(g) {
+  const z = g.zeilen;
+  const nach = (t) => z.filter((x) => x.tabelle === t);
+  const jahre = (d) => { const a = String(d.geburtsdatum || d.geburtsjahr || "").slice(0, 4), b = String(d.sterbedatum || d.sterbejahr || "").slice(0, 4); return a || b ? ` (${a}${b ? `–${b}` : ""})` : ""; };
+  let titel;
+  if (nach("personen").length) {
+    const ps = nach("personen");
+    titel = ps.length === 1 ? `👤 ${escapeHtml(pkPersonName(ps[0].daten.id, z))}${jahre(ps[0].daten)}` : `👤 ${ps.length} Personen: ${ps.slice(0, 3).map((x) => escapeHtml(pkPersonName(x.daten.id, z))).join(", ")}${ps.length > 3 ? " …" : ""}`;
+  } else if (nach("fotos").length) titel = `🖼️ ${nach("fotos").length === 1 ? `Foto${nach("fotos")[0].daten.titel ? ` „${escapeHtml(nach("fotos")[0].daten.titel)}“` : ""}` : `${nach("fotos").length} Fotos`}`;
+  else if (nach("sprachnotizen").length) titel = `🎙️ ${nach("sprachnotizen").length === 1 ? "Sprachnotiz" : `${nach("sprachnotizen").length} Sprachnotizen`}`;
+  else if (nach("familien").length) { const f = nach("familien")[0].daten; titel = `💍 ${escapeHtml(f.familientyp || "Familie")}: ${escapeHtml(pkPersonName(f.partner_a_id, z))}${f.partner_b_id ? ` & ${escapeHtml(pkPersonName(f.partner_b_id, z))}` : ""}`; }
+  else if (nach("familien_kinder").length) titel = `👶 Kind-Zuordnung: ${nach("familien_kinder").map((x) => escapeHtml(pkPersonName(x.daten.kind_id, z))).slice(0, 3).join(", ")}`;
+  else if (nach("haeuser").length) titel = `🏠 Haus ${escapeHtml([nach("haeuser")[0].daten.ort, nach("haeuser")[0].daten.nummer].filter(Boolean).join(" "))}`;
+  else { const [sym, eins] = PK_ART[z[0].tabelle] || ["🗑️", z[0].tabelle]; titel = `${sym} ${eins}`; }
+  // Rest zusammenfassen
+  const zaehl = {};
+  for (const x of z) zaehl[x.tabelle] = (zaehl[x.tabelle] || 0) + 1;
+  const haupt = nach("personen").length ? "personen" : nach("fotos").length ? "fotos" : nach("sprachnotizen").length ? "sprachnotizen" : nach("familien").length ? "familien" : nach("familien_kinder").length ? "familien_kinder" : nach("haeuser").length ? "haeuser" : z[0].tabelle;
+  const rest = Object.entries(zaehl).filter(([t]) => t !== haupt).map(([t, n]) => `${n} ${n === 1 ? (PK_ART[t]?.[1] || t) : (PK_ART[t]?.[2] || t)}`);
+  return { titel, rest };
+}
+
+let papierkorbNamen = null;
+async function papierkorbLaden() {
+  const box = document.getElementById("papierkorb-box");
+  const liste = document.getElementById("papierkorb-liste");
+  const meldung = document.getElementById("papierkorb-meldung");
+  if (!box || !liste) return;
+  if (!rolleIstEigentuemer()) { box.hidden = true; return; }
+  if (!papierkorbAktiv && !(await papierkorbPruefen())) {
+    box.hidden = false;
+    liste.innerHTML = "";
+    meldung.textContent = "Der Papierkorb ist in der Datenbank noch nicht eingerichtet (Supabase Paket 11). Bis dahin wird Gelöschtes sofort endgültig entfernt.";
+    return;
+  }
+  box.hidden = false;
+  meldung.textContent = "Lade …";
+  if (!papierkorbNamen) {
+    try { const { data } = await sb.from("benutzerprofil").select("user_id, anzeigename"); papierkorbNamen = new Map((data || []).map((x) => [x.user_id, x.anzeigename || "?"])); }
+    catch { papierkorbNamen = new Map(); }
+  }
+  const { data, error } = await sb.from("papierkorb").select("id, tabelle, datensatz_id, daten, geloescht_am, geloescht_von").order("geloescht_am", { ascending: false }).limit(2000);
+  if (error) { meldung.textContent = `Papierkorb konnte nicht geladen werden: ${error.message}`; return; }
+  const gruppen = papierkorbGruppieren(data || []);
+  meldung.textContent = gruppen.length ? `${gruppen.length} ${gruppen.length === 1 ? "gelöschte Aktion" : "gelöschte Aktionen"} · wird nach ${PAPIERKORB_TAGE} Tagen endgültig entfernt` : "Der Papierkorb ist leer.";
+  liste.replaceChildren(...gruppen.map((g) => {
+    const { titel, rest } = papierkorbTitel(g);
+    const tage = Math.max(0, PAPIERKORB_TAGE - Math.floor((Date.now() - g.zeit) / 86400000));
+    const li = document.createElement("li");
+    li.className = "pk-eintrag";
+    const wann = new Date(g.zeit).toLocaleString("de-AT", { timeZone: "Europe/Vienna", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+    li.innerHTML = `<div class="pk-text"><div class="pk-titel">${titel}</div>
+        ${rest.length ? `<div class="pk-rest">mit ${escapeHtml(rest.join(", "))}</div>` : ""}
+        <div class="pk-meta">gelöscht ${escapeHtml(wann)}${papierkorbNamen.get(g.von) ? ` von ${escapeHtml(papierkorbNamen.get(g.von))}` : ""} · noch ${tage} ${tage === 1 ? "Tag" : "Tage"}</div></div>
+      <div class="pk-knoepfe"><button type="button" class="btn btn--primary" data-pk="zurueck">↩ Wiederherstellen</button><button type="button" class="btn btn--ghost" data-pk="weg">Endgültig löschen</button></div>`;
+    const ids = g.zeilen.map((x) => x.id);
+    li.querySelector('[data-pk="zurueck"]').addEventListener("click", async (e) => {
+      e.currentTarget.disabled = true;
+      try {
+        const { data: erg, error: err } = await sb.rpc("fs_papierkorb_wiederherstellen", { eintraege: ids });
+        if (err) throw err;
+        const text = erg?.offen ? `Wiederhergestellt: ${erg.wiederhergestellt}. ${erg.offen} Teil(e) passten nicht mehr (z. B. Person fehlt) und bleiben im Papierkorb.` : `Wiederhergestellt ✓ (${erg?.wiederhergestellt ?? ids.length} Einträge)`;
+        void personenNachSpeichern();
+        await papierkorbLaden();
+        meldung.textContent = text;
+      } catch (err) { meldung.textContent = `Wiederherstellen fehlgeschlagen: ${err.message || err}`; e.currentTarget.disabled = false; }
+    });
+    li.querySelector('[data-pk="weg"]').addEventListener("click", async (e) => {
+      if (!confirm("Endgültig löschen? Das lässt sich nicht mehr rückgängig machen.")) return;
+      e.currentTarget.disabled = true;
+      try { await papierkorbEndgueltig(ids); await papierkorbLaden(); }
+      catch (err) { meldung.textContent = `Löschen fehlgeschlagen: ${err.message || err}`; e.currentTarget.disabled = false; }
+    });
+    return li;
+  }));
 }

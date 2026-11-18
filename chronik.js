@@ -861,7 +861,8 @@ function tagesMonatTag(datum = new Date()) {
   const g = (x) => +t.find((p) => p.type === x).value;
   return { jahr: g("year"), monat: g("month"), tag: g("day"), md: `${String(g("month")).padStart(2, "0")}-${String(g("day")).padStart(2, "0")}` };
 }
-function chrVermutlichLebend(p) {   // v435: gleiche Regel wie in der App – ab 1920 geboren und ohne Sterbedatum
+function chrVermutlichLebend(p) {   // v435/v436: gleiche Regel wie in der App – ab 1920 geboren, ohne Sterbedatum
+  if (typeof personVermutlichLebend === "function") return personVermutlichLebend(p);
   if (!p || p.sterbedatum || p.sterbejahr) return false;
   const j = chrGebJahr(p);
   return !!j && j >= (typeof LEBEND_AB_JAHR !== "undefined" ? LEBEND_AB_JAHR : 1920);

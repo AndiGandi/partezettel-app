@@ -1,0 +1,96 @@
+# Familienspuren – Änderungsgeschichte
+
+Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
+
+- v436: Papierkorb – Gelöschtes 30 Tage wiederherstellbar (Supabase Paket 11), Dateien erst danach endgültig entfernt.
+- v435: Hinweis „Neue Version verfügbar“ + „Neu in dieser Version“; vor 1920 Geborene gelten als verstorben; Tagesblatt und Kurzhilfe in der Chronik; Hilfetexte aktualisiert.
+- v434: Chronik „Längste Ehen“ nur mit bekannten Sterbedaten beider Partner.
+- v433: „Wie sind wir verwandt?“ springt direkt zum Gebirge (So ergibt sich die Beziehung).
+- v432: „Wie sind wir verwandt?“ landet beim Verwandtschaftsfenster statt im Familienstammbaum.
+- v431: Neue oder geänderte Personen sind sofort nach dem Speichern überall greifbar (ohne Aktualisieren).
+- v430: Personenansicht ohne „Das bin ich“-Knopf, dafür „Wie sind wir verwandt?“ (Stammbaum); im Verwandtschaftsfenster „👤 Ich“ als Schnellauswahl.
+- v429: Chronik – „Alles durchsuchen“ (Namen, Todesumstand, Notizen, Häuser, Jahre, Zeitgeschehen); Hochwasser 1910.
+- v428: Gruppenfoto – Person öffnet nur einmal, sofort sichtbar, springt nicht mehr ins Foto zurück.
+- v427: Bestandssuche schneller – ein Suchlauf nach dem Tippen statt fünf pro Buchstabe, Karten außerhalb des Bildschirms werden nicht gezeichnet.
+- v426: ✕ in allen Suchfeldern zum Löschen des ganzen Suchtextes.
+- v425: Verwandtschaftssatz schreibt Großmutter, Cousine usw. groß.
+- v424: Zwei-Finger-Zoom auch in „Verwandtschaft ermitteln“ (Gebirge-Grafik).
+- v423: iPad – Seitenzoom beim Tippen auf + / − verhindert, Zwei-Finger-Zoom vergrößert nur den Stammbaum, Eingabefelder 16px (kein Auto-Zoom).
+- v422: Tagesblatt erscheint um Mitternacht auch ohne Neustart (überall in der App); Tagesdatum nach österreichischer Zeit statt UTC.
+- v421: Dunkelmodus-Regeln entfernt (App ist immer hell) – Mondkasten im Tagesblatt war auf iPads im Dunkelmodus unlesbar.
+- v420: Tagesblatt ohne Personalisierung, mit Symbolen (🎂 🕯 💍) und Mond-Bildzeichen; Gruppenfoto: Namen erst beim Suchen, Hochladen nur Bearbeiter.
+- v419: Tagesblatt beim Start: Mondkalender (Bartholomäberg), Namenstag, Bauernregel, runde Jahrestage, Verwandte zuerst; Geburtstage Lebender nicht für Leser.
+- v418: Stammbaum →, Cousins aus, Leser einfacher, „Das bin ich“, Heute-vor-Jahren, Einführung, Zurück in der Kopfzeile, Vorlesen, Anmeldeprotokoll, Anmeldename merken.
+- v417: Stammbaum – Suchfeld zeigt immer die dargestellte Person (Chronik → Person → Stammbaum zeigte den alten Namen).
+- v416: Stammbaum startet leer mit Hinweis „Person suchen“; keine automatisch gewählte Startperson mehr.
+- v415: Stammbaum startet mit der zuletzt gewählten Person (sonst Hubert Ganahl *1930) statt mit der ersten Person der Datenbank.
+- v414: Hinweise – keine Verantwortung des Eigentümers mehr, Vorbehalt zu Vollständigkeit/Fehlern, Statistik nur zur Orientierung (auch in der Chronik).
+- v413: Stammbaum – „←“ (zurück zur vorigen Ansicht) sitzt jetzt in der Zoom-Leiste neben − / + / ↺.
+- v412: Kirchenbuch-Kurzanzeige für Eigentümer (Personenansicht oben, Bestandsliste T/Tr/S, Filter „Kirchenbuch fehlt“).
+- v411: Stammbaum – „← Zurück“ zur vorigen Ansicht; unbekannte Vorfahren/Partner werden nicht mehr als Platzhalter gezeigt.
+- v410: Einheitliche Eingabe – Trauungsbuch in der Ehe wie Tauf-/Sterbebuch, ✏️ bei Kirchenbüchern in der Personenansicht, Ehe-Angaben mit gemeinsamem „Speichern“, Hinweise je Abschnitt.
+- v409: Stammlinien (Schrunser / Bartholomäberg Linie): Kürzel S/B, Zeile in der Personenansicht, Bestand-Filter, Stammbaum-Vorlagen, Chronik-Karte.
+- v408: Zeitgeschehen – Eintrag 1812 Russlandfeldzug Napoleons ergänzt.
+- v407: neues Logo (Baum im Bogen) als App-Icon, Anmelde- und Kopfzeilen-Logo.
+- v406: Eltern-Felder – das Geschlecht wurde für die Anzeige nicht mitgeladen, deshalb wirkte v405 nicht.
+- v405: Bearbeiten – bei nur einem Elternteil (oder vertauschter Reihenfolge) entscheidet das Geschlecht, ob Vater oder Mutter.
+- v404: Gruppenfoto austauschen (bessere Qualität/koloriert) – Personen und Markierungen bleiben erhalten.
+- v403: 📷-Schalter blendet die Schlüsselfotos auch in der Ahnentafel aus.
+- v402: Personenansicht neu geordnet – Eltern, Ehepartner, Kinder, Notizen, dann Wohnorte, Kirchenbücher, Fotos, Links, Zeitgeschehen, Sprachnotizen, Verlauf.
+- v401: Jede gewählte Person (antippen, Suche, Ansichtswechsel) steht mittig im Stammbaum.
+- v400: Stammlinie wählen – Stammbaum wird sofort ins Bild geholt und die Linie mittig gezeigt.
+- v399: Lücken & Inseln – Liste aller erfassten Namen; alle Listen nach Nachname, Vorname oder Geburtsdatum sortierbar.
+- v398: Kinder ohne eigenes Datenblatt; „↗ Datenblatt“ macht aus einem Nur-Namen-Eintrag eine richtige Person samt Verbindung.
+- v397: Ehepartner ohne eigenes Datenblatt (nur Name) – Eingabe in Bearbeiten, Anzeige bei der Person und unter den Kindern (Paket 8).
+- v396: Eigentümer kann im Konto die Ansicht als Bearbeiter oder Leser ausprobieren (Vorschau-Leiste oben).
+- v395: Stammbaum – Schlüsselfotos werden wieder angezeigt (Abfrage war bei vielen Personen zu lang).
+- v394: Chronik – neuer Abschnitt „Schicksalsschläge“ (automatisch aus den Lebensdaten).
+- v393: Wohnorte – Geburtshaus, Elternhaus, dann nach Jahr; Stammbaum – Schlüsselfotos ein-/ausblendbar (📷).
+- v392: Ehedauer – gleiches Hochzeitsdatum zweier Ehen ergibt nicht mehr „unter 1 Tag“; Hinweis, wenn ein Partner vor der Hochzeit starb.
+- v391: Gebirge – Zoom +/−, Ehepartner ein-/ausblendbar, Geschwister immer mit gemeinsamen Eltern als Gipfel (auch „nicht erfasst“).
+- v390: Ahnentafel – Spalte „Kinder“ links neben der Ausgangsperson (antippen = eine Generation nach links).
+- v389: Gebirge-Darstellung zeigt den Geburtsnamen („geb. …“), auch beim Partner am Gipfel.
+- v388: Import-Assistent übernimmt einen eigenen Herkunftstext je Person (Feld „quelle“), z. B. für das Mangeng-Sippenbuch.
+- v387: Kirchenbücher – Fundstelle (Pfarre · Buch · Bild) wird aus dem Matricula-Link gelesen und angezeigt.
+- v386: Verwandtschaft ermitteln – neue Darstellung „Gebirge“ (Höhe = Generation, Gipfel = gemeinsame Vorfahren, ∞-Brücke = Ehe), umschaltbar auf Liste.
+- v385: Stammbaum – Doppeltippen auf iPad öffnet die Personenansicht (Zustand übersteht das Neuzeichnen); Tippen auf die Mitte öffnet direkt.
+- v384: Stammbaum „Generationen“: Ehepaare als Paar (∞ Jahr, Mann links) mit „Eltern von …“.
+- v383: Stammbaum „Familie“: Linien sitzen bei jedem Zoom richtig; Ehepaar steht nebeneinander, gestrichelt mit der Ausgangsperson verbunden.
+- v382: Zeitgeschehen um die Dorfchronik Bartholomäberg erweitert (68 Einträge, ⛪ markiert).
+- v381: Reiter „Chronik & Statistik“ (chronik.js) und „Zeitgeschehen“ in der Personenansicht.
+- v380: Verwandtschaftsweg nennt zu jedem Elternteil auch den zweiten Elternteil (∞) und bei Geschwistern die gemeinsamen Eltern.
+- v379: Ehepartner unter den Kindern – Ehefrauen mit Ledigenname statt Ehenamen.
+- v379: Ehepartner unter den Kindern mit Geburtsnamen (Ledigenname) statt Ehenamen.
+- v378: Ehepartner unter Kindern, Zurück zur vorherigen Person (auch nach Bearbeiten), „nur Name“ + Filter, grauer Punkt für eigene Einträge, Suchleiste fest oben.
+- v377: Feld „Todesumstand“ (gefallen/vermisst/verunglückt/Lawine/anderes + Zusatz) in Bearbeiten, Personenansicht und Bestandskarte (Paket 7).
+- v376: Ehe/Partnerschaft auch mit nur bekanntem Jahr (beginn_jahr/ende_jahr, Paket 6); Import übernimmt Heiratsjahre.
+- v375: Vater/Mutter in „Person bearbeiten“ auswählen speichert sofort; nur das Entfernen braucht „Eltern speichern“.
+- v374: Sicherung und Import laden seitenweise mit eindeutiger Reihenfolge (zusätzlich nach id) – vorher konnten bei gleichem Nachnamen Personen doppelt kommen oder fehlen.
+- v373: Gespeicherte Personenliste aus älteren Versionen (bei 1000 abgeschnitten) wird erkannt und einmal vollständig neu geladen; Anzahl wird beim Start mit der Datenbank verglichen.
+- v372: Kinder aus Familien mit nur einem Elternteil erscheinen in der Personenansicht und in der Zählung im Bestand.
+- v371: Listen über 1000 Einträge werden seitenweise geladen (Supabase liefert pro Abfrage höchstens 1000 Zeilen).
+- v370: Wohnorte mit „Geburtshaus“/„Elternhaus“, Hinweis „Haus des Ehepartners“, Bearbeiten (Art, Jahr, entfernen, hinzufügen).
+- v369: Kirchenbuch-Quellen mit „Seite“ (links/rechts) bei Taufe, Trauung, Tod und Ehe-Quelle; ohne Paket 4 wird ohne Seite gespeichert.
+- v368: „Import rückgängig“ prüft Foto-Markierungen jetzt über die richtige Spalte (personen_id).
+- v367: Wohnorte (Hausnummern) in der Personenansicht; Prüf-Punkt, Herkunftsvermerk und Filter nur für den Eigentümer; Filter „aus Hausblatt · alle“ und „selbst erfasst“.
+- v366: Hausblätter-Import: zweiter Durchgang für evtl. lebende Personen (eigene Import-Kennung, eigenes Rückgängig); Zuordnung zum ersten Import.
+- v365: Prüf-Punkt (orange = ungeprüft, grün = geprüft) bei importierten Personen in Liste, Personenansicht und Stammbaum; Filter „Anzeigen“ im Bestand.
+- v364: Lebensalter/Ehedauer unter 1 Jahr in Monaten, unter 1 Monat in Tagen (nie „0 Jahre“); nach Import/Rückgängig vollständig neu laden.
+- v363: Hausblätter-Import Stufe 2: Vorschau, Import (Personen, Familien, Häuser, Stationen) mit Import-Kennung, „Rückgängig“; Vermerk „aus Hausblatt · ungeprüft“; Backup enthält Häuser/Stationen/Importe.
+- v362: Hausblätter-Import Stufe 1 (Export / Sicherung, nur Eigentümer): Import-Datei laden, Abweichungen entscheiden, „Gleiche Person?“ bestätigen.
+- v361: Trauungsbuch-Quelle einer Ehe lässt sich entfernen (Feld leeren + speichern); alte Personenfelder gelten nur eindeutig für eine Ehe; keine Doppelzeile in „Kirchenbücher“.
+- v316: Fehler beim Neuaufbau der Stammlinie behoben; Ausgangs-ID korrekt übergeben und Nachkommen rekursiv einbeziehen.
+- v308: Stammlinienauswahl verbessert, Zentrierung nach Auswahl, Bestätigung und schnelleres Suchfeld.
+- v286: Johann Josef und Anna Maria Mangeng als gemeinsame Stammlinie mit beiden Vorfahrenzweigen.
+- v283: Vorgefertigte Stammlinien für Ganahl Reinhard/Paula und Mangeng Peter/Johann Josef.
+- v281: Gruppenfoto-Zahlen-Schaltfläche direkt oberhalb der Namensliste positionieren.
+- v288: iPhone-Suche mobil angeordnet; Personenkarten per Touch/Tastatur zuverlässig öffnen.
+- v302: Integrierte Hilfeseite und Kurzanleitung für alle Hauptbereiche.
+- v294: Diktiergerät direkt in der großen Bestandsansicht.
+- v279: Trauungsbuchquellen chronologisch mit Ehe-Nummer anzeigen; Stammbaum übernimmt Auswahl aus Bestand.
+- v276: Trauungsbuchquellen aus familien_trauungsbuch_quellen zusätzlich im Bereich Kirchenbücher anzeigen, je Ehe separat.\n// v273: Verwandtschaftspfad nutzt vorhandene Geschlechtsangaben für Vater/Mutter, Sohn/Tochter usw.; fehlende Angaben werden neutral beschriftet. v272: Elternanzeige erweitert.
+- v222: Gruppenfoto-Namen vollständig anzeigen und Tauschauswahl auf bereits zugeordnete Personen begrenzen.
+- v206: vorhandene Trauungsbuch-Links kompakt im Eheblock anzeigen, keine neue DB-Spalte: Kirchenbuchlinks in Personendetails und mehrere Trauungsbuchquellen je Ehe;  Klassischer Stammbaum – mehr Abstand zwischen Generationen, horizontal scrollbar, keine abgeschnittenen Karten. // v202: Verwandtschaft bei der Ersterfassung (Voll-/Halbgeschwister) und Schlüsselfoto auswählen; gewähltes Foto wird beim Upload markiert. // v199: Klassischer Stammbaum – eigener Familienzweig unterhalb der Geschwisterzeile, mit klaren Verbindungslinien. // v192: Klassische Stammbaumdarstellung aus v189 wiederhergestellt; Foto- und Gruppenfoto-Optimierungen aus v191 beibehalten.
+- v188: Klassischer Stammbaum mit echten Familien-Verbindungslinien. Restore prüft vorhandene Mediendateien ohne Download (exists/409) und korrigiert die Gültigkeitsdauer der Schlüsselfoto-URL. // v181: Backup erstellt keine automatischen Datenbank-Löschungen. Bestehende Fotooptimierung entfernt; neue Fotos werden beim Hochladen optimiert. Persistenter Personen-/Bild-Cache + robuste Warteschlangenbereinigung + Egress-Test.
+- v160: Sitzungscache + robuste lokale Namenssuche mit direktem oninput-Handler.
+- v340: Gemeinsames Modul für Namenssuche, Anzeige und Sortierung.

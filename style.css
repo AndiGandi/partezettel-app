@@ -2309,3 +2309,11 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .chr-hilfe ul{margin:.6rem 0 .2rem;padding-left:1.1rem;line-height:1.5;font-size:.93rem}
 .chr-hilfe li{margin:.3rem 0}
 .neuerungen-liste{text-align:left}
+/* v436: Papierkorb */
+.pk-liste{list-style:none;margin:.4rem 0 0;padding:0}
+.pk-eintrag{display:flex;gap:.8rem;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:.7rem 0;border-bottom:1px solid #eef2ec}
+.pk-text{flex:1 1 280px;min-width:0}
+.pk-titel{font-weight:600}
+.pk-rest{font-size:.88rem;color:var(--ink-soft,#5d6259)}
+.pk-meta{font-size:.82rem;color:var(--ink-soft,#6b7068);margin-top:.15rem}
+.pk-knoepfe{display:flex;gap:.4rem;flex-wrap:wrap}

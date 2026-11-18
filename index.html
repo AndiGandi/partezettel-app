@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 435 -->
+    <!-- Version 436 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=435">
+<link rel="stylesheet" href="style.css?v=436">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 435</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 436</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -561,7 +561,7 @@
         <li><strong>Partner:</strong> Erst die Person wählen, dann erscheint die Art (Ehe ist vorgewählt). Beginn und Ende sind optional. Bestehende Partnerschaften erscheinen als eine Zeile, mit „✎ Bearbeiten“ änderst du Art, Beginn und Ende und tippst dort auf „Partnerschaft speichern“.</li>
         <li><strong>Eltern:</strong> Auf ✎ tippen, Vater oder Mutter wählen und „Eltern speichern“ tippen.</li>
         <li><strong>Angaben zur Person</strong> (Name, Daten, Notiz, Links) speichert die Leiste unten. Sie erscheint erst, wenn du etwas geändert hast: „Nicht gespeicherte Änderungen“ mit <em>Verwerfen</em> und <em>Speichern</em>. Danach steht kurz „Gespeichert ✓“. Schließt du das Fenster vorher, fragt die App nach.</li>
-        <li><strong>Löschen:</strong> Verknüpfungen (Partner, Kind, Eltern) kannst du mit dem Papierkorb entfernen. Personen, Fotos und Sprachnotizen löscht nur der Eigentümer.</li>
+        <li><strong>Löschen:</strong> Verknüpfungen (Partner, Kind, Eltern) kannst du mit dem 🗑️-Symbol entfernen. Personen, Fotos und Sprachnotizen löscht nur der Eigentümer. Alles Gelöschte landet zuerst im <strong>Papierkorb</strong> (Reiter „Verlauf“, nur Eigentümer) und lässt sich dort 30 Tage lang wiederherstellen; danach wird es endgültig entfernt.</li>
         <li><strong>Plausibilitätsprüfung:</strong> Beim Speichern prüft die App, ob die Daten zusammenpassen. Eine Geburt nach dem Tod oder ein Datum in der Zukunft wird nicht gespeichert. Bei ungewöhnlichen Angaben (sehr hohes Alter, Mutter bei der Geburt zu jung oder zu alt, Kind nach dem Tod der Mutter) fragt die App nach, ob du trotzdem speichern willst.</li>
       </ul>
     </div>
@@ -717,6 +717,12 @@
   </section>
 
   <section id="tab-verlauf" class="tab-panel">
+    <fieldset class="field-group" id="papierkorb-box" hidden>
+      <legend>🗑️ Papierkorb</legend>
+      <p class="capture-status">Gelöschte Personen, Ehen, Kinder-Zuordnungen, Fotos und Sprachnotizen. Zusammengehöriges wird gemeinsam wiederhergestellt.</p>
+      <p id="papierkorb-meldung" class="form-message"></p>
+      <ol id="papierkorb-liste" class="pk-liste"></ol>
+    </fieldset>
     <fieldset class="field-group">
       <legend>🕘 Änderungsprotokoll</legend>
       <p class="capture-status">Zeigt, wer wann was angelegt, geändert oder gelöscht hat. Neueste zuerst.</p>
@@ -1071,8 +1077,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=435"></script>
-<script src="app.js?v=435"></script>
-<script src="chronik.js?v=435"></script>
+<script src="hinweise.js?v=436"></script>
+<script src="app.js?v=436"></script>
+<script src="chronik.js?v=436"></script>
 </body>
 </html>
