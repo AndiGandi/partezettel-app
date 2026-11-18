@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v439: Datenprüfung (pruefung.js, Supabase Paket 12): Dubletten, Elternalter, Kind nach Tod, Tod vor Geburt, über 105, junge Heirat, ohne Sterbedatum; Markierung „stimmt so“ dauerhaft; Zusammenführen.
 - v438: Die acht App-Dateien liegen direkt im Hauptordner statt im Ordner js/ (einfacher hochzuladen vom iPad).
 - v437: Aufräumen Stufe 1 – app.js in acht Dateien im Ordner js/ aufgeteilt (grundlagen, erfassung, bestand, person, export, stammbaum, import, komfort); Funktion unverändert.
 - v436: Papierkorb – Gelöschtes 30 Tage wiederherstellbar (Supabase Paket 11), Dateien erst danach endgültig entfernt.

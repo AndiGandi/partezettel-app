@@ -1,5 +1,5 @@
 // Familienspuren – Export und Sicherung: PDF, JSON, GEDCOM, Backup
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 438
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 439
 
 // ==========================================================
 // EXPORT
