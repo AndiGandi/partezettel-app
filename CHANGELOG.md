@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v441: Bestand-Filter (Eigentümer): Geburt bekannt ohne Sterbedatum (nach Geburt sortiert), nur Sterbejahr (nach Sterbejahr sortiert).
 - v440: Angeheiratete Verwandtschaft in Worten (Ehemann der Tante, Tante der Ehefrau, Schwager über Ehepartner, Stief-/Schwiegerverwandte), nur nähere Verwandtschaft.
 - v439: Datenprüfung (pruefung.js, Supabase Paket 12): Dubletten, Elternalter, Kind nach Tod, Tod vor Geburt, über 105, junge Heirat, ohne Sterbedatum; Markierung „stimmt so“ dauerhaft; Zusammenführen.
 - v438: Die acht App-Dateien liegen direkt im Hauptordner statt im Ordner js/ (einfacher hochzuladen vom iPad).

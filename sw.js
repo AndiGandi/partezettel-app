@@ -1,4 +1,4 @@
-const CACHE_NAME = "partezettel-shell-v440";
+const CACHE_NAME = "partezettel-shell-v441";
 const LIB_CACHE = "partezettel-libs-v1";   // Bibliotheken (three.js) bleiben über App-Versionen hinweg erhalten
 const THREE_PREFIX = "https://cdn.jsdelivr.net/npm/three@0.160.0/";
 const SHELL_FILES = ["./index.html", "./style.css", "./grundlagen.js", "./erfassung.js", "./bestand.js", "./person.js", "./export.js", "./stammbaum.js", "./import.js", "./komfort.js", "./tree3d.js", "./chronik.js", "./pruefung.js", "./hinweise.js", "./config.js", "./manifest.json"];

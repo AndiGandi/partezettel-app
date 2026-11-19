@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 440
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 441
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -474,9 +474,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 440;   // bei jeder Version mit hochzählen
+const APP_VERSION = 441;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [441, ["Bestand (Eigentümer): Anzeigen „Geburt bekannt, ohne Sterbedatum“ und „nur Sterbejahr“ – nach Alter sortiert"]],
   [440, ["Angeheiratete Verwandte in Worten: „Das ist der Ehemann deiner Tante“, „die Tante deiner Ehefrau“, Schwager, Schwiegermutter, Stiefvater …"]],
   [439, ["🔍 Datenprüfung (nur Eigentümer): mögliche Dubletten und unwahrscheinliche Angaben, „Stimmt so“ blendet Geprüftes dauerhaft aus, Dubletten zusammenführen"]],
   [436, ["🗑️ Papierkorb: Gelöschtes kann der Eigentümer 30 Tage lang wiederherstellen (Verlauf → Papierkorb)"]],

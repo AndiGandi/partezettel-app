@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 440
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 441
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -1651,6 +1651,12 @@ async function renderPersonenList(personen) {
 const personenSortSelect=document.getElementById("personen-sortierung");
 document.getElementById("personen-pruef-filter")?.addEventListener("change", (e) => {
   personenPruefFilter = e.target.value || "";
+  // v441: passende Sortierung gleich mitwählen (älteste zuerst)
+  const passendeSortierung = { "daten:geb-ohne-tod": "geburtsjahr", "daten:nur-sterbejahr": "sterbejahr" }[personenPruefFilter];
+  if (passendeSortierung && personenSortSelect && personenSortSelect.value !== passendeSortierung) {
+    personenSortSelect.value = passendeSortierung;
+    personenSortSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  }
   window.partezettelPersonenSuche?.(document.getElementById("search-input")?.value || "");
 });
 const personenSortButton=document.getElementById("personen-sort-richtung");
@@ -1681,6 +1687,9 @@ function pruefFilterPasst(p) {
   if (personenPruefFilter === "eigene") return !p.herkunft_quelle;
   if (personenPruefFilter === "ohne-nurname") return !istNurName(p);
   if (personenPruefFilter === "nurname") return istNurName(p);
+  // v441: Lebensdaten vervollständigen (Eigentümer – das ganze Filterfeld ist nur für ihn sichtbar)
+  if (personenPruefFilter === "daten:geb-ohne-tod") return !!(p.geburtsdatum || p.geburtsjahr) && !p.sterbedatum && !p.sterbejahr;
+  if (personenPruefFilter === "daten:nur-sterbejahr") return !!p.sterbejahr && !p.sterbedatum;
   if (personenPruefFilter.startsWith("kb:")) {   // v412: fehlende Kirchenbuch-Links
     const e = kbUebersicht.get(p.id); if (!e) return false;
     const art = personenPruefFilter.slice(3);
