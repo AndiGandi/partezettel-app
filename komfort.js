@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 439
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 440
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -58,9 +58,15 @@ async function personSucheAufbauen(container, beiWahl, platzhalter = "Namen eing
 function beziehungZuMir(personId, ichId) {
   if (!personId || !ichId || !treePerson(personId) || !treePerson(ichId)) return null;
   if (personId === ichId) return { wort: "du", artikel: "" };
-  let rel = null;
-  try { rel = treeRelationshipResult(personId, ichId)?.relation || null; } catch {}
+  let rel = null, erg = null;
+  try { erg = treeRelationshipResult(personId, ichId); rel = erg?.relation || null; } catch {}
   if (!rel || /keine gespeicherte|nicht eindeutig|angeheiratet verwandt/i.test(rel)) return null;
+  // v440: angeheiratet – „der Ehemann deiner Tante (Maria Meier)“, „die Tante deiner Ehefrau (Anna …)“
+  if (erg?.angeheiratet) {
+    const a = erg.angeheiratet;
+    const artikel = TREE_WEIBLICH_WORT.test(String(a.art).split(" ")[0]) ? "die" : "der";
+    return { wort: `${a.art} ${treeGenitiv(a.rolle, true)}`, artikel, zusatz: treePersonKurzname(a.ueber) };
+  }
   const g = String(treePerson(personId)?.geschlecht || "").toLowerCase();
   const w = /^w/.test(g), m = /^m/.test(g);
   rel = rel.replace("Cousin/Cousine", w ? "Cousine" : m ? "Cousin" : "Cousin/Cousine");
@@ -99,7 +105,7 @@ function komfortPersonAnsicht(person) {
       const weg = box.querySelector("#pv-ich-weg"); if (weg && treePerson(person.id)) weg.hidden = false;
       if (!b) { zeile.textContent = `👤 Keine nähere Verwandtschaft zu dir (${ich.name}) erfasst.`; zeile.classList.add("is-leer"); }
       else {
-        zeile.innerHTML = b.artikel ? `👤 Das ist ${b.artikel} <strong>${escapeHtml(b.wort)}</strong>` : `👤 Verwandtschaft zu dir: <strong>${escapeHtml(b.wort)}</strong>`;
+        zeile.innerHTML = b.artikel ? `👤 Das ist ${b.artikel} <strong>${escapeHtml(b.wort)}</strong>${b.zusatz ? ` (${escapeHtml(b.zusatz)})` : ""}` : `👤 Verwandtschaft zu dir: <strong>${escapeHtml(b.wort)}</strong>`;
         zeile.title = `bezogen auf ${ich.name}`;
       }
       zeile.hidden = false;
@@ -468,9 +474,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 439;   // bei jeder Version mit hochzählen
+const APP_VERSION = 440;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [440, ["Angeheiratete Verwandte in Worten: „Das ist der Ehemann deiner Tante“, „die Tante deiner Ehefrau“, Schwager, Schwiegermutter, Stiefvater …"]],
   [439, ["🔍 Datenprüfung (nur Eigentümer): mögliche Dubletten und unwahrscheinliche Angaben, „Stimmt so“ blendet Geprüftes dauerhaft aus, Dubletten zusammenführen"]],
   [436, ["🗑️ Papierkorb: Gelöschtes kann der Eigentümer 30 Tage lang wiederherstellen (Verlauf → Papierkorb)"]],
   [435, ["📅 Tagesblatt und eine Kurzanleitung („ⓘ So funktioniert die Chronik“) jetzt in der Chronik", "Wer vor 1920 geboren ist und kein Sterbedatum hat, gilt als verstorben", "Hinweis, wenn eine neue Version bereitsteht"]],

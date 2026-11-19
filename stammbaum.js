@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 439
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 440
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -1367,6 +1367,90 @@ function treeRelationshipSentence(aId, bId, relation) {
   return `${a} ist ${relation} von ${b}.`;
 }
 
+// ---------- v440: Angeheiratete Verwandtschaft in Worten (Ehemann der Tante, Tante der Ehefrau …) ----------
+// Nur für nähere Verwandtschaft: der Blutsverwandte auf dem Weg ist höchstens Cousin/Cousine (seitlich)
+// und höchstens 6 Generationen entfernt – also „nicht über 100 Ecken“.
+const TREE_WEIBLICH_WORT = /(mutter|tante|nichte|schwester|tochter|enkelin|cousine|ehefrau|schwägerin)/i;
+function treeWortNachGeschlecht(wort, id) {
+  const g = treePersonGender(treePerson(id));
+  return String(wort || "").replace("Cousin/Cousine", g === "w" ? "Cousine" : "Cousin");
+}
+// „Tante“ → „der Tante“, „Onkel“ → „des Onkels“, „Neffe“ → „des Neffen“, „Cousin 2. Grades“ → „des Cousins 2. Grades“
+function treeGenitiv(wort, possessiv = false) {
+  const teile = String(wort).split(" ");
+  const kopf = teile[0];
+  if (TREE_WEIBLICH_WORT.test(kopf)) return `${possessiv ? "deiner" : "der"} ${wort}`;
+  let g = kopf;
+  if (/e$/.test(kopf)) g = kopf + "n";
+  else if (/sohn$/i.test(kopf)) g = kopf + "es";
+  else if (!/s$/.test(kopf)) g = kopf + "s";
+  return `${possessiv ? "deines" : "des"} ${[g, ...teile.slice(1)].join(" ")}`;
+}
+function treeBlutNah(blood) {
+  if (!blood?.relation) return false;
+  return Math.min(blood.aDistance, blood.bDistance) <= 2 && Math.max(blood.aDistance, blood.bDistance) <= 6;
+}
+function treePartnerVon(id) {
+  const ids = new Set();
+  for (const f of treeData.familien || []) {
+    if (f.partner_a_id === id && f.partner_b_id) ids.add(f.partner_b_id);
+    if (f.partner_b_id === id && f.partner_a_id) ids.add(f.partner_a_id);
+  }
+  return [...ids].filter((x) => treePerson(x));
+}
+function treePersonKurzname(id) {
+  const p = treePerson(id);
+  return p ? [p.vorname, p.nachname].filter(Boolean).join(" ") : "";
+}
+function treeAngeheiratet(aId, bId, model) {
+  const aW = (m, w) => treeGenderWord(aId, m, w, m);
+  const kandidaten = [];
+  // A ist Ehepartner von B
+  if (treePartnerVon(aId).includes(bId)) return { relation: aW("Ehemann", "Ehefrau"), path: [{ from: aId, to: bId, type: "spouse" }] };
+  // 1) A ist Ehepartner von R, R ist blutsverwandt mit B
+  for (const r of treePartnerVon(aId)) {
+    if (r === bId) continue;
+    const blood = treeBloodRelationship(r, bId, model);
+    if (!treeBlutNah(blood)) continue;
+    const rel = treeWortNachGeschlecht(blood.relation, r);
+    let relation, satz = null;
+    if (/^(Vater|Mutter)$/.test(rel)) relation = aW("Stiefvater", "Stiefmutter");
+    else if (/^(Ur)*(ur)*[Gg]roß(vater|mutter)$|^Urgroß|^Ur+.*groß(vater|mutter)$/.test(rel) && /(vater|mutter)$/.test(rel)) {
+      // Ehepartner eines direkten Vorfahren (zweite Ehe): Stiefgroßvater, Stief-Urgroßmutter …
+      const w = rel.replace(/(vater|mutter)$/, aW("vater", "mutter"));
+      relation = /^Groß/.test(w) ? `Stief${w.toLowerCase()}` : `Stief-${w}`;
+    }
+    else if (/^(Sohn|Tochter)$/.test(rel)) relation = aW("Schwiegersohn", "Schwiegertochter");
+    else if (/^(Bruder|Schwester)$/.test(rel)) relation = aW("Schwager", "Schwägerin");
+    else { relation = `${aW("Ehemann", "Ehefrau")} ${treeGenitiv(rel)}`; satz = { art: aW("Ehemann", "Ehefrau"), rolle: rel, ueber: r }; }
+    const blutPfad = treeBuildBloodPath(r, bId, model, blood) || [];
+    kandidaten.push({ relation, satz, gewicht: blood.aDistance + blood.bDistance, path: [{ from: aId, to: r, type: "spouse" }, ...blutPfad] });
+  }
+  // 2) A ist blutsverwandt mit S, S ist Ehepartner von B
+  for (const sp of treePartnerVon(bId)) {
+    if (sp === aId) continue;
+    const blood = treeBloodRelationship(aId, sp, model);
+    if (!treeBlutNah(blood)) continue;
+    const rel = treeWortNachGeschlecht(blood.relation, aId);
+    const spW = treeGenderWord(sp, "Ehemann", "Ehefrau", "Ehepartner");
+    let relation, satz = null;
+    if (/^(Vater|Mutter)$/.test(rel)) relation = aW("Schwiegervater", "Schwiegermutter");
+    else if (/^(Bruder|Schwester)$/.test(rel)) relation = aW("Schwager", "Schwägerin");
+    else if (/^(Sohn|Tochter)$/.test(rel)) relation = aW("Stiefsohn", "Stieftochter");
+    else { relation = `${rel} ${treeGenitiv(spW)}`; satz = { art: rel, rolle: spW, ueber: sp }; }
+    const blutPfad = treeBuildBloodPath(aId, sp, model, blood) || [];
+    kandidaten.push({ relation, satz, gewicht: blood.aDistance + blood.bDistance, path: [...blutPfad, { from: sp, to: bId, type: "spouse" }] });
+  }
+  // 3) Schwager über Ehepartner: A ist Ehepartner eines Geschwisters von B's Ehepartner
+  for (const r of treePartnerVon(aId)) for (const sp of treePartnerVon(bId)) {
+    const blood = treeBloodRelationship(r, sp, model);
+    if (blood?.aDistance === 1 && blood?.bDistance === 1) kandidaten.push({ relation: aW("Schwager", "Schwägerin"), satz: null, gewicht: 3, path: [{ from: aId, to: r, type: "spouse" }, { from: r, to: sp, type: "sibling" }, { from: sp, to: bId, type: "spouse" }] });
+  }
+  if (!kandidaten.length) return null;
+  kandidaten.sort((x, y) => x.gewicht - y.gewicht);
+  return kandidaten[0];
+}
+
 function treeRelationshipResult(aId, bId) {
   if (!aId || !bId) return null;
   if (aId === bId) return { relation: "dieselbe Person", path: [] };
@@ -1383,8 +1467,20 @@ function treeRelationshipResult(aId, bId) {
     };
   }
 
-  // Falls keine Blutsverwandtschaft existiert, bleibt die bisherige
-  // angeheiratete Ermittlung erhalten.
+  // v440: nähere angeheiratete Verwandtschaft in Worten
+  const ang = treeAngeheiratet(aId, bId, model);
+  if (ang) {
+    const satzRel = ang.satz ? `${ang.satz.art} ${treeGenitiv(ang.satz.rolle)} (${treePersonKurzname(ang.satz.ueber)})` : ang.relation;
+    return {
+      relation: ang.relation,
+      angeheiratet: ang.satz,
+      path: ang.path,
+      sentence: treeRelationshipSentence(aId, bId, satzRel),
+      pathText: treeHumanRelationshipPath(aId, ang.path)
+    };
+  }
+
+  // Sonst: bisherige allgemeine Ermittlung über beliebige Wege
   const path = treeFindRelationshipPath(aId, bId);
   if (!path) return { relation: "Keine gespeicherte Verwandtschaft gefunden", path: null };
   const relation = treeInLawRelation(path) || "verwandt (genauer Verwandtschaftsgrad nicht eindeutig bestimmbar)";
@@ -2676,7 +2772,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=439");
+      treeModul3D = await import("./tree3d.js?v=440");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
