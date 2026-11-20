@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v442: Tagesblatt blättern (‹ ›, Wischen, Pfeiltasten, „Zurück zu heute“); obsigend/nidsigend nach Wendepunkt der Mondbahn statt Tierkreis (Abgleich Kalender Jänner 2027); Mondviertel, Erdnähe/-ferne, Knoten, Sonne ins Zeichen mit Uhrzeit; Zeichen bei Wechsel richtig benannt; „in der Waage“, „in den Zwillingen“.
 - v441: Bestand-Filter (Eigentümer): Geburt bekannt ohne Sterbedatum (nach Geburt sortiert), nur Sterbejahr (nach Sterbejahr sortiert).
 - v440: Angeheiratete Verwandtschaft in Worten (Ehemann der Tante, Tante der Ehefrau, Schwager über Ehepartner, Stief-/Schwiegerverwandte), nur nähere Verwandtschaft.
 - v439: Datenprüfung (pruefung.js, Supabase Paket 12): Dubletten, Elternalter, Kind nach Tod, Tod vor Geburt, über 105, junge Heirat, ohne Sterbedatum; Markierung „stimmt so“ dauerhaft; Zusammenführen.

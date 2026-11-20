@@ -689,11 +689,54 @@ const MOND = (() => {
     if (kreuzt(0)) ereignis = "Neumond"; else if (kreuzt(180)) ereignis = "Vollmond";
     const p = phase(mittag);
     const zunehmend = p < 180;
-    const aufsteigend = m.lon >= 270 || m.lon < 90;   // Steinbock … Zwillinge
+    // v442: obsigend/nidsigend nach dem Wendepunkt der Mondbahn (tiefster/höchster Stand) wie im Kalender,
+    // nicht mehr nach dem Tierkreiszeichen (das lag bis zu 12 Stunden daneben)
+    const ab = astroEreignisse(beginn, ende);
+    const aufsteigend = dekl(new Date(mittag.getTime() + 3600000)) > dekl(new Date(mittag.getTime() - 3600000));
+    ereignis = ab.liste.find((x) => x.art === "Neumond" || x.art === "Vollmond")?.art || ereignis;
     const mz = durchgaenge(hMond, beginn, 0.125 - 0.583 - 0.27 + 0.27);   // Oberrand, Refraktion
     const sz = durchgaenge(hSonne, beginn, -0.833);
     const beleuchtet = Math.round((1 - Math.cos(p * RAD)) / 2 * 100);
-    return { zeichen: z, wechsel, ereignis, zunehmend, aufsteigend, beleuchtet, mondAuf: mz.auf, mondUnter: mz.unter, sonneAuf: sz.auf, sonneUnter: sz.unter, laenge: m.lon };
+    return { zeichen: z, wechsel, ereignis, zunehmend, aufsteigend, bahnWechsel: ab.bahnWechsel, ereignisse: ab.liste, beleuchtet, mondAuf: mz.auf, mondUnter: mz.unter, sonneAuf: sz.auf, sonneUnter: sz.unter, laenge: m.lon };
+  }
+  // v442: Deklination des Mondes (für über sich / unter sich)
+  function dekl(date) {
+    const d = tage(date), m = mond(d), ecl = 23.4393 - 3.563e-7 * d;
+    return Math.asin(sind(m.lat) * cosd(ecl) + cosd(m.lat) * sind(ecl) * sind(m.lon)) * DEG;
+  }
+  // v442: Ereignisse eines Tages mit Uhrzeit wie im Kalender: Mondviertel, Erdnähe/-ferne, Knoten, Sonne in neues Zeichen, Bahnwende
+  function astroEreignisse(beginn, ende) {
+    const SCHRITT = 30 * 60000, a0 = beginn.getTime() - SCHRITT, e0 = ende.getTime() + SCHRITT;
+    const werte = (t) => { const m = mond(tage(new Date(t))); return { t, ph: rev(m.lon - m.sonne.lon), dist: m.dist, lat: m.lat, sl: m.sonne.lon, de: dekl(new Date(t)) }; };
+    const pkt = []; for (let t = a0; t <= e0; t += SCHRITT) pkt.push(werte(t));
+    const liste = []; let bahnWechsel = null;
+    const imTag = (t) => t >= beginn.getTime() && t < ende.getTime();
+    const halbieren = (a, b, istVorher) => { for (let k = 0; k < 25; k++) { const c = (a + b) / 2; if (istVorher(c)) a = c; else b = c; } return (a + b) / 2; };
+    const extrem = (a, b, f, max) => { for (let k = 0; k < 40; k++) { const c1 = a + (b - a) / 3, c2 = b - (b - a) / 3; if ((f(c1) < f(c2)) === max) a = c1; else b = c2; } return (a + b) / 2; };
+    const dazu = (t, art, text) => { if (imTag(t)) liste.push({ zeit: new Date(t), art, text: text || art }); };
+    const VIERTEL = [[0, "Neumond"], [90, "Erstes Viertel"], [180, "Vollmond"], [270, "Letztes Viertel"]];
+    for (let i = 1; i < pkt.length; i++) {
+      const p0 = pkt[i - 1], p1 = pkt[i];
+      for (const [ziel, art] of VIERTEL) {
+        const rel = (ph) => rev(ph - ziel + 180) - 180;
+        if (rel(p0.ph) < 0 && rel(p1.ph) >= 0) dazu(halbieren(p0.t, p1.t, (c) => rel(werte(c).ph) < 0), art);
+      }
+      if ((p0.lat < 0) !== (p1.lat < 0)) dazu(halbieren(p0.t, p1.t, (c) => (werte(c).lat < 0) === (p0.lat < 0)), p1.lat > 0 ? "aufsteigender Knoten" : "absteigender Knoten");
+      if (Math.floor(p0.sl / 30) !== Math.floor(p1.sl / 30)) {
+        const t = halbieren(p0.t, p1.t, (c) => Math.floor(werte(c).sl / 30) === Math.floor(p0.sl / 30));
+        const n = zeichenVon(Math.floor(p1.sl / 30) * 30 + 1).name;
+        dazu(t, "Sonne", `Sonne tritt in ${n === "Zwillinge" || n === "Fische" ? "die" : n === "Jungfrau" || n === "Waage" ? "die" : "den"} ${n}`);
+      }
+      if (i < pkt.length - 1) {
+        const p2 = pkt[i + 1];
+        if (p1.dist < p0.dist && p1.dist <= p2.dist) dazu(extrem(p0.t, p2.t, (c) => werte(c).dist, false), "Erdnähe", "Mond in Erdnähe");
+        if (p1.dist > p0.dist && p1.dist >= p2.dist) dazu(extrem(p0.t, p2.t, (c) => werte(c).dist, true), "Erdferne", "Mond in Erdferne");
+        const tief = p1.de < p0.de && p1.de <= p2.de, hoch = p1.de > p0.de && p1.de >= p2.de;
+        if (tief || hoch) { const t = extrem(p0.t, p2.t, (c) => dekl(new Date(c)), hoch); if (imTag(t)) bahnWechsel = { zeit: new Date(t), auf: tief }; }
+      }
+    }
+    liste.sort((x, y) => x.zeit - y.zeit);
+    return { liste, bahnWechsel };
   }
   return { tag, ZEICHEN, phase, mondLaenge: (date) => mond(tage(date)).lon };
 })();
@@ -868,23 +911,37 @@ function chrVermutlichLebend(p) {   // v435/v436: gleiche Regel wie in der App �
   return !!j && j >= (typeof LEBEND_AB_JAHR !== "undefined" ? LEBEND_AB_JAHR : 1920);
 }
 const chrUhr = (d) => d ? d.toLocaleTimeString("de-AT", { timeZone: "Europe/Vienna", hour: "2-digit", minute: "2-digit" }) : "–";
+// v442: richtige Fälle („in der Waage“, „in den Zwillingen“, „im Schützen“)
+const MOND_IN = { Zwillinge: "in den Zwillingen", Jungfrau: "in der Jungfrau", Waage: "in der Waage", Fische: "in den Fischen", Löwe: "im Löwen", Schütze: "im Schützen" };
+const mondIn = (name) => MOND_IN[name] || `im ${name}`;
 function mondZeileHtml(m) {   // v420: Symbole wie im Vorarlberger Kalender, jeweils mit Text
   const phase = m.ereignis === "Neumond" ? ["●", "Neumond"] : m.ereignis === "Vollmond" ? ["○", "Vollmond"] : m.zunehmend ? ["☽\uFE0E", "zunehmender Mond"] : ["☾\uFE0E", "abnehmender Mond"];
-  const bahn = m.aufsteigend ? ["◡", "aufsteigender Mond (obsigend)"] : ["⌒", "absteigender Mond (nidsigend)"];
+  const ev = m.ereignisse || [];
+  const pe = ev.find((x) => x.art === "Neumond" || x.art === "Vollmond");
+  const bahnText = (auf) => auf ? "aufsteigender Mond (obsigend, „über sich“)" : "absteigender Mond (nidsigend, „unter sich“)";
+  // v442: Wendet die Mondbahn an diesem Tag, steht die Uhrzeit dabei
+  const bahn = m.bahnWechsel
+    ? [m.bahnWechsel.auf ? "◡" : "⌒", `${bahnText(!m.bahnWechsel.auf)}, ab ${chrUhr(m.bahnWechsel.zeit)} Uhr <strong>${m.bahnWechsel.auf ? "aufsteigend" : "absteigend"}</strong>`]
+    : [m.aufsteigend ? "◡" : "⌒", bahnText(m.aufsteigend)];
   const zeile = (sym, text, klasse = "") => `<div class="tb-mz ${klasse}"><span class="tb-mz__sym" aria-hidden="true">${sym}</span><span>${text}</span></div>`;
-  const wechsel = m.wechsel ? `<br><span class="tb-klein">ab ${chrUhr(m.wechsel.zeit)} Uhr im <strong>${chrEsc(m.wechsel.nach.name)}</strong> ${m.wechsel.nach.bild} – ${chrEsc(m.wechsel.nach.art)}</span>` : "";
+  // v442: Bei Zeichenwechsel zuerst das Zeichen vom Tagesbeginn, dann ab wann das neue gilt
+  const z0 = m.wechsel ? m.wechsel.von : m.zeichen;
+  const wechsel = m.wechsel ? `<br><span class="tb-klein">ab ${chrUhr(m.wechsel.zeit)} Uhr ${mondIn(m.wechsel.nach.name).replace(/\S+$/, (w) => `<strong>${chrEsc(w)}</strong>`)} ${m.wechsel.nach.bild} – ${chrEsc(m.wechsel.nach.art)}</span>` : "";
+  const weitere = ev.filter((x) => x !== pe).map((x) => `${chrEsc(x.text)} ${chrUhr(x.zeit)} Uhr`);
   return `<div class="tb-mond">
-    ${zeile(phase[0], `<strong>${phase[1]}</strong>`)}
+    ${zeile(phase[0], `<strong>${phase[1]}</strong>${pe ? ` um ${chrUhr(pe.zeit)} Uhr` : ""}`)}
     ${zeile(bahn[0], bahn[1])}
-    ${zeile(m.zeichen.bild, `Mond im <strong>${chrEsc(m.zeichen.name)}</strong> <span class="tb-glyph">${m.zeichen.symbol}</span> – ${chrEsc(m.zeichen.art)}${wechsel}`)}
+    ${zeile(z0.bild, `Mond ${mondIn(z0.name).replace(/\S+$/, (w) => `<strong>${chrEsc(w)}</strong>`)} <span class="tb-glyph">${z0.symbol}</span> – ${chrEsc(z0.art)}${wechsel}`)}
+    ${weitere.length ? zeile("✦", weitere.join(" · "), "tb-mz--klein") : ""}
     ${zeile("🌙", `Mondaufgang ${chrUhr(m.mondAuf)} · Monduntergang ${chrUhr(m.mondUnter)}`, "tb-mz--klein")}
     ${zeile("☀️", `Sonnenaufgang ${chrUhr(m.sonneAuf)} · Sonnenuntergang ${chrUhr(m.sonneUnter)} <span class="tb-ort">(Bartholomäberg)</span>`, "tb-mz--klein")}
   </div>`;
 }
 // Ganzes Tagesblatt. opt: { leser: bool, ich: {id,name}|null, beziehung: (personId) => "Urgroßmutter"|null }
 function tagesblattAuswerten(d, opt = {}) {
-  const heute = tagesMonatTag();
-  const r = { datum: heute, mond: MOND.tag(heute.jahr, heute.monat, heute.tag) };
+  // v442: opt.datum = beliebiger Tag ({jahr, monat, tag, md}) zum Vor- und Zurückblättern; ohne Angabe heute
+  const heute = opt.datum || tagesMonatTag();
+  const r = { datum: heute, istHeute: heute.md === tagesMonatTag().md && heute.jahr === tagesMonatTag().jahr, mond: MOND.tag(heute.jahr, heute.monat, heute.tag) };
   const nt = namenstagFuer(heute.md);
   if (nt) {
     const namen = new Set(nt.namen);
@@ -920,15 +977,16 @@ function tagesblattHtml(r) {
   const zeile = (x) => {
     const [icon, art] = x.art === "geheiratet" ? ["💍", "Hochzeitstag"] : x.art === "geboren" ? ["🎂", "Geburtstag"] : ["🕯️", "Todestag"];
     const wer = x.art === "geheiratet" ? `${chrLink(x.p)} und ${chrLink(x.p2)}${hochzeit(x.jahre)}` : chrLink(x.p);
-    return `<li><span class="tb-icon" aria-hidden="true">${icon}</span><span><strong>${art}</strong> · heute vor ${x.jahre} Jahren (${x.jahr}): ${wer}</span></li>`;
+    const vor = x.jahre === 0 ? "in diesem Jahr" : `${r.istHeute ? "heute " : ""}vor ${x.jahre} ${x.jahre === 1 ? "Jahr" : "Jahren"}`;
+    return `<li><span class="tb-icon" aria-hidden="true">${icon}</span><span><strong>${art}</strong> · ${vor} (${x.jahr}): ${wer}</span></li>`;
   };
   const nt = r.namenstag;
   return `<p class="tb-datum">${chrEsc(datum)}</p>
     ${mondZeileHtml(r.mond)}
     ${namenstagZeileHtml(nt)}
     ${r.regel ? `<p class="tb-regel">🌾 <em>${chrEsc(r.regel)}</em></p>` : ""}
-    <h3 class="tb-titel">Heute vor … Jahren</h3>
-    ${r.ereignisse.length ? `<ul class="heute-liste tb-liste">${r.ereignisse.map(zeile).join("")}</ul>` : '<p class="tb-klein">Heute gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>'}
+    <h3 class="tb-titel">${r.istHeute ? "Heute" : "An diesem Tag"} vor … Jahren</h3>
+    ${r.ereignisse.length ? `<ul class="heute-liste tb-liste">${r.ereignisse.map(zeile).join("")}</ul>` : `<p class="tb-klein">${r.istHeute ? "Heute" : "An diesem Tag"} gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>`}
     <p class="tb-hinweis">Mondangaben berechnet nach altem Mondkalender (Tierkreis wie im Vorarlberger Kalender) – überliefertes Brauchtum, keine Empfehlung.</p>`;
 }
 const TAGESNAMEN = {"01-01": "Maria, Wilhelm","01-02": "Basilius, Dietmar, Gregor","01-03": "Genoveva, Odilo","01-04": "Angela, Marius, Rüdiger, Titus","01-05": "Emilia, Johann","01-06": "Kaspar, Melchior, Balthasar, Erminold","01-07": "Raimund, Valentin","01-08": "Erhard, Gudula, Severin","01-09": "Adrian, Alice, Eberhard, Julian","01-10": "Leonie, Paulus","01-11": "Paulin, Paulinus, Theodosius","01-12": "Ernst, Tatjana, Xenia","01-13": "Hilarius, Hilmar, Jutta, Remigius","01-14": "Engelmar, Felix, Rainer","01-15": "Arnold, Maurus, Romedius","01-16": "Dietwald, Marcel, Tilman","01-17": "Antonius, Beatrix","01-18": "Margitta, Ulfried, Uwe","01-19": "Agritius, Marius, Martha, Pia","01-20": "Fabian, Sebastian, Ursula, Ute","01-21": "Agnes, Ines, Meinrad","01-22": "Vinzenz","01-23": "Hartmut, Heinrich, Nikolaus","01-24": "Franz, Thurid, Vera","01-25": "Paulus, Wolfram","01-26": "Paula, Timotheus, Titus","01-27": "Angela, Julian","01-28": "Karoline, Manfred, Thomas","01-29": "Gerhard, Gerd, Josef, Valerius","01-30": "Adelgunde, Martina","01-31": "Johannes, Marcella","02-01": "Brigitta, Katharina, Reginald, Severus","02-02": "Bodo, Mariä Lichtmess","02-03": "Ansgar, Blasius, Oskar","02-04": "Andreas, Rabanus, Veronika","02-05": "Agatha, Albuin","02-06": "Dorothea, Doris, Paul","02-07": "Ava, Richard","02-08": "Hieronymus, Josefina, Josefine","02-09": "Alto, Anna Katharina, Apollonia","02-10": "Scholastika, Siegmar","02-11": "Anselm","02-12": "Benedikt, Eulalia, Gregor","02-13": "Adolf, Christina, Irmhild","02-14": "Cyrill, Method, Valentin","02-15": "Georgia, Siegfried","02-16": "Adalbert, Juliana, Liane, Philippa","02-17": "Alexius, Benignus, Bonosus","02-18": "Constanze, Simon, Simone","02-19": "Hadwig, Irmgard, Irma","02-20": "Corona, Falko, Jacinta","02-21": "Enrica, Gunthild, Petrus","02-22": "Isabella","02-23": "Raffaela, Romana","02-24": "Matthias","02-25": "Walburga","02-26": "Edigna, Gerlinde, Ottokar","02-27": "Baldur, Marko, Markward, Gabriel","02-28": "Oswald, Roman, Silvana","02-29": "Hilarius, Oswald","03-01": "Albin, Leontina, Roger","03-02": "Agnes, Karl","03-03": "Friedrich, Camilla, Kunigunde","03-04": "Edwin, Humbert, Kasimir","03-05": "Dietmar, Jeremia, Olivia","03-06": "Fridolin, Nicola, Rosa","03-07": "Felicitas, Perpetua, Reinhard","03-08": "Gerhard, Johannes","03-09": "Bruno, Franziska","03-10": "Emil, Gustav","03-11": "Alram, Rosina","03-12": "Almut, Beatrix, Serafina","03-13": "Judith, Leander, Pauline","03-14": "Eva, Evelyn, Mathilde","03-15": "Klemens Maria, Luise","03-16": "Eduard, Herbert","03-17": "Gertraud, Gertrud, Patrick","03-18": "Cyrill, Edward, Sibylle","03-19": "Josef, Josefa, Josefine","03-20": "Claudia, Wolfram","03-21": "Alexandra, Axel, Christian, Emilia","03-22": "Klemens, Elmar, Lea","03-23": "Otto, Rebekka, Toribio","03-24": "Elias, Karin, Katharina","03-25": "Judith, Lucia","03-26": "Lara, Ludger","03-27": "Ernst, Frowin, Heimo","03-28": "Guntram, Ingbert","03-29": "Berthold, Helmut, Ludolf","03-30": "Amadeus, Dodo","03-31": "Benjamin, Cornelia","04-01": "Hugo, Irene, Irina","04-02": "Franz, Mirjam, Sandra","04-03": "Richard, Sixtus","04-04": "Isidor, Konrad","04-05": "Crescentia, Vinzenz","04-06": "Notker, Wilhelm","04-07": "Johann","04-08": "Beate, Rose-Marie, Walter","04-09": "Casilda, Waltraud","04-10": "Ezechiel, Gernot, Holda","04-11": "Hildebrand, Stanislaus","04-12": "Herta, Julius, Zeno","04-13": "Hermenegild, Ida, Martin","04-14": "Elmo, Erna, Ernestine","04-15": "Anastasia, Damian","04-16": "Bernadette, Magnus","04-17": "Eberhard, Rudolph","04-18": "Werner, Wigbert","04-19": "Gerold, Leo, Marcel","04-20": "Hildegund, Odetta, Wilhelm","04-21": "Anselm, Konrad","04-22": "Alfred, Kaj, Leonidas","04-23": "Adalbert, Georg, Jörg, Jürgen","04-24": "Egbert, Fidelis, Wilfried","04-25": "Erwin, Markus","04-26": "Helene, Trudpert","04-27": "Petrus, Zita","04-28": "Hugo, Ludwig, Pierre","04-29": "Katharina, Roswitha","04-30": "Pauline, Pius, Silvio","05-01": "Josef","05-02": "Athanasius, Boris, Siegmund","05-03": "Jakob, Philipp, Viola","05-04": "Florian, Guido, Valeria","05-05": "Godehard, Jutta, Sigrid","05-06": "Antonia, Britto, Gundula","05-07": "Gisela, Helga, Notker, Silke","05-08": "Ida, Klara, Ulla, Ulrike","05-09": "Beatus, Caroline, Volkmar","05-10": "Gordian, Isidor, Liliana","05-11": "Gangolf, Joachim, Mamertus","05-12": "Pankraz, Pankratius","05-13": "Servatius","05-14": "Bonifatius, Christian","05-15": "Hertraud, Rupert, Sonja, Sophie","05-16": "Adolf, Johann","05-17": "Dietmar, Pascal, Walter","05-18": "Erich, Erika, Felix, Johannes","05-19": "Ivo, Kuno, Yvonne","05-20": "Bernhardin, Elfriede, Mira","05-21": "Christoph, Constantin, Josef","05-22": "Julia, Ortwin, Rita","05-23": "Alma, Desiree, Renate","05-24": "Dagmar, Esther","05-25": "Beda, Gregor, Magdalena","05-26": "Alwin, Philipp","05-27": "August, Bruno, Randolph","05-28": "German, Wilhelm","05-29": "Erwin, Irmtraud, Maximin","05-30": "Ferdinand, Johanna, Otto","05-31": "Helma, Mechthild, Petra","06-01": "Justin, Silvana, Simeon","06-02": "Armin, Erasmus, Marcel, Petrus","06-03": "Hildburg, Karl, Silvia","06-04": "Christa, Klothilde","06-05": "Erika, Winfried","06-06": "Bertrand, Kevin, Norbert","06-07": "Anita, Gottlieb, Robert","06-08": "Elga, Maria, Medardus","06-09": "Annamaria, Ephraim, Grazia","06-10": "Bardo, Diana, Heinrich, Heinz","06-11": "Alice, Barnabas, Paula","06-12": "Florinda, Guido, Leo","06-13": "Antonius, Bernhard","06-14": "Hartwig, Meinrad","06-15": "Gebhard, Lothar, Veit","06-16": "Benno, Luitgard, Quirin","06-17": "Adolf, Alena, Volker","06-18": "Elisabeth, Ilsa, Marina","06-19": "Juliana, Romuald","06-20": "Adalbert, Florentina","06-21": "Alban, Alois, Aloisia, Ralf","06-22": "Paulinus, Thomas","06-23": "Edeltraud, Marion, Ortrud","06-24": "Johannes, Reingard","06-25": "Dorothea, Eleonora, Ella","06-26": "Anthelm, Vigilius","06-27": "Cyrill, Heimo, Hemma, Maxim","06-28": "Ekkehard, Harald, Irenäus","06-29": "Gero, Paul, Peter","06-30": "Bertram, Ehrentrud, Otto","07-01": "Aaron, Dietrich, Otto, Theobald","07-02": "Wiltrud","07-03": "Günther, Ramona, Thomas","07-04": "Berta, Elisabeth, Ulrich","07-05": "Albrecht, Antonius, Letizia","07-06": "Goar, Isaias, Marietta","07-07": "Edda, Firmin, Willibald","07-08": "Amalia, Edgar, Kilian","07-09": "Augustin","07-10": "Engelbert, Knud, Raphael","07-11": "Benedikt, Olga, Oliver","07-12": "Felix, Henriette, Siegbert","07-13": "Arno, Heinrich, Kunigunde","07-14": "Goswin, Kamillus, Roland","07-15": "Bonaventura, Egon, Waldemar","07-16": "Irmgard","07-17": "Charlotte, Donata, Gabriella","07-18": "Arnulf, Friedrich","07-19": "Bernulf, Marina, Poppo, Reto","07-20": "Apollinaris, Bernhard, Margaretha","07-21": "Daniel, Daniela, Julia, Laurentius","07-22": "Maria Magdalena","07-23": "Birgitta, Birgit, Liborius","07-24": "Christoph","07-25": "Jakobus, Thomas, Valentina","07-26": "Anna, Gloria, Joachim","07-27": "Berthold, Natalie, Pantaleon","07-28": "Adele, Beatus, Innozenz","07-29": "Ladislaus, Martha, Olaf","07-30": "Ingeborg, Inga, Petrus","07-31": "Hermann, Ignatius, Justinus","08-01": "Alfons, Peter","08-02": "Eusebius, Julian, Petrus","08-03": "August, Lydia, Nikodemus","08-04": "Johannes, Rainer","08-05": "Oswald","08-06": "Gilbert","08-07": "Afra, Albert, Cajetan","08-08": "Cyriak, Dominik, Elgar","08-09": "Edith","08-10": "Astrid, Laurenz, Lorenz","08-11": "Klara, Susanna","08-12": "Karl, Radegunde","08-13": "Cassian, Hippolyt, Marko, Pontianus","08-14": "Maximilian, Meinhard","08-15": "Mariä Himmelfahrt, Tarsitius","08-16": "Alfried, Rochus, Stefan","08-17": "Gudrun, Hyazinth, Janine","08-18": "Claudia, Helena","08-19": "Johann, Julius, Sebald","08-20": "Bernhard, Bernd, Ronald","08-21": "Maximilian, Pius","08-22": "Regina","08-23": "Isolde, Rosa, Zachäus","08-24": "Bartholomäus, Michaela","08-25": "Elvira, Josef, Ludwig","08-26": "Gregor, Miriam, Teresa","08-27": "Gebhard, Monika, Vivian","08-28": "Adelinde, Aline, Augustin","08-29": "Johannes","08-30": "Felix, Heribert, Rebekka","08-31": "Paulinus, Raimund","09-01": "Ägidius, Ruth, Verena","09-02": "Ingrid, René, Salomon","09-03": "Gregor, Silvia, Sophie","09-04": "Ida, Iris, Irmgard, Rosalia","09-05": "Roswitha, Teresa","09-06": "Bertram, Gundolf, Magnus","09-07": "Otto, Ralph, Regina","09-08": "Adrian, Mariä Geburt","09-09": "Edgar, Otmar","09-10": "Carlo, Diethard, Isabella","09-11": "Felix, Maternus, Regula","09-12": "Gerfried, Maria","09-13": "Johann, Notburga, Tobias","09-14": "Albert, Cornelius","09-15": "Dolores, Melitta","09-16": "Edith, Ludmilla, Mechthild","09-17": "Ariane, Hildegard, Robert","09-18": "Herlinde, Lambert","09-19": "Igor, Januarius","09-20": "Susanne","09-21": "Deborah, Jonas, Matthäus","09-22": "Emmeram, Mauritius","09-23": "Gerhild, Linus, Thekla","09-24": "Gerhard, Hermann, Rupert, Virgil","09-25": "Irmfried, Serge","09-26": "Cosima, Damian, Kosmas","09-27": "Dietrich, Hiltrud, Vinzenz","09-28": "Giselher, Lioba, Thekla, Wenzel","09-29": "Gabriel, Michael, Michaela, Rafael","09-30": "Hieronymus, Urs, Viktor","10-01": "Remigius","10-02": "Gideon","10-03": "Bianca, Ewald, Udo","10-04": "Aurea, Edwin, Franz","10-05": "Herwig, Meinolf","10-06": "Adalbero, Bruno, Melanie","10-07": "Jörg, Justina, Rosa Maria","10-08": "Felix, Günther, Simeon","10-09": "Dionys, Günter, Sara, Johannes","10-10": "Gereon, Samuel, Viktor","10-11": "Bruno, Jakob","10-12": "Edwin, Gottfried, Maximilian","10-13": "Eduard, Gerald","10-14": "Burkhard, Kallixtus","10-15": "Aurelia, Theresia","10-16": "Gallus, Hedwig, Margareta","10-17": "Anselm, Ignatius","10-18": "Justus, Lukas","10-19": "Isaak, Johannes, Paul, Petrus","10-20": "Irina, Vitalis, Wendelin","10-21": "Karl, Ursula, Ulla","10-22": "Cordula, Ingbert, Salome","10-23": "Johannes, Severin, Uta","10-24": "Alois, Aloisia, Anton, Armella","10-25": "Krispin, Krispinian","10-26": "Albin, Amand, Wigand","10-27": "Christa, Sabina, Wolfhard","10-28": "Simon, Thaddäus","10-29": "Ermelinda, Melinda","10-30": "Alfons, Angelo, Dieter","10-31": "Quentin, Wolfgang","11-01": "Allerheiligen, Arthur, Harald, Otmar, Rupert","11-02": "Allerseelen, Angela, Margarethe, Tobias","11-03": "Hubert, Martin, Pirmin, Rupert","11-04": "Karl, Karla, Modesta","11-05": "Bernhard, Berthild, Emmerich","11-06": "Christine, Leonhard, Rudolf","11-07": "Carina, Engelbert, Willibrord","11-08": "Gottfried, Willehad","11-09": "Herfried, Roland, Theodor","11-10": "Andrea, Andreas, Jens, Leo","11-11": "Martin, Menas, Senta","11-12": "Emil, Josaphat, Kunibert","11-13": "Eugen, Livia, Stanislaus","11-14": "Nikolaus, Sidonia","11-15": "Albert, Leopold, Leopoldine","11-16": "Margareta, Otmar","11-17": "Gertrud, Hilda, Florin","11-18": "Odo, Philippine","11-19": "Elisabeth, Bettina, Lisa","11-20": "Bernward, Edmund, Korbinian","11-21": "Amalie","11-22": "Cäcilia, Salvator","11-23": "Klemens, Columban, Detlef","11-24": "Albert, Flora","11-25": "Katharina, Kathrin, Katja","11-26": "Anneliese, Gebhard, Konrad","11-27": "Albrecht, Brunhilde, Uta","11-28": "Berta, Gunther, Jakob","11-29": "Christine, Friedrich, Friederike","11-30": "Andreas, Andrea, Volkert","12-01": "Blanka, Eligius, Natalie","12-02": "Bibiana, Jan, Lucius","12-03": "Emma, Franz Xaver","12-04": "Adolf, Barbara, Johannes","12-05": "Anno, Gerald, Niels, Reinhard","12-06": "Denise, Henrike, Nikolaus","12-07": "Ambrosius, Benedikte","12-08": "Mariä Empfängnis, Edith, Elfriede","12-09": "Liborius, Reinmar, Valerie","12-10": "Angelina, Bruno, Emma, Herbert","12-11": "Arthur, Damasus, Tassilo","12-12": "Johanna","12-13": "Jodok, Lucia, Odilia, Ottilie","12-14": "Berthold, Johannes","12-15": "Christiane, Nina","12-16": "Adelheid, Heidi, Elke","12-17": "Jolanda, Lazarus, Viviana","12-18": "Philipp, Wunibald","12-19": "Benjamin, Susanne","12-20": "Eike, Holger, Julius, Regina","12-21": "Hagar, Peter","12-22": "Jutta","12-23": "Viktoria","12-24": "Adam, Eva","12-25": "Christtag, Anastasia, Eugenia, Natalis","12-26": "Stephan, Stephanie","12-27": "Fabiola, Johannes","12-28": "Unschuldige Kinder","12-29": "David, Jonathan, Thomas","12-30": "Felix, Lothar","12-31": "Melanie, Silvester"};   // v421: Namenstage aller Tage (Übersicht meinbezirk.at, ergänzt um Hochfeste)
