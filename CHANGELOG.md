@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v443: Fehlende Daten schätzen (schaetzung.js, nur Eigentümer, Reiter Verlauf): Heirat aus erstem Kind (Abstand aus eigenem Bestand gelernt, Untergrenzen Alter und Tod früherer Ehepartner), Geburt aus Heirat/Kindern/Geschwistern/Eltern, Tod zwischen letztem Ereignis und Wiederheirat des Partners; Namensfilter.
 - v442: Tagesblatt blättern (‹ ›, Wischen, Pfeiltasten, „Zurück zu heute“); obsigend/nidsigend nach Wendepunkt der Mondbahn statt Tierkreis (Abgleich Kalender Jänner 2027); Mondviertel, Erdnähe/-ferne, Knoten, Sonne ins Zeichen mit Uhrzeit; Zeichen bei Wechsel richtig benannt; „in der Waage“, „in den Zwillingen“.
 - v441: Bestand-Filter (Eigentümer): Geburt bekannt ohne Sterbedatum (nach Geburt sortiert), nur Sterbejahr (nach Sterbejahr sortiert).
 - v440: Angeheiratete Verwandtschaft in Worten (Ehemann der Tante, Tante der Ehefrau, Schwager über Ehepartner, Stief-/Schwiegerverwandte), nur nähere Verwandtschaft.

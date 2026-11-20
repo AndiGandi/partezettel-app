@@ -2346,3 +2346,12 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .tb-zurueck { text-align: center; margin: -4px 0 10px; }
 .tb-zurueck .btn { width: auto; font-size: .92rem; padding: 6px 14px; }
 .is-anderer-tag .tb-kalenderblatt span { background: #8a6d3b; }
+
+/* v443: Fehlende Daten schätzen */
+.schaetz-filter { flex: 1 1 14rem; min-width: 0; padding: 8px 12px; border: 1px solid var(--line, #d8d2c6); border-radius: 10px; font-size: 16px; }
+.schaetz-fund { grid-template-columns: minmax(200px, 1.2fr) minmax(200px, 2fr); }
+.schaetz-zeitraum { color: #2b2722; }
+.schaetz-zeitraum strong { color: var(--green-dark, #2f5e47); font-size: 1.05em; }
+.schaetz-hinweis { color: #8a6d3b; }
+.schaetz-fund.is-widerspruch .schaetz-zeitraum { color: #a33; font-weight: 600; }
+@media (max-width: 760px) { .schaetz-fund { grid-template-columns: 1fr; } }
