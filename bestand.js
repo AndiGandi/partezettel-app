@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 443
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -1414,7 +1414,17 @@ function erstellePersonenKarte(p) {
   return karte;
 }
 
+// v443: Fingerabdruck einer Karte – ändert sich nichts, wird die Karte nicht neu befüllt
+function personenKartenSignatur(p) {
+  const v = personenVerwandtschaftCache.get(p.id);
+  const l = typeof stammlinienInfo !== "undefined" ? stammlinienInfo.get(p.id) : null;
+  const k = typeof kbUebersicht !== "undefined" ? kbUebersicht.get(p.id) : null;
+  return `${JSON.stringify(p)}|${l ? JSON.stringify(l) : ""}|${k ? JSON.stringify(k) : ""}|${v ? `${v.eltern?.size}/${v.ehePartnerschaften?.size}/${v.kinder?.size}` : ""}|${rolleIstEigentuemer() ? 1 : 0}|${new Date().toDateString()}`;
+}
 function aktualisierePersonenKarte(karte, p) {
+  const signatur = personenKartenSignatur(p);
+  if (karte.signatur === signatur) { karte.person = p; setzeSchluesselfotoInKarte(p.id); return; }
+  karte.signatur = signatur;
   karte.person = p;
   karte.li.dataset.personId = p.id;
   karte.name.textContent = `${p.vorname || ""} ${p.nachname || ""}`.trim();

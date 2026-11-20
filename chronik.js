@@ -130,7 +130,15 @@ const ZEITGESCHEHEN = [
 ];
 
 /* ---------- Hilfen ---------- */
-const chrDatum = (v) => { if (!v) return null; const d = new Date(`${String(v).slice(0, 10)}T00:00:00`); return isNaN(d) ? null : d; };
+// v443: gelesene Daten merken – die Chronik fragt dieselben Daten zehntausendfach ab
+const chrDatumCache = new Map();
+const chrDatum = (v) => {
+  if (!v) return null;
+  const k = String(v).slice(0, 10);
+  let d = chrDatumCache.get(k);
+  if (d === undefined) { d = new Date(`${k}T00:00:00`); if (isNaN(d)) d = null; else Object.freeze(d); chrDatumCache.set(k, d); }
+  return d;   // gemeinsames, nur lesbares Datum (wird nirgends verändert)
+};
 const chrJahr = (v) => { const d = chrDatum(v); return d ? d.getFullYear() : (v && /^\d{4}$/.test(String(v)) ? Number(v) : null); };
 const chrGebJahr = (p) => chrJahr(p?.geburtsdatum) || (p?.geburtsjahr ? Number(p.geburtsjahr) : null);
 const chrTodJahr = (p) => chrJahr(p?.sterbedatum) || (p?.sterbejahr ? Number(p.sterbejahr) : null);

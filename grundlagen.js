@@ -1,5 +1,5 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 443
 
 
 // ==========================================================
@@ -63,6 +63,8 @@ const PersonSuche = (() => {
     };
   }
 
+  // v443: ein gemeinsamer Vergleicher ist auf dem iPad um ein Vielfaches schneller als localeCompare(…, Optionen)
+  const vergleich = new Intl.Collator("de", { sensitivity: "base" }).compare;
   const sortSchluessel = (p) => String(p?.nachname || p?.Ledigenname || p?.ledigenname || p?.geburtsname || "").trim();
   // Eine Sortierung für alle: Nachname (ersatzweise Ledigenname), Vorname, Geburtsjahr; ohne Namen zuletzt.
   function sort(a, b) {
@@ -70,9 +72,9 @@ const PersonSuche = (() => {
     const kb = sortSchluessel(b);
     if (!ka && kb) return 1;
     if (ka && !kb) return -1;
-    const n = ka.localeCompare(kb, "de", { sensitivity: "base" });
+    const n = vergleich(ka, kb);
     if (n) return n;
-    const v = String(a?.vorname || "").trim().localeCompare(String(b?.vorname || "").trim(), "de", { sensitivity: "base" });
+    const v = vergleich(String(a?.vorname || "").trim(), String(b?.vorname || "").trim());
     if (v) return v;
     const ay = Number(jahrVon(a?.geburtsdatum, a?.geburtsjahr)) || 0;
     const by = Number(jahrVon(b?.geburtsdatum, b?.geburtsjahr)) || 0;
@@ -132,14 +134,23 @@ const PersonSuche = (() => {
 })();
 
 // ---------- Sichtbares Debug-Log (funktioniert ohne Mac/Web-Inspector) ----------
+// v443: Zeilen sammeln und höchstens einmal pro Bild schreiben, auf 400 Zeilen begrenzt
+// (vorher wurde bei jeder Meldung der ganze, immer längere Text neu gesetzt und das Layout neu berechnet).
+let debugLogZeilen = [], debugLogGeplant = false;
 function debugLog(msg) {
-  const el = document.getElementById("debug-log");
   const zeit = new Date().toLocaleTimeString("de-DE");
   console.log("[Partezettel]", msg);
-  if (el) {
-    el.textContent += `[${zeit}] ${msg}\n`;
-    el.scrollTop = el.scrollHeight;
-  }
+  debugLogZeilen.push(`[${zeit}] ${msg}`);
+  if (debugLogZeilen.length > 400) debugLogZeilen = debugLogZeilen.slice(-400);
+  if (debugLogGeplant) return;
+  debugLogGeplant = true;
+  requestAnimationFrame(() => {
+    debugLogGeplant = false;
+    const el = document.getElementById("debug-log");
+    if (!el) return;
+    el.textContent = debugLogZeilen.join("\n") + "\n";
+    if (el.offsetParent) el.scrollTop = el.scrollHeight;   // nur wenn sichtbar
+  });
 }
 
 // ---------- Temporäre Egress-Messung (v165) ----------

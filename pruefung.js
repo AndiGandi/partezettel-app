@@ -1,7 +1,7 @@
-// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 442
+// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 443
 // Sucht mögliche Dubletten und unwahrscheinliche Angaben. Was als „stimmt so“ oder „verschiedene Personen“
 // markiert ist (Tabelle pruef_ausnahmen, Supabase Paket 12), erscheint bei späteren Prüfungen nicht mehr.
-// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 442
+// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 443
 
 const PRUEF_REGELN = {
   dublette:             { sym: "👥", titel: "Mögliche Dubletten", text: "Gleicher Vorname, gleicher Familienname und gleiches Geburts- oder Sterbedatum.", ok: "✓ Verschiedene Personen" },

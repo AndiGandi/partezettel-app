@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 443
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -422,7 +422,7 @@ function sucheXAnbringen(input) {
 }
 function sucheXAlle(wurzel = document) { wurzel.querySelectorAll?.('input[type="search"]').forEach(sucheXAnbringen); }
 sucheXAlle();
-new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.matches?.('input[type="search"]')) sucheXAnbringen(n); else sucheXAlle(n); } })
+new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.tagName === "INPUT") { if (n.type === "search") sucheXAnbringen(n); } else if (n.getElementsByTagName("input").length) sucheXAlle(n); } })   // v443: schnelle Vorprüfung
   .observe(document.body, { childList: true, subtree: true });
 
 
@@ -474,9 +474,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 442;   // bei jeder Version mit hochzählen
+const APP_VERSION = 443;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [443, ["Schneller: Stammbaum, Chronik, Sortieren und der Wechsel zurück in den Bestand brauchen nur noch etwa die Hälfte der Zeit"]],
   [441, ["Bestand (Eigentümer): Anzeigen „Geburt bekannt, ohne Sterbedatum“ und „nur Sterbejahr“ – nach Alter sortiert"]],
   [440, ["Angeheiratete Verwandte in Worten: „Das ist der Ehemann deiner Tante“, „die Tante deiner Ehefrau“, Schwager, Schwiegermutter, Stiefvater …"]],
   [439, ["🔍 Datenprüfung (nur Eigentümer): mögliche Dubletten und unwahrscheinliche Angaben, „Stimmt so“ blendet Geprüftes dauerhaft aus, Dubletten zusammenführen"]],

@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 443
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -1212,12 +1212,13 @@ function lebensalterAnzeige(person) {
 function sortierNachnameSchluessel(p) {
   return PersonSuche.sortSchluessel(p);
 }
+const sortierVergleicher = new Intl.Collator("de", { sensitivity: "base" }).compare;   // v443: schneller als localeCompare mit Optionen
 function sortierNameVergleich(a, b) {
   const ka = sortierNachnameSchluessel(a), kb = sortierNachnameSchluessel(b);
   if (!ka && kb) return 1;
   if (ka && !kb) return -1;
-  const nc = ka.localeCompare(kb, "de", { sensitivity: "base" });
-  return nc || String(a.vorname || "").localeCompare(String(b.vorname || ""), "de", { sensitivity: "base" }) || String(a.id || "").localeCompare(String(b.id || ""));
+  const nc = sortierVergleicher(ka, kb);
+  return nc || sortierVergleicher(String(a.vorname || ""), String(b.vorname || "")) || (String(a.id || "") < String(b.id || "") ? -1 : String(a.id || "") > String(b.id || "") ? 1 : 0);
 }
 // Zeitstempel robust lesen (Safari/WebKit verträgt "2026-09-28 06:16:42+00" nicht).
 function sortierZeitstempel(raw) {
@@ -1257,7 +1258,7 @@ function personenVergleich(a, b) {
   if (aMissing && !bMissing) return 1;
   if (!aMissing && bMissing) return -1;
   if (!aMissing && !bMissing) {
-    if (personenSortierung === "familie") cmp = String(av).localeCompare(String(bv), "de", { sensitivity: "base" });
+    if (personenSortierung === "familie") cmp = sortierVergleicher(String(av), String(bv));
     else cmp = av < bv ? -1 : av > bv ? 1 : 0;
     if (cmp) return cmp * personenSortRichtung;
   }

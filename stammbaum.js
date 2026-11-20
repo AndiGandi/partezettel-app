@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 443
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -141,7 +141,7 @@ function treeChildrenForFamily(familyId) {
       if (dateB) return 1;
       const nameA = `${a.person.nachname || ""} ${a.person.vorname || ""}`;
       const nameB = `${b.person.nachname || ""} ${b.person.vorname || ""}`;
-      return nameA.localeCompare(nameB, "de", { sensitivity: "base" });
+      return sortierVergleicher(nameA, nameB);
     });
 }
 
@@ -1561,7 +1561,7 @@ function treeCousinsOf(personId) {
 
   const nachName = (p) => `${p?.nachname || ""} ${p?.vorname || ""}`;
   const sortierer = (x, y) => treeBirthSortKey(x).localeCompare(treeBirthSortKey(y))
-    || nachName(x).localeCompare(nachName(y), "de", { sensitivity: "base" });
+    || sortierVergleicher(nachName(x), nachName(y));
 
   const gruppen = [];
   const ohneKinder = [];
@@ -2641,7 +2641,7 @@ function fillTreePersonSelect(searchValue = "", preferredId = "") {
 function treeClassicPersonSort(aId, bId) {
   const a=treePerson(aId), b=treePerson(bId), da=a?.geburtsdatum||"", db=b?.geburtsdatum||"";
   if(da&&db&&da!==db) return da.localeCompare(db); if(da)return -1; if(db)return 1;
-  return `${a?.nachname||""} ${a?.vorname||""}`.localeCompare(`${b?.nachname||""} ${b?.vorname||""}`,"de",{sensitivity:"base"});
+  return sortierVergleicher(`${a?.nachname||""} ${a?.vorname||""}`, `${b?.nachname||""} ${b?.vorname||""}`);
 }
 
 // v204: fokussierter klassischer Stammbaum mit getrennten Generationsebenen. Genealogie ausschließlich aus
@@ -2772,7 +2772,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=442");
+      treeModul3D = await import("./tree3d.js?v=443");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
