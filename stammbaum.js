@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 444
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 445
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -1495,15 +1495,21 @@ function treeRelationshipResult(aId, bId) {
 function fillTreeRelationshipSelects() {
   const selects = [document.getElementById("tree-relation-person-a"), document.getElementById("tree-relation-person-b")].filter(Boolean);
   const current = selects.map(s => s.value);
-  const personen = [...(treeData.personen || [])].sort(personenAuswahlSortierung);
-  for (const select of selects) {
-    select.innerHTML = '<option value="">— Person auswählen —</option>';
-    for (const p of personen) {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      opt.textContent = treePersonSearchText(p);
-      select.appendChild(opt);
+  // v445: Listen nur neu aufbauen, wenn sich der Personenbestand geändert hat (sonst je ~2500 Einträge pro Aufruf).
+  const quelle = treeData.personen || [];
+  const neuBauen = fillTreeRelationshipSelects.gebautFuer !== quelle || fillTreeRelationshipSelects.anzahl !== quelle.length
+    || selects.some(s => s.options.length !== quelle.length + 1);
+  if (neuBauen) {
+    const personen = [...quelle].sort(personenAuswahlSortierung);
+    const texte = personen.map(p => [p.id, treePersonSearchText(p)]);
+    for (const select of selects) {
+      const fragment = document.createDocumentFragment();
+      fragment.appendChild(new Option("— Person auswählen —", ""));
+      for (const [id, text] of texte) fragment.appendChild(new Option(text, id));
+      select.replaceChildren(fragment);
     }
+    fillTreeRelationshipSelects.gebautFuer = quelle;
+    fillTreeRelationshipSelects.anzahl = quelle.length;
   }
   selects.forEach((s, i) => { if (current[i] && treePerson(current[i])) s.value = current[i]; });
   if (typeof treeRelationSyncInputs === "function") treeRelationSyncInputs();
@@ -2772,7 +2778,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=444");
+      treeModul3D = await import("./tree3d.js?v=445");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

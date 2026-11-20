@@ -2337,3 +2337,9 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .zf-leer{color:#aaa}
 .zf-anders,.zf-anders-muster{background:#fbeeb8;border-radius:3px}
 .personen-mehr{margin-top:.8rem}
+/* v445: Jahr eintippen statt aus langer Liste wählen */
+.jahr-select-versteckt{display:none !important}
+.jahr-eingabe{width:100%;min-width:0;padding:.5rem .45rem;border:1px solid var(--line);border-radius:7px;font-size:16px;background:#fff;color:var(--ink);font-family:inherit;text-align:center;letter-spacing:.04em}
+.jahr-eingabe:disabled{opacity:.5;background:#f3f3ef}
+.jahr-eingabe.ist-ungueltig{border-color:var(--danger,#a33);box-shadow:0 0 0 2px rgba(170,55,55,.14)}
+.date-year-only-field .jahr-eingabe{width:6.5em;flex:0 0 auto}

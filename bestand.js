@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 444
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 445
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -943,7 +943,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   // Protokoll in die Zwischenablage kopieren (zum Weitergeben bei Problemen)
   document.getElementById("debug-copy")?.addEventListener("click", async () => {
-    const text = document.getElementById("debug-log")?.textContent || "";
+    const text = debugLogZeilen.join("\n") + "\n";
     const knopf = document.getElementById("debug-copy");
     try {
       await navigator.clipboard.writeText(text);

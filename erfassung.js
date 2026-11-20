@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 444
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 445
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -432,15 +432,52 @@ function initDatumElemente(tag, monat, jahr) {
   monat.replaceChildren(new Option("Monat", ""));
   MONATE.forEach((m,i)=>monat.appendChild(new Option(m, String(i+1).padStart(2,"0"))));
   jahr.replaceChildren(new Option("Jahr", ""));
-  for(let y=new Date().getFullYear();y>=1600;y--) jahr.appendChild(new Option(String(y), String(y)));
+  for(let y=new Date().getFullYear();y>=1500;y--) jahr.appendChild(new Option(String(y), String(y)));
+  jahrAlsEingabe(jahr);
+}
+// v445: Jahr wird eingetippt statt aus einer Liste mit über 500 Jahren gewählt (auf dem iPad sehr langsam).
+// Die bisherige Auswahlliste bleibt unsichtbar bestehen; alle Programmteile lesen und setzen sie wie bisher.
+function jahrAlsEingabe(sel) {
+  if (!sel || sel.dataset.jahrEingabe) return;
+  sel.dataset.jahrEingabe = "1";
+  const inp = document.createElement("input");
+  inp.type = "text"; inp.inputMode = "numeric"; inp.pattern = "[0-9]*"; inp.maxLength = 4;
+  inp.placeholder = "Jahr"; inp.autocomplete = "off"; inp.className = "jahr-eingabe";
+  inp.setAttribute("aria-label", "Jahr (vierstellig)");
+  sel.after(inp);
+  sel.classList.add("jahr-select-versteckt");
+  const wertDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value");
+  const ausDesc = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "disabled");
+  Object.defineProperty(sel, "value", { configurable: true,
+    get() { return wertDesc.get.call(this); },
+    set(v) { wertDesc.set.call(this, v); inp.value = wertDesc.get.call(this) || ""; inp.classList.remove("ist-ungueltig"); } });
+  Object.defineProperty(sel, "disabled", { configurable: true,
+    get() { return ausDesc.get.call(this); },
+    set(v) { ausDesc.set.call(this, v); inp.disabled = !!v; } });
+  inp.addEventListener("input", () => {
+    const t = inp.value.replace(/\D/g, "").slice(0, 4);
+    if (t !== inp.value) inp.value = t;
+    const gueltig = t.length === 4 && !!sel.querySelector(`option[value="${t}"]`);
+    const neu = gueltig ? t : "";
+    if (wertDesc.get.call(sel) !== neu) {
+      wertDesc.set.call(sel, neu);
+      sel.dispatchEvent(new Event("input", { bubbles: true }));
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    inp.classList.toggle("ist-ungueltig", t.length === 4 && !gueltig);
+  });
+  inp.addEventListener("blur", () => { inp.classList.toggle("ist-ungueltig", !!inp.value && !wertDesc.get.call(sel)); });
+  inp.value = wertDesc.get.call(sel) || "";
+  inp.disabled = ausDesc.get.call(sel);
 }
 function initJahrOnly(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.replaceChildren(new Option("Jahr", ""));
-  for (let y = new Date().getFullYear(); y >= 1600; y--) {
+  for (let y = new Date().getFullYear(); y >= 1500; y--) {
     el.appendChild(new Option(String(y), String(y)));
   }
+  jahrAlsEingabe(el);
 }
 
 function getDatumElemente(tag, monat, jahr) {

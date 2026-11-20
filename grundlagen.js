@@ -1,5 +1,5 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 444
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 445
 
 
 // ==========================================================
@@ -146,12 +146,23 @@ function debugLog(msg) {
   debugLogGeplant = true;
   requestAnimationFrame(() => {
     debugLogGeplant = false;
-    const el = document.getElementById("debug-log");
-    if (!el) return;
-    el.textContent = debugLogZeilen.join("\n") + "\n";
-    if (el.offsetParent) el.scrollTop = el.scrollHeight;   // nur wenn sichtbar
+    // v445: Protokoll nur ins Fenster schreiben, wenn der Bereich aufgeklappt ist (sonst kostet es bei jedem Schritt Zeit).
+    const panel = document.querySelector("details.debug-panel");
+    if (panel && !panel.open) { debugLogVeraltet = true; return; }
+    debugLogZeichnen();
   });
 }
+let debugLogVeraltet = false;
+function debugLogZeichnen() {
+  const el = document.getElementById("debug-log");
+  if (!el) return;
+  debugLogVeraltet = false;
+  el.textContent = debugLogZeilen.join("\n") + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+document.addEventListener("toggle", (e) => {
+  if (e.target?.matches?.("details.debug-panel") && e.target.open && debugLogVeraltet) debugLogZeichnen();
+}, true);
 
 // ---------- Temporäre Egress-Messung (v165) ----------
 // Nur für den kontrollierten Egress-Test. Die eigentliche Bild- und Suchlogik
@@ -575,6 +586,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (clearBtn) {
     clearBtn.addEventListener("click", () => {
       document.getElementById("debug-log").textContent = "";
+      debugLogZeilen = [];
     });
   }
 });

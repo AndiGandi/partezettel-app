@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 444
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 445
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -474,9 +474,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 444;   // bei jeder Version mit hochzählen
+const APP_VERSION = 445;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [445, ["Datum eingeben: Das Jahr wird jetzt direkt eingetippt (Zahlentastatur) statt aus einer langen Liste gewählt – viel schneller", "Etwas flüssiger: Stammbaum-Listen und das technische Protokoll arbeiten nur noch, wenn nötig"]],
   [444, ["Bestand: Liste lädt in Portionen – Wischen und Datumsauswahl deutlich flüssiger; weitere Personen kommen beim Hinunterwischen von selbst"]],
   [443, ["Schneller: Stammbaum, Chronik, Sortieren und der Wechsel zurück in den Bestand brauchen nur noch etwa die Hälfte der Zeit"]],
   [441, ["Bestand (Eigentümer): Anzeigen „Geburt bekannt, ohne Sterbedatum“ und „nur Sterbejahr“ – nach Alter sortiert"]],
