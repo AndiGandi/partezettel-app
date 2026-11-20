@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 441
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -234,61 +234,19 @@ function einfuehrungGesehen() { if (komfortUserId) lsSet(KOMFORT.tour + komfortU
 // ---------- Heute vor … Jahren (einmal am Tag) ----------
 async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
   // v419: Tagesblatt – Mondkalender, Namenstag, Bauernregel, Jahrestage (runde hervorgehoben, Verwandte zuerst)
-  // v442: Mit ‹ › (oder Wischen / Pfeiltasten) zum Vortag und Folgetag blättern, „Heute“ springt zurück
   if (typeof chronikDatenLaden !== "function" || typeof tagesblattAuswerten !== "function") return false;
   const d = await chronikDatenLaden(false);
-  const leser = zugang?.rolle === "leser";   // v420: ohne Personalisierung
-  const r0 = tagesblattAuswerten(d, { leser });
-  if (!r0.ereignisse.length && !auchLeer) return false;
-  let tag = { jahr: r0.datum.jahr, monat: r0.datum.monat, tag: r0.datum.tag };
-  const fenster = komfortFenster(`<div class="tb-rahmen">
-    <div class="tb-blaettern">
-      <button type="button" class="tb-pfeil" data-tb="-1" aria-label="Vortag">‹</button>
-      <div class="tb-kalenderblatt" aria-hidden="true"><span></span><b></b></div>
-      <button type="button" class="tb-pfeil" data-tb="1" aria-label="Folgetag">›</button>
-    </div>
+  const r = tagesblattAuswerten(d, { leser: zugang?.rolle === "leser" });   // v420: ohne Personalisierung
+  if (!r.ereignisse.length && !auchLeer) return false;
+  const f = komfortFenster(`
+    <div class="tb-kalenderblatt" aria-hidden="true"><span>${new Date().toLocaleDateString("de-AT", { month: "short", timeZone: "Europe/Vienna" }).replace(".", "").toUpperCase()}</span><b>${new Date().toLocaleDateString("de-AT", { day: "numeric", timeZone: "Europe/Vienna" }).replace(".", "")}</b></div>
     <h2 class="tour-titel">Tagesblatt</h2>
-    <p class="tb-zurueck" hidden><button type="button" class="btn btn--ghost tb-heute" data-tb="0">↩ Zurück zu heute</button></p>
-    <div class="tagesblatt"></div>
+    <div class="tagesblatt">${tagesblattHtml(r)}</div>
     <label class="heute-aus"><input type="checkbox" id="heute-aus-cb" ${lsGet(KOMFORT.heuteAus) ? "checked" : ""}> Nicht mehr automatisch zeigen (beim Start und um Mitternacht)</label>
-    <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-heute="ok">Schließen</button></div>
-  </div>`, { klasse: "komfort-fenster--heute" });
-  const f = fenster.querySelector(".tb-rahmen");   // eigener Rahmen: das Fenster selbst wird wiederverwendet
-  const zeichnen = (r) => {
-    const mittag = new Date(Date.UTC(r.datum.jahr, r.datum.monat - 1, r.datum.tag, 12));
-    f.querySelector(".tb-kalenderblatt span").textContent = mittag.toLocaleDateString("de-AT", { month: "short", timeZone: "UTC" }).replace(".", "").toUpperCase();
-    f.querySelector(".tb-kalenderblatt b").textContent = String(r.datum.tag);
-    f.querySelector(".tagesblatt").innerHTML = tagesblattHtml(r);
-    f.querySelector(".tb-zurueck").hidden = r.istHeute;
-    fenster.classList.toggle("is-anderer-tag", !r.istHeute);
-  };
-  const blaettern = (schritt) => {
-    if (schritt === 0) { const h = tagesMonatTag(); tag = { jahr: h.jahr, monat: h.monat, tag: h.tag }; }
-    else { const n = new Date(Date.UTC(tag.jahr, tag.monat - 1, tag.tag + schritt, 12)); tag = { jahr: n.getUTCFullYear(), monat: n.getUTCMonth() + 1, tag: n.getUTCDate() }; }
-    const md = `${String(tag.monat).padStart(2, "0")}-${String(tag.tag).padStart(2, "0")}`;
-    zeichnen(tagesblattAuswerten(d, { leser, datum: { ...tag, md } }));
-    fenster.scrollTop = 0;
-  };
-  zeichnen(r0);
-  f.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-tb]"); if (b) { blaettern(+b.dataset.tb); return; }
-    if (e.target.closest(".chr-link")) komfortFensterZu();
-  });
-  // Wischen nach links/rechts (iPhone, iPad, Android)
-  let wx = null, wy = null;
-  f.addEventListener("touchstart", (e) => { const t = e.touches[0]; wx = t.clientX; wy = t.clientY; }, { passive: true });
-  f.addEventListener("touchend", (e) => {
-    if (wx === null) return; const t = e.changedTouches[0], dx = t.clientX - wx, dy = t.clientY - wy; wx = null;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy)) blaettern(dx < 0 ? 1 : -1);
-  }, { passive: true });
-  // Pfeiltasten am Computer / iPad mit Tastatur
-  const tasten = (e) => {
-    if (!f.isConnected || !komfortFensterOffen()) { document.removeEventListener("keydown", tasten); return; }
-    if (e.key === "ArrowLeft") blaettern(-1); else if (e.key === "ArrowRight") blaettern(1);
-  };
-  document.addEventListener("keydown", tasten);
+    <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-heute="ok">Schließen</button></div>`, { klasse: "komfort-fenster--heute" });
   f.querySelector("#heute-aus-cb").addEventListener("change", (e) => lsSet(KOMFORT.heuteAus, e.target.checked ? "1" : null));
   f.querySelector('[data-heute="ok"]').addEventListener("click", komfortFensterZu);
+  f.querySelectorAll(".chr-link").forEach((b) => b.addEventListener("click", () => komfortFensterZu()));
   return true;
 }
 
@@ -516,12 +474,9 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 444;   // bei jeder Version mit hochzählen
+const APP_VERSION = 442;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
-  [444, ["Fehlende Daten schätzen: Ehen, die frühestens nach 1940 geschlossen wurden, sind ausgeblendet (Kirchenbücher nur bis 1940 einsehbar)"]],
-  [443, ["🧮 Verlauf (Eigentümer): Fehlende Daten schätzen – Suchzeitraum für Heirat, Geburt und Tod in den Kirchenbüchern"]],
-  [442, ["📅 Tagesblatt: mit ‹ › oder Wischen zum Vortag und Folgetag blättern", "Mondkalender genauer: „über sich / unter sich“ mit Uhrzeit wie im Kalender, dazu Mondviertel, Erdnähe/Erdferne und Knoten"]],
   [441, ["Bestand (Eigentümer): Anzeigen „Geburt bekannt, ohne Sterbedatum“ und „nur Sterbejahr“ – nach Alter sortiert"]],
   [440, ["Angeheiratete Verwandte in Worten: „Das ist der Ehemann deiner Tante“, „die Tante deiner Ehefrau“, Schwager, Schwiegermutter, Stiefvater …"]],
   [439, ["🔍 Datenprüfung (nur Eigentümer): mögliche Dubletten und unwahrscheinliche Angaben, „Stimmt so“ blendet Geprüftes dauerhaft aus, Dubletten zusammenführen"]],

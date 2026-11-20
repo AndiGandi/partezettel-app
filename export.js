@@ -1,5 +1,5 @@
 // Familienspuren – Export und Sicherung: PDF, JSON, GEDCOM, Backup
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 441
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
 
 // ==========================================================
 // EXPORT
@@ -50,7 +50,25 @@ async function fetchAllExportData() {
   const [importe, haeuser, person_stationen] = rolleIstEigentuemer()
     ? await Promise.all([optional("importe"), optional("haeuser"), optional("person_stationen")])
     : [[], await optional("haeuser"), await optional("person_stationen")];
-  return { personen, familien, familien_kinder, fotos, foto_personen, sprachnotizen, importe, haeuser, person_stationen };
+  // v442: Trauungsbuch-Quellen je Ehe und Beziehungen mitsichern (fehlten bisher in der JSON-Sicherung)
+  const optionalSortiert = async (t, spalte) => {
+    try {
+      const rows = []; let from = 0;
+      while (true) {
+        const { data, error } = await sb.from(t).select("*").order(spalte).range(from, from + 499);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if ((data || []).length < 500) break;
+        from += 500;
+      }
+      return rows;
+    } catch (err) { debugLog(`ℹ️ Backup ohne ${t}: ${err.message || err}`); return []; }
+  };
+  const [familien_trauungsbuch_quellen, beziehung] = await Promise.all([
+    optionalSortiert("familien_trauungsbuch_quellen", "familie_id"),
+    optionalSortiert("beziehung", "id")
+  ]);
+  return { personen, familien, familien_kinder, fotos, foto_personen, sprachnotizen, importe, haeuser, person_stationen, familien_trauungsbuch_quellen, beziehung };
 }
 
 function backupDateiname() {
@@ -282,7 +300,7 @@ async function erstelleICloudBackup() {
       version: 2,
       createdAt: new Date().toISOString(),
       app: "Partezettel Archiv",
-      tables: ["personen", "familien", "familien_kinder", "fotos", "foto_personen", "sprachnotizen", "importe", "haeuser", "person_stationen"],
+      tables: ["personen", "familien", "familien_kinder", "fotos", "foto_personen", "sprachnotizen", "importe", "haeuser", "person_stationen", "familien_trauungsbuch_quellen", "beziehung"],
       media: media.map(({ bucket, path, zipPath, mimeType, size }) => ({ bucket, path, zipPath, mimeType, size })),
     };
     const daten = { ...data };
@@ -330,12 +348,12 @@ async function stelleBackupWiederHer(file) {
       throw new Error("Keine gültige Partezettel-Backup-Datei.");
     }
 
-    const upsertBatch = async (table, rows, label) => {
+    const upsertBatch = async (table, rows, label, konflikt = "id") => {
       const batchSize = 100;
       for (let i = 0; i < rows.length; i += batchSize) {
         const batch = rows.slice(i, i + batchSize);
         if (!batch.length) continue;
-        const { error } = await sb.from(table).upsert(batch, { onConflict: "id" });
+        const { error } = await sb.from(table).upsert(batch, { onConflict: konflikt });
         if (error) throw new Error(`${label}: ${error.message}`);
       }
     };
@@ -350,6 +368,9 @@ async function stelleBackupWiederHer(file) {
     await upsertBatch("foto_personen", data.foto_personen || [], "Foto-Personen-Verknüpfungen");
     await upsertBatch("sprachnotizen", data.sprachnotizen || [], "Sprachnotizen");
     if ((data.person_stationen || []).length) await upsertBatch("person_stationen", data.person_stationen, "Stationen");
+    // v442: Trauungsbuch-Quellen (eine je Ehe) und Beziehungen
+    if ((data.familien_trauungsbuch_quellen || []).length) await upsertBatch("familien_trauungsbuch_quellen", data.familien_trauungsbuch_quellen, "Trauungsbuch-Quellen", "familie_id");
+    if ((data.beziehung || []).length) await upsertBatch("beziehung", data.beziehung, "Beziehungen");
 
     let restoredMedia = 0;
     let skippedMedia = 0;

@@ -2,9 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
-- v444: Fehlende Daten schätzen – Heirat frühestens nach 1940 ausgeblendet (Kirchenbücher nur bis 1940), Suchzeitraum über 1940 hinaus auf 1940 gekürzt mit Hinweis.
-- v443: Fehlende Daten schätzen (schaetzung.js, nur Eigentümer, Reiter Verlauf): Heirat aus erstem Kind (Abstand aus eigenem Bestand gelernt, Untergrenzen Alter und Tod früherer Ehepartner), Geburt aus Heirat/Kindern/Geschwistern/Eltern, Tod zwischen letztem Ereignis und Wiederheirat des Partners; Namensfilter.
-- v442: Tagesblatt blättern (‹ ›, Wischen, Pfeiltasten, „Zurück zu heute“); obsigend/nidsigend nach Wendepunkt der Mondbahn statt Tierkreis (Abgleich Kalender Jänner 2027); Mondviertel, Erdnähe/-ferne, Knoten, Sonne ins Zeichen mit Uhrzeit; Zeichen bei Wechsel richtig benannt; „in der Waage“, „in den Zwillingen“.
+- v442: JSON-Export und Backup sichern auch Trauungsbuch-Quellen je Ehe und Beziehungen; Wiederherstellen spielt sie zurück.
 - v441: Bestand-Filter (Eigentümer): Geburt bekannt ohne Sterbedatum (nach Geburt sortiert), nur Sterbejahr (nach Sterbejahr sortiert).
 - v440: Angeheiratete Verwandtschaft in Worten (Ehemann der Tante, Tante der Ehefrau, Schwager über Ehepartner, Stief-/Schwiegerverwandte), nur nähere Verwandtschaft.
 - v439: Datenprüfung (pruefung.js, Supabase Paket 12): Dubletten, Elternalter, Kind nach Tod, Tod vor Geburt, über 105, junge Heirat, ohne Sterbedatum; Markierung „stimmt so“ dauerhaft; Zusammenführen.

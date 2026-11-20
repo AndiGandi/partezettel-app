@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 441
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 442
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {

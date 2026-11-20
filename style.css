@@ -2337,21 +2337,3 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .zf-tabelle th{color:var(--ink-soft,#5d6259);font-weight:600;white-space:nowrap}
 .zf-leer{color:#aaa}
 .zf-anders,.zf-anders-muster{background:#fbeeb8;border-radius:3px}
-
-/* v442: Tagesblatt – Vortag / Folgetag blättern */
-.tb-blaettern { display: flex; align-items: center; justify-content: center; gap: 18px; margin-bottom: 8px; }
-.tb-blaettern .tb-kalenderblatt { margin: 0; }
-.tb-pfeil { width: 46px; height: 46px; border-radius: 50%; border: 1px solid #d8d2c6; background: #fff; color: #2f6b4a; font: 400 1.9rem/1 Georgia, serif; padding: 0 0 4px; cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-.tb-pfeil:active { background: #eef6f0; }
-.tb-zurueck { text-align: center; margin: -4px 0 10px; }
-.tb-zurueck .btn { width: auto; font-size: .92rem; padding: 6px 14px; }
-.is-anderer-tag .tb-kalenderblatt span { background: #8a6d3b; }
-
-/* v443: Fehlende Daten schätzen */
-.schaetz-filter { flex: 1 1 14rem; min-width: 0; padding: 8px 12px; border: 1px solid var(--line, #d8d2c6); border-radius: 10px; font-size: 16px; }
-.schaetz-fund { grid-template-columns: minmax(200px, 1.2fr) minmax(200px, 2fr); }
-.schaetz-zeitraum { color: #2b2722; }
-.schaetz-zeitraum strong { color: var(--green-dark, #2f5e47); font-size: 1.05em; }
-.schaetz-hinweis { color: #8a6d3b; }
-.schaetz-fund.is-widerspruch .schaetz-zeitraum { color: #a33; font-weight: 600; }
-@media (max-width: 760px) { .schaetz-fund { grid-template-columns: 1fr; } }
