@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 446
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 447
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN
@@ -871,6 +871,7 @@ document.getElementById("pv-close")?.addEventListener("click", async () => {
   if (personViewVerlauf.length) { await personZurueck(); return; }
   document.getElementById("person-view-overlay").hidden = true;
   document.body.classList.remove("person-view-open");
+  bestandNachziehen();   // v447
   void kehreZumGruppenfotoZurueck();
 });
 document.getElementById("person-view-overlay")?.addEventListener("click", (event) => {
@@ -879,6 +880,7 @@ document.getElementById("person-view-overlay")?.addEventListener("click", (event
     personViewVerlauf = [];
     event.currentTarget.hidden = true;
     document.body.classList.remove("person-view-open");
+    bestandNachziehen();   // v447
     void kehreZumGruppenfotoZurueck();
   }
 });
@@ -1000,9 +1002,11 @@ document.getElementById("detail-close-btn").addEventListener("click", async () =
     if (select && returnTreePersonId) select.value = returnTreePersonId;
     try { await loadStammbaum(); } catch (err) { debugLog(`⚠️ Stammbaum nach Rückkehr: ${err.message || err}`); }
   } else {
-    void personenNachSpeichern();   // v431
+    // v447: Nach „Speichern“ ist alles schon aktuell (personenNachSpeichern lief dort). Beim Schließen nur noch
+    // nachzeichnen, wenn während des Bearbeitens fremde Änderungen hereinkamen – und erst nach der Rückkehr.
     const zurueckZu = bearbeitenAusAnsicht;
     bearbeitenAusAnsicht = null;
+    if (!zurueckZu) bestandNachziehen();   // Bestand ist gleich sichtbar; sonst erst, wenn er wieder zu sehen ist
     if (zurueckZu) { try { await openPersonDetail(zurueckZu, { zurueck: true, behalteRueckkehr: true }); } catch (err) { debugLog(`⚠️ Rückkehr zur Ansicht: ${err.message || err}`); } }
   }
 });

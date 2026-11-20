@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 446
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 447
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -556,13 +556,14 @@ let erstPartnerPersonenGeladen = false;
 let erstPartnerFamilienCache = null;
 // v340: Eine Datenquelle für alle Personenlisten: der Bestands-Cache (mit Änderungsprüfung).
 let personenFrischAm = 0;
+let bestandNeuZeichnenNoetig = false;   // v447: Änderungen kamen herein, während das Bearbeiten-Fenster offen war
 async function ensurePersonenFrisch(maxAlterMs = 30000) {
   const veraltet = !personenCacheGeladen || !Array.isArray(personenCache) || personenCache.length < 2 || (Date.now() - personenFrischAm) > maxAlterMs;
   // v445: Ist das Bearbeiten-Fenster offen, nur den Änderungsstand holen – die Bestandsliste dahinter
   // wird beim Schließen neu gezeichnet. Das Neuzeichnen blockierte sonst das Antippen der Datumsfelder.
   const bearbeitenOffen = !document.getElementById("detail-overlay")?.hidden;
   if (veraltet && bearbeitenOffen && personenCacheGeladen && personenCacheSyncInitialisiert && personenCache.length >= 2) {
-    try { await synchronisierePersonenDelta(); } catch (err) { debugLog(`⚠️ Personenliste aktualisieren: ${err.message || err}`); }
+    try { if (await synchronisierePersonenDelta()) bestandNeuZeichnenNoetig = true; } catch (err) { debugLog(`⚠️ Personenliste aktualisieren: ${err.message || err}`); }
     personenFrischAm = Date.now();
   } else if (veraltet) {
     try { await loadPersonen(); } catch (err) { debugLog(`⚠️ Personenliste aktualisieren: ${err.message || err}`); }
@@ -1240,6 +1241,12 @@ function personenVergleich(a, b) {
     const ka = sortierNachnameSchluessel(a), kb = sortierNachnameSchluessel(b);
     if (!ka && kb) return 1;
     if (ka && !kb) return -1;
+    return sortierNameVergleich(a, b) * personenSortRichtung;
+  }
+  if (personenSortierung === "schluesselfoto") {
+    // v447: Personen mit Schlüsselfoto zuerst (immer oben), innerhalb nach Namen
+    const fa = schluesselfotoMetaCache.has(a.id) ? 0 : 1, fb = schluesselfotoMetaCache.has(b.id) ? 0 : 1;
+    if (fa !== fb) return fa - fb;
     return sortierNameVergleich(a, b) * personenSortRichtung;
   }
   if (personenSortierung === "alter") {

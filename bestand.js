@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 446
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 447
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -1170,17 +1170,35 @@ async function loadPersonen(force = false) {
 
 // v431: Nach dem Speichern sofort überall verfügbar (Bestand, Suche, Stammbaum, Personenauswahl, Chronik).
 // Bisher prüfte der Abgleich nur einmal pro Sitzung auf Änderungen – neue Personen erschienen erst nach „Aktualisieren“.
+// v447: Während Bearbeiten/Ansicht offen sind, wird die Bestandsliste nicht im Hintergrund neu gezeichnet,
+// sondern erst, wenn sie wieder sichtbar wird.
+function bestandNachziehen() {
+  if (!bestandNeuZeichnenNoetig) return;
+  bestandNeuZeichnenNoetig = false;
+  renderPersonenList(personenCache).catch((e) => debugLog(`⚠️ Bestand nachzeichnen: ${e.message || e}`));
+}
+document.addEventListener("click", (e) => {
+  if (e.target.closest?.('.tab-btn[data-tab="liste"]')) setTimeout(bestandNachziehen, 0);
+});
 let personenNachSpeichernLauf = null;
 async function personenNachSpeichern(neueId = null) {
   if (personenNachSpeichernLauf) await personenNachSpeichernLauf.catch(() => {});
   personenNachSpeichernLauf = (async () => {
     syncPruefungSeitCacheLaden = false;
-    try { await loadPersonen(); } catch (e) { debugLog(`⚠️ Bestand nach Speichern: ${e.message || e}`); }
+    // v447: Ist das Bearbeiten-Fenster noch offen, nur die Daten abgleichen; die Bestandsliste dahinter
+    // wird erst nach dem Schließen neu gezeichnet (spart beim Speichern rund eine Sekunde Blockade).
+    const fensterOffen = !document.getElementById("detail-overlay")?.hidden;
+    try {
+      if (fensterOffen && personenCacheGeladen && personenCacheSyncInitialisiert) {
+        await synchronisierePersonenDelta();
+        bestandNeuZeichnenNoetig = true;
+      } else await loadPersonen();
+    } catch (e) { debugLog(`⚠️ Bestand nach Speichern: ${e.message || e}`); }
     // Sicherheitsnetz: fehlt die neue Person noch, direkt holen und einfügen
     if (neueId && !personenCache.some((x) => x.id === neueId)) {
       try {
         const { data } = await sb.from("personen").select("*").eq("id", neueId).maybeSingle();
-        if (data) { personenCache.push(data); await renderPersonenList(personenCache); }
+        if (data) { personenCache.push(data); if (fensterOffen) bestandNeuZeichnenNoetig = true; else await renderPersonenList(personenCache); }
       } catch (e) { debugLog(`⚠️ Neue Person nachladen: ${e.message || e}`); }
     }
     treeDataGeladenAm = 0;
@@ -1811,6 +1829,7 @@ window.partezettelPersonenSuche = function (suchwert) {
 
 async function aktualisierePersonenSortierung() {
   aktualisierePersonenCacheStatus();
+  if (personenSortierung === "schluesselfoto") { try { await ladeSchluesselfotoMetadaten(); } catch {} }   // v447
   await renderPersonenList(personenCache);
   const feld = document.getElementById("search-input");
   const q = (feld?.value || "").trim();
