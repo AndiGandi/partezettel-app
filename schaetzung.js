@@ -5,6 +5,7 @@
 
 const SCHAETZ_STANDARD = { erstesKind: 2, erstesKindSpanne: 4, heiratsalterM: 28, heiratsalterW: 25, alterErstesKindM: 30, alterErstesKindW: 27 };
 let schaetzLetzte = null;
+const KIRCHENBUCH_BIS = 1940;   // v444: Kirchenbücher sind online nur bis 1940 einsehbar
 
 // Dezimaljahr aus Datum („1861-11-19“ → 1861,88) oder nur Jahr (→ Jahresmitte, ungenau)
 function szJahr(datum, jahr) {
@@ -75,7 +76,7 @@ function datenSchaetzen(d) {
   };
 
   // ---------- 2. Heirat ohne Datum, aber mit Kindern ----------
-  const heirat = [];
+  const heirat = []; let nachKb = 0;
   for (const f of ehen) {
     if (szBeginn(f)) continue;
     const g = geburten(f); if (!g.length) continue;
@@ -113,6 +114,10 @@ function datenSchaetzen(d) {
     if (g.length >= 2 && g[1].g.j - g[0].g.j > 4) hinweise.push(`großer Abstand zum nächsten Kind (${szJ(g[1].g.j)}) – erstes Kind evtl. vorehelich`);
     const widerspruch = frueh > spaet;
     if (!widerspruch) schaetz = Math.min(Math.max(schaetz, frueh), spaet);
+    // v444: Heirat frühestens nach 1940 → in den Kirchenbüchern nicht einsehbar, ausblenden
+    if (!widerspruch && szJ(frueh) > KIRCHENBUCH_BIS) { nachKb++; continue; }
+    const bis1940 = !widerspruch && szJ(spaet) > KIRCHENBUCH_BIS;
+    if (bis1940) { spaet = KIRCHENBUCH_BIS + 0.999; hinweise.push(`Bücher nur bis ${KIRCHENBUCH_BIS} einsehbar – Heirat kann auch danach gewesen sein`); }
     heirat.push({ art: "heirat", f, personen: [a, b], schaetz, frueh, spaet, grund, hinweise, widerspruch, sortJ: schaetz,
       suchtext: widerspruch ? "Angaben widersprechen sich" : `≈ ${szJ(schaetz)} · im Trauungsbuch suchen <strong>${szBereich(frueh, spaet)}</strong>` });
   }
@@ -213,7 +218,7 @@ function datenSchaetzen(d) {
   }
 
   for (const l of [heirat, geburt, tod]) l.sort((x, y) => (x.widerspruch - y.widerspruch) || ((x.spaet - x.frueh) - (y.spaet - y.frueh)) || (x.sortJ - y.sortJ));
-  return { S, heirat, geburt, tod };
+  return { S, heirat, geburt, tod, nachKb };
 }
 
 // ---------- Anzeige ----------
@@ -250,7 +255,7 @@ function schaetzRendern() {
     const liste = schaetzLetzte[k].filter(passt); summe += liste.length;
     return `<details class="pruef-gruppe"${k === "heirat" ? " open" : ""}>
       <summary>${G.sym} ${chrEsc(G.titel)} <span class="pruef-zahl">${liste.length}</span></summary>
-      <p class="pruef-erklaerung">${chrEsc(G.text)} Engste Zeiträume zuerst.</p>
+      <p class="pruef-erklaerung">${chrEsc(G.text)} Engste Zeiträume zuerst.${k === "heirat" && schaetzLetzte.nachKb ? ` ${schaetzLetzte.nachKb} ${schaetzLetzte.nachKb === 1 ? "Ehe" : "Ehen"} ausgeblendet, weil frühestens nach ${KIRCHENBUCH_BIS} geheiratet (Kirchenbücher nur bis ${KIRCHENBUCH_BIS} einsehbar).` : ""}</p>
       <ul class="pruef-liste">${liste.slice(0, 400).map((x) => `<li class="pruef-fund schaetz-fund${x.widerspruch ? " is-widerspruch" : ""}">
         <div class="pruef-personen">${x.personen.map((p) => chrLink(p)).join(k === "heirat" ? "<br>⚭ " : "")}</div>
         <div class="pruef-details"><span class="schaetz-zeitraum">${x.suchtext}</span><br><small>${chrEsc(x.grund.join(" · "))}</small>${x.hinweise.length ? `<br><small class="schaetz-hinweis">⚠️ ${chrEsc(x.hinweise.join(" · "))}</small>` : ""}</div>

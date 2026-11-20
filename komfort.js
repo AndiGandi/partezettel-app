@@ -516,9 +516,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 443;   // bei jeder Version mit hochzählen
+const APP_VERSION = 444;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [444, ["Fehlende Daten schätzen: Ehen, die frühestens nach 1940 geschlossen wurden, sind ausgeblendet (Kirchenbücher nur bis 1940 einsehbar)"]],
   [443, ["🧮 Verlauf (Eigentümer): Fehlende Daten schätzen – Suchzeitraum für Heirat, Geburt und Tod in den Kirchenbüchern"]],
   [442, ["📅 Tagesblatt: mit ‹ › oder Wischen zum Vortag und Folgetag blättern", "Mondkalender genauer: „über sich / unter sich“ mit Uhrzeit wie im Kalender, dazu Mondviertel, Erdnähe/Erdferne und Knoten"]],
   [441, ["Bestand (Eigentümer): Anzeigen „Geburt bekannt, ohne Sterbedatum“ und „nur Sterbejahr“ – nach Alter sortiert"]],
