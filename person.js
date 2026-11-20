@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 445
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 446
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN
@@ -978,7 +978,12 @@ async function openPersonEdit(personId, options = {}) {
   try { await loadDetailFotos(personId); } catch (err) { debugLog(`⚠️ Fotos der Person konnten nicht geladen werden: ${err.message || err}`); }
   try { await loadDetailAudio(personId); } catch (err) { debugLog(`⚠️ Sprachnotizen der Person konnten nicht geladen werden: ${err.message || err}`); }
   // Für die Familienansicht immer aktuelle Personennamen verwenden.
-  try { await loadPersonen(); } catch (_) {}
+  // v445: nur den Änderungsstand holen – die Bestandsliste hinter dem Fenster wird erst beim Schließen neu gezeichnet
+  // (vorher wurde sie hier jedes Mal komplett neu aufgebaut und hat Tippen auf Tag/Monat/Jahr sekundenlang blockiert).
+  try {
+    if (personenCacheGeladen && personenCacheSyncInitialisiert) await synchronisierePersonenDelta();
+    else await loadPersonen();
+  } catch (_) {}
   try { await loadDetailFamilie(personId); } catch (err) { debugLog(`⚠️ Familienangaben konnten nicht geladen werden: ${err.message || err}`); }
 }
 
@@ -3025,17 +3030,23 @@ async function loadDetailFamilie(personId) {
     }
   }
 
+  // v445: einmal sortieren, Listen in einem Schritt einsetzen (je ~2500 Einträge)
+  const elternKandidaten = personenCache.filter((p) => p.id !== personId).sort(personenAuswahlSortierung);
+  // Ist der Elternteil schon eingetragen, ist die Liste verborgen: dann nur diesen einen Eintrag einsetzen,
+  // die volle Liste erst beim Tippen auf ✏️ (spart beim Öffnen je ~2500 Einträge).
+  const elternBekannt = new Map([[parentSelectVater, vaterId], [parentSelectMutter, mutterId]]);
   [parentSelectVater, parentSelectMutter].forEach((select) => {
-    select.innerHTML = '<option value="">— nicht angegeben —</option>';
-    personenCache.filter((p) => p.id !== personId).sort(personenAuswahlSortierung).forEach((p) => {
-      select.appendChild(personOption(p));
-    });
+    const id = elternBekannt.get(select);
+    const bekannt = id ? elternKandidaten.find((p) => p.id === id) : null;
+    if (bekannt) { fuellePersonenAuswahl(select, [bekannt], "— nicht angegeben —"); select._volleListe = elternKandidaten; }
+    else { fuellePersonenAuswahl(select, elternKandidaten, "— nicht angegeben —"); select._volleListe = null; }
   });
 
   parentSelectVater.value = vaterId || "";
   parentSelectMutter.value = mutterId || "";
   const aktualisiereElternLink = (select, button) => {
-    const person = personenCache.find(p => p.id === select.value);
+    const gewaehlt = select.value;   // v445: nur einmal lesen (vorher je Person ein Lesezugriff auf die 2500er-Liste)
+    const person = gewaehlt ? personenCache.find(p => p.id === gewaehlt) : null;
     button.textContent = person ? personenAuswahlText(person) : "— nicht angegeben —";
     button.hidden = !person;
     select.hidden = !!person;
@@ -3050,13 +3061,23 @@ async function loadDetailFamilie(personId) {
     btn.onclick = () => {
       const select = document.getElementById(btn.dataset.parentEdit);
       const openBtn = document.getElementById(btn.dataset.parentEdit.replace("d-vater", "d-vater-open").replace("d-mutter", "d-mutter-open"));
+      if (select._volleListe) {   // v445: volle Liste erst jetzt
+        const wert = select.value;
+        fuellePersonenAuswahl(select, select._volleListe, "— nicht angegeben —");
+        select._volleListe = null;
+        select.value = wert;
+      }
       select.hidden = false; if (openBtn) openBtn.hidden = true; select.focus();
     };
   });
-  [parentSelectVater, parentSelectMutter].forEach(select => select.addEventListener("change", () => {
-    const openBtn = document.getElementById(select.id === "d-vater" ? "d-vater-open" : "d-mutter-open");
-    aktualisiereElternLink(select, openBtn);
-  }));
+  [parentSelectVater, parentSelectMutter].forEach(select => {
+    if (select.dataset.elternLinkInit) return;   // v445: nicht bei jedem Öffnen einen weiteren Beobachter anhängen
+    select.dataset.elternLinkInit = "1";
+    select.addEventListener("change", () => {
+      const openBtn = document.getElementById(select.id === "d-vater" ? "d-vater-open" : "d-mutter-open");
+      aktualisiereElternLink(select, openBtn);
+    });
+  });
 
   partnerList.innerHTML = "";
   // Ehe-/Partnerschaftsblöcke chronologisch sortieren: frühester Beginn zuerst.
@@ -3517,8 +3538,6 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
   const select = document.getElementById(selectId);
   if (!select) return;
 
-  select.innerHTML = '<option value="">— auswählen —</option>';
-
   // v340: gemeinsamer Bestands-Cache statt eigenem Komplettabruf bei jedem Öffnen.
   const personenFuerAuswahl = await ensurePersonenFrisch();
 
@@ -3562,8 +3581,7 @@ async function fillFamilienPersonSelect(selectId, excludePersonId) {
   }
 
   kandidaten.sort(PersonSuche.sort);
-
-  for (const p of kandidaten) select.appendChild(personOption(p));
+  fuellePersonenAuswahl(select, kandidaten, "— auswählen —");
 }
 
 async function findeOderErstelleFamilie(partnerAId, partnerBId, typ = "Partnerschaft", beginn = null, ende = null) {

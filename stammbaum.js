@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 445
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 446
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -2355,11 +2355,16 @@ function personSuggestAttach(input, anbieter, beiAuswahl, optionen = {}) {
 
 // <option> für Personenlisten: einheitliches Anzeigeformat, Person bleibt für die Suche am Eintrag.
 function personOption(person) {
-  const opt = document.createElement("option");
-  opt.value = person.id;
-  opt.textContent = PersonSuche.label(person);
+  const opt = new Option(PersonSuche.label(person), person.id);
   opt._person = person;
   return opt;
+}
+// v445: ganze Personenliste in einem Schritt einsetzen (statt 2500 Einzelschritte mit Neuberechnung)
+function fuellePersonenAuswahl(select, personen, leerText) {
+  const fragment = document.createDocumentFragment();
+  fragment.appendChild(new Option(leerText, ""));
+  for (const p of personen) fragment.appendChild(personOption(p));
+  select.replaceChildren(fragment);
 }
 
 function personPickerEintrag(opt) {
@@ -2778,7 +2783,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=445");
+      treeModul3D = await import("./tree3d.js?v=446");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
