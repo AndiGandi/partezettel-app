@@ -1,5 +1,5 @@
 // Familienspuren – Hausblätter-Import (nur Eigentümer)
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 447
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 448
 
 // ===================== v362: Hausblätter-Import, Stufe 1 (nur Eigentümer) =====================
 // Lädt eine Import-Datei (format „familienspuren-import“), zeigt Abweichungen bei vorhandenen

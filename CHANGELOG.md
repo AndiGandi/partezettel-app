@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v448: Datumssuche in allen Personensuchen (PersonSuche.zerlege → Bausteine „#TT.MM.JJJJ#“, „#TT.MM.“, „.MM.JJJJ#“; Ziffern, ISO und Monatsnamen inkl. Jänner/Feber; angefangenes Jahr „24.10.18“). Passt nur auf Geburts- und Sterbedatum.
 - v447: Sortierung „Mit Schlüsselfoto zuerst“ (innerhalb nach Namen). Schließen des Bearbeiten-Fensters ohne erneutes Laden von Bestand und Stammbaum; Speichern bei offenem Fenster nur Datenabgleich – die Bestandsliste wird erst gezeichnet, wenn sie wieder sichtbar ist (bestandNachziehen). Gebremst gemessen: Zurück 1,4 s → 0,35 s, Speichern 1,4 s → 0,7 s.
 - v446: Jahr wieder als Auswahlliste (Eintippfeld aus v445 zurückgenommen). Bearbeiten-Fenster: Bestandsliste wird beim Öffnen nicht mehr im Hintergrund neu gezeichnet (nur Änderungsabgleich), Eltern-Auswahl mit ~2500 Einträgen erst bei ✏️ befüllt, Personenlisten in einem Schritt eingesetzt, Eltern-Beobachter nur einmal angehängt. Blockierzeit beim Öffnen gebremst gemessen 2,4 s → 0,45 s.
 - v445: Jahr in allen Datumsfeldern als Eintippfeld (inputmode numeric, 4-stellig, 1500–heute) statt Auswahlliste mit über 500 Einträgen; Auswahlliste bleibt unsichtbar im Hintergrund. Beziehungs-Auswahllisten im Stammbaum nur bei geändertem Bestand neu aufbauen. Technisches Protokoll nur bei geöffnetem Bereich zeichnen.

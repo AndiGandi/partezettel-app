@@ -1,5 +1,5 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 447
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 448
 
 
 // ==========================================================
@@ -24,11 +24,49 @@ const PersonSuche = (() => {
       .trim();
   }
 
+  // v448: Datum in der Suche – „24.10.1875“, „24. 10. 1875“, „24.10.“ (Tag im Jahr), „10.1875“, „1875-10-24“,
+  // „24. Oktober 1875“, „Okt. 1875“. Jedes Datum wird zu einem genauen Suchbaustein „#TT.MM.JJJJ#“,
+  // der nur auf Geburts- oder Sterbedatum passt (nicht mehr auf beliebige Ziffern irgendwo).
+  const MONATSNAMEN = [/^j(a|ä|ae)n/, /^feb/, /^m(ä|ae|a)r/, /^apr/, /^mai/, /^jun/, /^jul/, /^aug/, /^sep/, /^okt/, /^nov/, /^dez/];
+  const MONATSWORT = "(j(?:a|ä|ae)n(?:uar|ner)?|feb(?:ruar|er)?|m(?:ä|ae|a)rz?|apr(?:il)?|mai|jun[ie]?|jul[ie]?|aug(?:ust)?|sep(?:t(?:ember)?)?|okt(?:ober)?|nov(?:ember)?|dez(?:ember)?)";
+  const zwei = (n) => String(n).padStart(2, "0");
+  const tagOk = (d) => d >= 1 && d <= 31, monatOk = (m) => m >= 1 && m <= 12;
+  function monatAusWort(w) { const i = MONATSNAMEN.findIndex((r) => r.test(w)); return i >= 0 ? i + 1 : 0; }
+  function datumsBausteine(roh) {
+    let t = String(roh ?? "").toLocaleLowerCase("de-DE");
+    const tokens = [];
+    const nimm = (token) => { tokens.push(token); return " "; };
+    // ISO: 1875-10-24 bzw. 1875-10
+    t = t.replace(/\b(\d{4})-(\d{1,2})(?:-(\d{1,2}))?\b/g, (g, y, m, d) =>
+      !monatOk(+m) ? g : (d ? (tagOk(+d) ? nimm(`#${zwei(d)}.${zwei(m)}.${y}#`) : g) : nimm(`.${zwei(m)}.${y}#`)));
+    // Monatsname: „24. Oktober 1875“, „24. okt“, „Oktober 1875“
+    t = t.replace(new RegExp(`(?:\\b(\\d{1,2})\\s*\\.?\\s*)?\\b${MONATSWORT}\\b\\.?(?:\\s*(\\d{4})\\b)?`, "g"), (g, d, w, y) => {
+      const m = monatAusWort(w);
+      if (!m || (!d && !y)) return g;               // „Mai“ allein bleibt ein Wort (auch Vorname/Name möglich)
+      if (d && !tagOk(+d)) return g;
+      if (d) return nimm(y ? `#${zwei(d)}.${zwei(m)}.${y}#` : `#${zwei(d)}.${zwei(m)}.`);
+      return nimm(`.${zwei(m)}.${y}#`);
+    });
+    // Ziffern: Tag.Monat.Jahr (Jahr auch erst angefangen, z. B. „24.10.18“)
+    t = t.replace(/(?<![\d.])(\d{1,2})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,4})(?![\d.])/g, (g, d, m, y) =>
+      tagOk(+d) && monatOk(+m) ? nimm(y.length === 4 ? `#${zwei(d)}.${zwei(m)}.${y}#` : `#${zwei(d)}.${zwei(m)}.${y}`) : g);
+    // Monat.Jahr: „10.1875“
+    t = t.replace(/(?<![\d.])(\d{1,2})\s*\.\s*(\d{4})(?![\d.])/g, (g, m, y) => monatOk(+m) ? nimm(`.${zwei(m)}.${y}#`) : g);
+    // Tag.Monat ohne Jahr: „24.10.“ oder „24.10“
+    t = t.replace(/(?<![\d.])(\d{1,2})\s*\.\s*(\d{1,2})\s*\.?(?!\s*\d)/g, (g, d, m) =>
+      tagOk(+d) && monatOk(+m) ? nimm(`#${zwei(d)}.${zwei(m)}.`) : g);
+    return { rest: t, tokens };
+  }
+  // Datumsbausteine einer Person (Geburt und Tod), passend zu datumsBausteine()
+  const datumsSchluessel = (d) => { const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `#${m[3]}.${m[2]}.${m[1]}#` : ""; };
+
   // Suchbegriffe: Kommas, Klammern, Punkte, „geb./gest.“ werden ignoriert (ganzes Wort, nicht „Gebhard“).
   function zerlege(wert, ohneJahre = false) {
-    let t = normalisiere(wert).replace(/\b(geb|geboren|gest|gestorben)\.?(?![a-z0-9])/g, " ");
+    const { rest, tokens: datum } = /\d/.test(String(wert ?? "")) ? datumsBausteine(wert) : { rest: wert, tokens: [] };
+    let t = normalisiere(rest).replace(/\b(geb|geboren|gest|gestorben)\.?(?![a-z0-9])/g, " ");
     if (ohneJahre) t = t.replace(/\b\d{4}\b/g, " ");
-    return t.replace(/[(),.;:*†]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    const woerter = t.replace(/[(),.;:*†]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    return ohneJahre ? woerter : [...woerter, ...datum];   // ohneJahre: reiner Namensvergleich, Daten weglassen
   }
 
   const deDatum = (d) => { const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}.${m[2]}.${m[1]}` : ""; };
@@ -96,7 +134,8 @@ const PersonSuche = (() => {
       search: normalisiere([person.vorname, person.nachname, person.Ledigenname, person.ledigenname, person.geburtsname,
         person.geburtsdatum, deDatum(person.geburtsdatum), person.geburtsjahr,
         person.sterbedatum, deDatum(person.sterbedatum), person.sterbejahr]
-        .filter((v) => v !== null && v !== undefined && String(v).trim() !== "").join(" ")),
+        .filter((v) => v !== null && v !== undefined && String(v).trim() !== "").join(" "))
+        + ` ${datumsSchluessel(person.geburtsdatum)} ${datumsSchluessel(person.sterbedatum)}`,
       names: normalisiere(`${person.vorname || ""} ${person.nachname || ""} ${ledigVon(person)}`),
       nachVor: normalisiere(`${person.nachname || ""} ${person.vorname || ""}`)
     };
