@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 443
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 444
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -1263,8 +1263,8 @@ async function ladeSchluesselfotos(personen, force = false) {
   });
   if (!fehlende.length) return;
   if (schluesselfotoLadePromise.value) {
-    await schluesselfotoLadePromise.value;
-    return;
+    await schluesselfotoLadePromise.value.catch(() => {});
+    return ladeSchluesselfotos(personen, force);   // v444: danach die eigenen Fotos auch wirklich laden
   }
 
   schluesselfotoLadePromise.value = (async () => {
@@ -1337,11 +1337,9 @@ function beobachteSchluesselfotos() {
     ladeSchluesselfotos(sichtbar).then(() => {
       sichtbar.forEach(p => setzeSchluesselfotoInKarte(p.id));
     });
-  }, { root: list, rootMargin: "400px 0px", threshold: 0.01 });
+  }, { root: null, rootMargin: "600px 0px", threshold: 0 });   // v444: Bildschirm statt ganzer Liste – nur Fotos in der Nähe laden
 
-  for (const karte of personenKartenCache.values()) {
-    if (!karte.li.hidden) schluesselfotoObserver.observe(karte.li);
-  }
+  for (const karte of personenKartenCache.values()) schluesselfotoObserver.observe(karte.li);
 }
 
 function erstellePersonenKarte(p) {
@@ -1751,9 +1749,13 @@ function wendePersonenSucheAn(suchwert) {
     // Namens-Suchraum vorkommen. Dadurch ist die Reihenfolge egal:
     // "Ganahl Alois" findet "Alois Ganahl" und umgekehrt.
     const sichtbar = (suchTokens.length === 0 || PersonSuche.trifft(p, suchTokens)) && pruefFilterPasst(p);
-    if (karte.li.hidden === sichtbar) karte.li.hidden = !sichtbar;   // v427: nur ändern, wenn nötig
+    karte.treffer = sichtbar;
     if (sichtbar) treffer++;
   }
+  // v444: nur die ersten Karten zeigen, weitere beim Hinunterwischen – hält die Liste auf dem iPad flüssig
+  const suchSchluessel = `${q}|${personenPruefFilter}|${personenSortierung}|${personenSortRichtung}`;
+  if (suchSchluessel !== personenListeSuchSchluessel) { personenListeSuchSchluessel = suchSchluessel; personenListeGrenze = PERSONEN_LISTE_SCHRITT; }
+  personenListeBegrenzen();
 
   if (empty) {
     empty.textContent = treffer
@@ -1767,6 +1769,37 @@ function wendePersonenSucheAn(suchwert) {
   const filterText = { offen: " ungeprüft", geprueft: " geprüft", hausblatt: " aus Hausblatt", eigene: " selbst erfasst" }[personenPruefFilter] || "";
   if (status) status.textContent = q ? `${treffer} Treffer${filterText}` : `${treffer} Personen${filterText}`;
   return true;
+}
+
+// v444: Liste in Portionen – nur die ersten 150 Treffer stehen im Bildschirmaufbau, weitere kommen beim Hinunterwischen
+const PERSONEN_LISTE_SCHRITT = 150;
+let personenListeGrenze = PERSONEN_LISTE_SCHRITT;
+let personenListeSuchSchluessel = "";
+let personenListeBeobachter = null;
+function personenListeBegrenzen() {
+  const list = document.getElementById("personen-list");
+  if (!list) return;
+  let n = 0, mehr = 0;
+  for (const li of list.children) {
+    const karte = personenKartenCache.get(li.dataset.personId);
+    const treffer = !!karte?.treffer;
+    let zeigen = false;
+    if (treffer) { n++; zeigen = n <= personenListeGrenze; if (!zeigen) mehr++; }
+    if (li.hidden === zeigen) li.hidden = !zeigen;
+  }
+  let knopf = document.getElementById("personen-mehr");
+  if (!knopf) {
+    knopf = document.createElement("button");
+    knopf.type = "button"; knopf.id = "personen-mehr"; knopf.className = "btn btn--secondary btn--full personen-mehr";
+    knopf.addEventListener("click", () => { personenListeGrenze += PERSONEN_LISTE_SCHRITT * 2; personenListeBegrenzen(); });
+    list.after(knopf);
+    if ("IntersectionObserver" in window) {
+      personenListeBeobachter = new IntersectionObserver((e) => { if (e.some((x) => x.isIntersecting) && !knopf.hidden) { personenListeGrenze += PERSONEN_LISTE_SCHRITT; personenListeBegrenzen(); } }, { rootMargin: "900px 0px" });
+      personenListeBeobachter.observe(knopf);
+    }
+  }
+  knopf.hidden = mehr === 0;
+  knopf.textContent = `Weitere ${Math.min(mehr, PERSONEN_LISTE_SCHRITT * 2)} von ${mehr} anzeigen`;
 }
 
 // Öffentliche Funktion für den direkten oninput/onkeyup-Handler im HTML.

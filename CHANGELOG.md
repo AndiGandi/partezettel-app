@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v444: Bestandsliste in Portionen (150, beim Wischen nachladen), Schlüsselfotos nur nahe dem Bildschirm, Egress-Messcode gebündelt, content-visibility entfernt.
 - v443: Tempo – Intl.Collator statt localeCompare mit Optionen, Datums-Zwischenspeicher in der Chronik, Debug-Protokoll gebündelt, Bestandskarten nur bei Änderung neu befüllen, schnellerer Suchfeld-Beobachter.
 - v442: JSON-Export und Backup sichern auch Trauungsbuch-Quellen je Ehe und Beziehungen; Wiederherstellen spielt sie zurück.
 - v441: Bestand-Filter (Eigentümer): Geburt bekannt ohne Sterbedatum (nach Geburt sortiert), nur Sterbejahr (nach Sterbejahr sortiert).

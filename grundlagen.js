@@ -1,5 +1,5 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 443
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 444
 
 
 // ==========================================================
@@ -424,10 +424,17 @@ async function ladeFotoBild(dateipfad) {
   return map.get(dateipfad) || fotoBildMemoryCache.get(dateipfad) || null;
 }
 
+// v444: höchstens alle 2 Sekunden speichern (vorher bei jedem einzelnen Foto – bremste das Wischen)
+let egressSpeichernTimer = null;
 function speichereEgressMessung() {
-  try {
-    sessionStorage.setItem(EGRESS_DEBUG_KEY, JSON.stringify(egressMessung));
-  } catch (_) {}
+  if (egressSpeichernTimer) return;
+  egressSpeichernTimer = setTimeout(() => {
+    egressSpeichernTimer = null;
+    try {
+      if (egressMessung.uniqueAssignedUrls?.length > 300) egressMessung.uniqueAssignedUrls = egressMessung.uniqueAssignedUrls.slice(-300);
+      sessionStorage.setItem(EGRESS_DEBUG_KEY, JSON.stringify(egressMessung));
+    } catch (_) {}
+  }, 2000);
 }
 
 try {
@@ -514,7 +521,7 @@ function registriereEgressSchritt(label) {
 
 function aktualisiereEgressMessung() {
   const el = document.getElementById("egress-debug-status");
-  if (!el) return;
+  if (!el || !el.offsetParent) return;   // v444: nur wenn die Diagnose sichtbar ist
   const seit = new Date(egressMessung.start).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const schritte = egressMessung.schritte.length
     ? "\n\nLetzte Messschritte:\n" + egressMessung.schritte.map((s, i) =>
