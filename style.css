@@ -2337,3 +2337,37 @@ input[type=search]::-webkit-search-cancel-button{-webkit-appearance:none;appeara
 .zf-leer{color:#aaa}
 .zf-anders,.zf-anders-muster{background:#fbeeb8;border-radius:3px}
 .personen-mehr{margin-top:.8rem}
+/* v449: Partezettel auswerten (KI) */
+.pzki-overlay{position:fixed;inset:0;z-index:1200;background:rgba(20,18,14,.55);display:flex;justify-content:center;align-items:flex-start;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:max(12px,env(safe-area-inset-top)) 12px 40px}
+.pzki-overlay[hidden]{display:none}
+body.pzki-offen{overflow:hidden}
+.pzki-sheet{background:var(--paper);color:var(--ink);width:min(760px,100%);border-radius:14px;padding:16px 16px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25)}
+.pzki-kopf{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}
+.pzki-kopf h2{margin:0;font-size:1.25rem}
+.pzki-block{border-top:1px solid var(--line,#ddd);padding-top:12px;margin-top:12px}
+.pzki-block h3{margin:0 0 8px;font-size:1.05rem}
+.pzki-zeile{display:grid;grid-template-columns:8.5em 1fr;gap:8px;padding:3px 0;font-size:.95rem}
+.pzki-zeile span{color:var(--ink-soft)}
+.pzki-hinweis{font-size:.9rem;color:var(--ink-soft);margin:6px 0}
+.pzki-text{white-space:pre-wrap;font-family:inherit;font-size:.88rem;background:rgba(0,0,0,.03);padding:8px;border-radius:8px;max-height:40vh;overflow:auto}
+.pzki-kandidat{display:flex;align-items:flex-start;gap:10px;border:1px solid var(--line,#ddd);border-radius:10px;padding:10px;margin:6px 0;cursor:pointer;background:#fff}
+.pzki-kandidat:has(input:checked){border-color:var(--accent,#5a6b3a);box-shadow:0 0 0 2px rgba(90,107,58,.18)}
+.pzki-kandidat input{margin-top:4px;flex:0 0 auto;width:20px;height:20px}
+.pzki-k-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.pzki-k-text small{color:var(--ink-soft)}
+.pzki-k-gruende{font-size:.82rem;color:var(--ink-soft)}
+.pzki-badge{flex:0 0 auto;font-size:.75rem;padding:2px 8px;border-radius:99px;background:#eee;white-space:nowrap}
+.pzki-sicher .pzki-badge{background:#dfeccd;color:#2f4a12}
+.pzki-moeglich .pzki-badge{background:#f6ecc8;color:#6a5108}
+.pzki-unsicher .pzki-badge{background:#f1dede;color:#7a2a2a}
+.pzki-check{display:flex;gap:10px;align-items:flex-start;padding:7px 0}
+.pzki-check input{width:20px;height:20px;flex:0 0 auto;margin-top:2px}
+.pzki-check small{display:block;color:var(--ink-soft);font-size:.82rem}
+.pzki-warn small{color:#8a4b00}
+.pzki-fotos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:10px}
+.pzki-foto{border:1px solid var(--line,#ddd);border-radius:10px;padding:8px;background:#fff;display:flex;flex-direction:column;gap:8px}
+.pzki-foto img{width:100%;max-height:300px;object-fit:contain;background:#f3f1ec;border-radius:6px}
+.pzki-neu{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.pzki-aktionen{margin-top:14px}
+.pzki-fehler{color:#9a2b2b}
+.pzki-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--accent-soft);border-radius:9px;padding:8px 10px;margin:4px 0 6px;font-size:.92rem}

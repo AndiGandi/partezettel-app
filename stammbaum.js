@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 448
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 450
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -2783,7 +2783,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=448");
+      treeModul3D = await import("./tree3d.js?v=450");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

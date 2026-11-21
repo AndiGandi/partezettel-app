@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 448
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 450
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -142,11 +142,17 @@ function drawPhotoEditor() {
   photoCtx.restore();
 }
 
-function openPhotoEditor(file) {
+let fotoEditorOptionen = {};
+// v449: optionen.crop = Start-Ausschnitt (Anteile 0–1), optionen.voll = in voller Auflösung ausschneiden,
+// optionen.maxKB = Zielgröße, optionen.titel = Überschrift (z. B. „Porträt zuschneiden“)
+function openPhotoEditor(file, optionen = {}) {
   return new Promise(async resolve => {
     fotoEditorResolve = resolve;
+    fotoEditorOptionen = optionen || {};
     fotoEditorRotation = 0;
-    fotoEditorCrop = { x: 0, y: 0, w: 1, h: 1 };
+    fotoEditorCrop = optionen?.crop ? { ...optionen.crop } : { x: 0, y: 0, w: 1, h: 1 };
+    const ueberschrift = photoEditor.querySelector("h2");
+    if (ueberschrift) ueberschrift.textContent = optionen?.titel || "Foto anpassen";
     fotoEditorImage = await loadImage(await bildZuDataURL(file));
     photoEditor.hidden = false;
     syncCropControls();
@@ -213,7 +219,21 @@ async function blobZuJPEGUnter200KB(blob, maxKB = 200) {
 
 function exportEditedPhoto() {
   if (!fotoEditorImage || !fotoEditorBaseCanvas.width) return null;
-  const src = fotoEditorBaseCanvas;
+  const maxKB = fotoEditorOptionen?.maxKB || 200;
+  let src = fotoEditorBaseCanvas;
+  if (fotoEditorOptionen?.voll) {   // v449: aus dem Originalbild ausschneiden (Vorschau ist auf 1200 px verkleinert)
+    const img = fotoEditorImage;
+    const f = Math.min(1, 4096 / Math.max(img.naturalWidth, img.naturalHeight));
+    const w0 = Math.round(img.naturalWidth * f), h0 = Math.round(img.naturalHeight * f);
+    const gedreht = Math.abs(fotoEditorRotation % 180) === 90;
+    const voll = document.createElement("canvas");
+    voll.width = gedreht ? h0 : w0; voll.height = gedreht ? w0 : h0;
+    const vctx = voll.getContext("2d");
+    vctx.translate(voll.width / 2, voll.height / 2);
+    vctx.rotate(fotoEditorRotation * Math.PI / 180);
+    vctx.drawImage(img, -w0 / 2, -h0 / 2, w0, h0);
+    src = voll;
+  }
   const x = Math.max(0, Math.round(src.width * fotoEditorCrop.x));
   const y = Math.max(0, Math.round(src.height * fotoEditorCrop.y));
   const w = Math.max(1, Math.min(src.width - x, Math.round(src.width * fotoEditorCrop.w)));
@@ -221,7 +241,7 @@ function exportEditedPhoto() {
   const out = document.createElement("canvas");
   out.width = w; out.height = h;
   out.getContext("2d").drawImage(src, x, y, w, h, 0, 0, w, h);
-  return new Promise(resolve => out.toBlob(async blob => resolve(blob ? await blobZuJPEGUnter200KB(blob) : null), "image/jpeg", .92));
+  return new Promise(resolve => out.toBlob(async blob => resolve(blob ? await blobZuJPEGUnter200KB(blob, maxKB) : null), "image/jpeg", .92));
 }
 
 async function bearbeiteFotos(files) {

@@ -1,7 +1,7 @@
-const CACHE_NAME = "partezettel-shell-v448";
+const CACHE_NAME = "partezettel-shell-v450";
 const LIB_CACHE = "partezettel-libs-v1";   // Bibliotheken (three.js) bleiben über App-Versionen hinweg erhalten
 const THREE_PREFIX = "https://cdn.jsdelivr.net/npm/three@0.160.0/";
-const SHELL_FILES = ["./index.html", "./style.css", "./grundlagen.js", "./erfassung.js", "./bestand.js", "./person.js", "./export.js", "./stammbaum.js", "./import.js", "./komfort.js", "./tree3d.js", "./chronik.js", "./pruefung.js", "./hinweise.js", "./config.js", "./manifest.json"];
+const SHELL_FILES = ["./index.html", "./style.css", "./grundlagen.js", "./erfassung.js", "./bestand.js", "./person.js", "./export.js", "./stammbaum.js", "./import.js", "./komfort.js", "./tree3d.js", "./chronik.js", "./pruefung.js", "./partezettel_ki.js", "./hinweise.js", "./config.js", "./manifest.json"];
 
 self.addEventListener("install", event => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES)));

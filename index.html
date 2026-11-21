@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 448 -->
+    <!-- Version 450 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=448">
+<link rel="stylesheet" href="style.css?v=450">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 448</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 450</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -480,6 +480,21 @@
 
   <!-- ===================== TAB: FOTOS ===================== -->
   <section id="tab-fotos" class="tab-panel">
+    <fieldset class="field-group nur-eigentuemer" id="pzki-box">
+      <legend>🕊️ Partezettel auswerten</legend>
+      <p class="capture-status">Für jede Anzeige wird die Person im Bestand gesucht und vorgeschlagen, was eingetragen wird: fehlendes Geburts- und Sterbedatum, das Porträt als Schlüsselfoto und der Partezettel als eigenes Foto. Gespeichert wird erst, wenn du bestätigst.</p>
+      <label class="btn btn--primary btn--full capture-btn" style="margin-top:.5rem;">
+        <span>📦 Partezettel-Paket einspielen</span>
+        <input type="file" id="pzki-paket" accept=".json,application/json" hidden>
+      </label>
+      <p class="capture-status">Das Paket bereitet Claude im Chat aus deinen Fotos vor (gelesene Angaben + zugeschnittene Bilder).</p>
+      <label class="btn btn--secondary btn--full capture-btn" style="margin-top:.5rem;">
+        <span>📷 Einzelnes Foto mit KI auswerten</span>
+        <input type="file" id="pzki-input" accept="image/*" hidden>
+      </label>
+      <p class="capture-status">Braucht die eingerichtete Supabase-Funktion „partezettel-lesen“ mit Anthropic-Schlüssel.</p>
+      <p id="pzki-status" class="capture-status" aria-live="polite"></p>
+    </fieldset>
     <fieldset class="field-group" data-rolle="bearbeiter">
       <legend>📷 Gruppenfotos</legend>
       <p class="capture-status">Hier werden ausschließlich Fotos verwaltet, die als Gruppenfoto gekennzeichnet sind oder bereits Personen-Markierungen besitzen. Normale Personenfotos bleiben hier ausgeblendet.</p>
@@ -607,6 +622,7 @@
         <p><strong>Verlauf:</strong> zeigt, wer wann was angelegt, geändert oder gelöscht hat, je Person und gesamt. <strong>Lücken &amp; Inseln</strong> (im Stammbaum) zeigt Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen.</p>
         <p><strong>Chronik:</strong> Zahlen und Rekorde aus dem Bestand, das Zeitgeschehen, das <strong>📅 Tagesblatt</strong> und <strong>🔎 Alles durchsuchen</strong>. Eine Kurzanleitung steht direkt in der Chronik unter „ⓘ So funktioniert die Chronik“.</p>
         <p><strong>Das bin ich:</strong> Unter ⚙ Konto legst du fest, wer du im Stammbaum bist. Dann steht bei jeder Person, wie sie mit dir verwandt ist („Das ist deine Großmutter“), und <strong>↔ Wie sind wir verwandt?</strong> zeigt den Weg im Stammbaum.</p>
+        <p class="nur-eigentuemer"><strong>🕊️ Partezettel auswerten</strong> (nur Eigentümer, im Bereich Fotos): Entweder ein von Claude im Chat vorbereitetes <em>Partezettel-Paket</em> einspielen (mehrere Anzeigen nacheinander) oder – mit eingerichteter KI-Funktion – ein einzelnes Foto auswerten. Aus Namen, Daten, Ehepartner und Kindern wird die passende Person im Bestand gesucht. Vorgeschlagen werden fehlendes Geburts- und Sterbedatum, das Porträt als Schlüsselfoto und der Partezettel als eigenes Foto. Mit „✂️ Ausschnitt anpassen“ lässt sich der Rahmen korrigieren. Abweichende Daten und bei Jahresgedenken nur abgeleitete Sterbejahre sind nicht angehakt. Gespeichert wird erst mit „Übernehmen“.</p>
         <p><strong>Suchen:</strong> Es genügen die ersten Buchstaben, Umlaute und Groß-/Kleinschreibung sind egal. Auch nach <strong>Datum</strong> (Geburt oder Tod): „24.10.1875“, „24. Oktober 1875“, „24.10.“ (alle mit diesem Tag), „10.1875“ (Monat), „Okt 1875“ – auch zusammen mit einem Namen, z. B. „Ganahl 3.1.1900“. Das <strong>✕</strong> im Suchfeld löscht den Suchtext mit einem Tipp. Neue oder geänderte Personen sind gleich nach dem Speichern überall auffindbar.</p>
         <p><strong>Weiterklicken und zurück:</strong> Öffnest du aus einer Person heraus ein Kind, einen Elternteil oder Ehepartner, steht oben „← Name“. Damit oder mit ✕ geht es zur vorherigen Person zurück (auch nach dem Bearbeiten), erst danach in den Bestand. Unter jedem Kind steht klein der Ehepartner (∞), bei mehreren Ehen nummeriert; Personen im Bestand sind anklickbar. Personen ganz ohne Lebensdaten tragen im Bestand den Hinweis „nur Name“ und lassen sich über „Anzeigen“ ausblenden.</p>
         <p><strong>Todesumstand:</strong> In „Bearbeiten“ unter dem Sterbedatum lässt sich „gefallen“, „vermisst“, „verunglückt“ oder „in der Lawine umgekommen“ wählen, mit einem kurzen Zusatz (z. B. „in Galizien“ oder „seit 1960“). Angezeigt wird das in der Personenansicht und auf der Karte im Bestand, z. B. „⚔ gefallen in Galizien“.</p>
@@ -1088,17 +1104,18 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=448"></script>
+<script src="hinweise.js?v=450"></script>
 <!-- App-Logik, in dieser Reihenfolge laden (früher app.js) -->
-<script src="grundlagen.js?v=448"></script>
-<script src="erfassung.js?v=448"></script>
-<script src="bestand.js?v=448"></script>
-<script src="person.js?v=448"></script>
-<script src="export.js?v=448"></script>
-<script src="stammbaum.js?v=448"></script>
-<script src="import.js?v=448"></script>
-<script src="komfort.js?v=448"></script>
-<script src="chronik.js?v=448"></script>
-<script src="pruefung.js?v=448"></script>
+<script src="grundlagen.js?v=450"></script>
+<script src="erfassung.js?v=450"></script>
+<script src="bestand.js?v=450"></script>
+<script src="person.js?v=450"></script>
+<script src="export.js?v=450"></script>
+<script src="stammbaum.js?v=450"></script>
+<script src="import.js?v=450"></script>
+<script src="komfort.js?v=450"></script>
+<script src="chronik.js?v=450"></script>
+<script src="pruefung.js?v=450"></script>
+<script src="partezettel_ki.js?v=450"></script>
 </body>
 </html>
