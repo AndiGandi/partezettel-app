@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v452: Partezettel bei bestehender Person: Kinder aus der Anzeige, die im Bestand fehlen (weder mit Datenblatt noch als „Name ohne Datenblatt“), werden einzeln zum Ergänzen vorgeschlagen und an kinder_ohne_datenblatt angehängt (nichts wird überschrieben). Abgleich mit Schreibvarianten und Rufnamen (Seppl/Josef, Conny/Kornelia, Stefan/Stephan …).
 - v451: Neuanlage aus Partezettel: partner_ohne_datenblatt/kinder_ohne_datenblatt aus Ehepartner/Kindern, herkunft_quelle (quelle_text) und Notiz; Rückfall ohne diese Spalten. Einstufung „möglich“ erst ab 9 Punkten (nur gleicher Name = unsicher).
 - v450: Partezettel-Paket (JSON mit Anzeigebild als data-URL, gelesenen Angaben, Porträt-Rahmen, Personenvorschlag) einspielen; gemeinsame Prüfansicht mit der KI-Auswertung, Navigation „Anzeige n von m“, Überspringen, Fototitel je Art (Partezettel/Jahresgedenken/Danksagung/Sterbebild). Neue Person wird bei erneutem „Übernehmen“ nicht doppelt angelegt.
 - v449: Partezettel auswerten (partezettel_ki.js, nur Eigentümer). Supabase Edge Function „partezettel-lesen“ (Claude, Werkzeug-Antwort als JSON, Eigentümerprüfung über fs_ist_eigentuemer, Schlüssel als Geheimnis ANTHROPIC_API_KEY). Abgleich: Name/Ledigenname ähnlich, Geburts-/Sterbedatum, Alter, Ehepartner und Kinder aus familien/familien_kinder. Porträt → Schlüsselfoto, Anzeige → Foto mit Titel „Partezettel“/„Jahresgedenken“. Foto-Editor: Startausschnitt, volle Auflösung, Zielgröße.

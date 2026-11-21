@@ -1,4 +1,4 @@
-// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 451
+// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 452
 // Ablauf: Foto der Todesanzeige → KI liest Namen, Daten, Angehörige und findet Porträt/Anzeige
 // (Supabase Edge Function „partezettel-lesen“) → passende Person im Bestand suchen (Name, Geburtsdatum,
 // Ehepartner, Kinder) → Vorschlag prüfen → erst nach Bestätigung speichern.
@@ -11,6 +11,7 @@ const PZKI = {
   gewaehlt: null,      // Personen-ID oder "neu"
   portraet: null,      // { crop, blob }
   anzeige: null,       // { crop, blob }
+  angehoerige: {},     // v452: je Personen-ID { kinder: [Namen], partner: [Namen] } aus dem Bestand
 };
 
 // ---------- kleine Helfer ----------
@@ -48,6 +49,39 @@ function pzkiNamenAehnlich(a, b) {
   for (const x of wa) for (const y of wb) best = Math.max(best, pzkiWortAehnlich(x, y));
   return best;
 }
+// v452: gebräuchliche Rufnamen, damit z. B. „Seppl“ nicht als fehlendes Kind gilt, wenn „Josef“ im Bestand ist
+const PZKI_RUFNAMEN = {
+  seppl: "josef", sepp: "josef", sepl: "josef", pepi: "josef", toni: "anton", hansi: "johann", hans: "johann", hannes: "johann",
+  conny: "kornelia", konny: "kornelia", fredy: "alfred", freddy: "alfred", fritz: "friedrich", mandi: "manfred", liesi: "elisabeth",
+  lisl: "elisabeth", annelies: "elisabeth", gretl: "margareta", resi: "theresia", vroni: "veronika", fini: "josefine", rosl: "rosa",
+  burgi: "walburga", christl: "christine", christel: "christine", gerti: "gertrud", wolfi: "wolfgang", heini: "heinrich", lothi: "lothar",
+};
+function pzkiNameBekannt(name, liste) {
+  const ruf = (n) => pzkiWoerter(n).map((w) => PZKI_RUFNAMEN[w] || w.replace(/ph/g, "f").replace(/th/g, "t").replace(/ck/g, "k")).join(" ");
+  return liste.some((x) => pzkiNamenAehnlich(name, x) >= 0.8 || pzkiNamenAehnlich(ruf(name), ruf(x)) >= 0.8);
+}
+// v452: Ehepartner und Kinder einer Person aus dem Bestand (mit Datenblatt und „Namen ohne Datenblatt“)
+async function pzkiAngehoerigeLaden(personId) {
+  if (!personId || personId === "neu" || PZKI.angehoerige[personId]) return;
+  const nachId = new Map((personenCache || []).map((p) => [p.id, p]));
+  const p = nachId.get(personId) || {};
+  const erg = { kinder: [], partner: [], kinderOhne: partnerOhneListe(p.kinder_ohne_datenblatt) };
+  try {
+    const { data: f } = await sb.from("familien").select("id, partner_a_id, partner_b_id").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`);
+    const fam = f || [];
+    for (const x of fam) { const o = nachId.get(x.partner_a_id === personId ? x.partner_b_id : x.partner_a_id); if (o) erg.partner.push(`${o.vorname || ""} ${o.nachname || ""}`.trim()); }
+    if (fam.length) {
+      const { data: k } = await sb.from("familien_kinder").select("kind_id").in("familie_id", fam.map((x) => x.id));
+      for (const x of k || []) { const c = nachId.get(x.kind_id); if (c) erg.kinder.push(c.vorname || ""); }
+    }
+    const { data: frisch } = await sb.from("personen").select("kinder_ohne_datenblatt").eq("id", personId).maybeSingle();
+    if (frisch) erg.kinderOhne = partnerOhneListe(frisch.kinder_ohne_datenblatt);
+  } catch (e) { debugLog(`⚠️ Partezettel: Angehörige von ${personId} nicht geladen: ${e.message || e}`); erg.fehler = true; }
+  for (const o of erg.kinderOhne) erg.kinder.push(o.name || "");
+  for (const o of partnerOhneListe(p.partner_ohne_datenblatt)) erg.partner.push(o.name || "");
+  PZKI.angehoerige[personId] = erg;
+}
+
 const pzkiJahr = (datum, jahr) => {
   const m = String(datum || "").match(/^(\d{4})/);
   return m ? Number(m[1]) : (Number(jahr) || null);
@@ -279,6 +313,8 @@ async function pzkiAuswerten(e, breite, hoehe, vorschlag) {
   PZKI.portraet = { crop: pc, gefunden: !!pb, blob: await pzkiAusschneiden(PZKI.bild, pc, 200) };
   PZKI.anzeige = { crop: ab, blob: await pzkiAusschneiden(PZKI.bild, ab, 700) };
   for (const t of [PZKI.portraet, PZKI.anzeige]) if (t?.blob) t.url = URL.createObjectURL(t.blob);
+  PZKI.angehoerige = {};
+  await pzkiAngehoerigeLaden(PZKI.gewaehlt);
   pzkiStatus("");
   const o = pzkiOverlay();
   o.hidden = false;
@@ -368,7 +404,11 @@ function pzkiZeichnen() {
     </section>
     <section class="pzki-block" id="pzki-aenderungen"></section>`;
   inhalt.querySelector("#pzki-ueberspringen")?.addEventListener("click", () => pzkiPaketEintrag(PZKI.paketIndex + 1));
-  inhalt.querySelectorAll('input[name="pzki-person"]').forEach((r) => r.addEventListener("change", () => { PZKI.gewaehlt = r.value; pzkiAenderungenZeichnen(); }));
+  inhalt.querySelectorAll('input[name="pzki-person"]').forEach((r) => r.addEventListener("change", async () => {
+    PZKI.gewaehlt = r.value;
+    await pzkiAngehoerigeLaden(r.value);
+    if (PZKI.gewaehlt === r.value) pzkiAenderungenZeichnen();
+  }));
   pzkiAenderungenZeichnen();
 }
 
@@ -408,6 +448,17 @@ function pzkiVorschlaege(p) {
   }
   if (v.ledigenname && !String(p.Ledigenname || "").trim()) add("ledig", "Ledigenname", v.ledigenname, "fehlt", true, { Ledigenname: v.ledigenname });
   if (v.todesumstand && !String(p.todesumstand_text || "").trim()) add("umstand", "Todesumstand", v.todesumstand, "fehlt", true, { todesumstand_text: v.todesumstand });
+  // v452: Kinder aus der Anzeige, die im Bestand fehlen → als „Namen ohne Datenblatt“ ergänzen (jedes Kind einzeln abwählbar)
+  const ang = PZKI.angehoerige[p.id];
+  if (ang && !ang.fehler) {
+    const bisher = ang.kinder.filter(Boolean);
+    for (const k of (e.kinder || []).filter((x) => x?.vorname)) {
+      if (k.bereits_verstorben) continue;
+      const name = [k.vorname, k.nachname].filter(Boolean).join(" ");
+      if (pzkiNameBekannt(name, bisher)) continue;
+      add("kind", "Kind ohne Datenblatt", name + (k.partner ? ` (mit ${k.partner})` : ""), bisher.length ? `Kinder im Bestand: ${bisher.join(", ")}` : "keine Kinder im Bestand", true, { _kind: { name } });
+    }
+  }
   return vs;
 }
 
@@ -533,12 +584,25 @@ async function pzkiUebernehmen() {
       erledigt.push("neue Person angelegt");
     } else {
       const aenderung = {};
+      const neueKinder = [];
       box.querySelectorAll("[data-pzki-feld]").forEach((c) => {
         if (!c.checked) return;
         const x = box._vorschlaege[Number(c.dataset.pzkiFeld)];
+        if (x.felder._kind) { neueKinder.push(x.felder._kind); return; }
         Object.assign(aenderung, x.felder);
         erledigt.push(x.label);
       });
+      if (neueKinder.length) {   // v452: an die vorhandenen „Kinder ohne Datenblatt“ anhängen (frisch gelesen, nichts überschreiben)
+        const { data: frisch, error: lesefehler } = await sb.from("personen").select("kinder_ohne_datenblatt").eq("id", personId).maybeSingle();
+        if (lesefehler) throw lesefehler;
+        const vorhanden = partnerOhneListe(frisch?.kinder_ohne_datenblatt);
+        const dazu = neueKinder.filter((k) => !vorhanden.some((o) => pzkiNorm(o.name) === pzkiNorm(k.name)));
+        if (dazu.length) {
+          aenderung.kinder_ohne_datenblatt = [...vorhanden, ...dazu];
+          erledigt.push(`${dazu.length} ${dazu.length === 1 ? "Kind" : "Kinder"} ergänzt (${dazu.map((k) => k.name).join(", ")})`);
+        }
+        delete PZKI.angehoerige[personId];
+      }
       if (Object.keys(aenderung).length) {
         const { error } = await sb.from("personen").update(aenderung).eq("id", personId);
         if (error) throw error;
