@@ -1,4 +1,4 @@
-// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 450
+// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 451
 // Ablauf: Foto der Todesanzeige → KI liest Namen, Daten, Angehörige und findet Porträt/Anzeige
 // (Supabase Edge Function „partezettel-lesen“) → passende Person im Bestand suchen (Name, Geburtsdatum,
 // Ehepartner, Kinder) → Vorschlag prüfen → erst nach Bestätigung speichern.
@@ -202,7 +202,7 @@ async function pzkiKandidatenSuchen(erg) {
 function pzkiStufe(k, zweiter) {
   const vorsprung = k.punkte - (zweiter?.punkte ?? 0);
   if (k.punkte >= 12 && vorsprung >= 4) return ["sicher", "sehr wahrscheinlich"];
-  if (k.punkte >= 8) return ["moeglich", "möglich"];
+  if (k.punkte >= 9) return ["moeglich", "möglich"];   // nur Name gleich (8) = unsicher
   return ["unsicher", "unsicher"];
 }
 
@@ -433,7 +433,7 @@ function pzkiAenderungenZeichnen() {
         <label class="field"><span>Nachname</span><input type="text" id="pzki-n-nachname" value="${pzkiH(v.nachname || "")}"></label>
         <label class="field"><span>Ledigenname</span><input type="text" id="pzki-n-ledig" value="${pzkiH(v.ledigenname || "")}"></label>
         <label class="field"><span>Geschlecht</span><select id="pzki-n-geschlecht"><option value="">–</option><option ${v.geschlecht === "männlich" ? "selected" : ""}>männlich</option><option ${v.geschlecht === "weiblich" ? "selected" : ""}>weiblich</option></select></label>
-        <p class="pzki-hinweis">Geboren ${pzkiH(pzkiDatumText(v.geburtsdatum, v.geburtsjahr) || "unbekannt")}, gestorben ${pzkiH(pzkiDatumText(v.sterbedatum, v.sterbejahr) || "unbekannt")}. Ehepartner und Kinder bitte danach im Datenblatt verbinden.</p>
+        <p class="pzki-hinweis">Geboren ${pzkiH(pzkiDatumText(v.geburtsdatum, v.geburtsjahr) || "unbekannt")}, gestorben ${pzkiH(pzkiDatumText(v.sterbedatum, v.sterbejahr) || "unbekannt")}. ${pzkiNeuHinweis()}</p>
       </div>` : (vs.length ? vs.map((x, i) => `<label class="pzki-check ${x.warnung ? "pzki-warn" : ""}"><input type="checkbox" data-pzki-feld="${i}" ${x.an ? "checked" : ""}>
         <span>${pzkiH(x.label)}: <strong>${pzkiH(x.neu)}</strong><small>bisher: ${pzkiH(x.bisher)}${x.warnung ? ` · ⚠️ ${pzkiH(x.warnung)}` : ""}</small></span></label>`).join("")
         : `<p class="pzki-hinweis">Namen und Daten stimmen bereits mit dem Bestand überein.</p>`)}
@@ -450,6 +450,17 @@ function pzkiAenderungenZeichnen() {
 }
 
 const pzkiFotoTitel = () => ({ jahresgedenken: "Jahresgedenken", danksagung: "Danksagung", sterbebild: "Sterbebild" }[PZKI.ergebnis?.art] || "Partezettel");
+
+function pzkiNeuHinweis() {
+  const e = PZKI.ergebnis || {};
+  const n = (l) => (l || []).filter((x) => x?.vorname).map((x) => x.vorname).join(", ");
+  const teile = [];
+  if (n(e.ehepartner)) teile.push(`Ehepartner: ${pzkiH(n(e.ehepartner))}`);
+  if (n(e.kinder)) teile.push(`Kinder: ${pzkiH(n(e.kinder))}`);
+  return teile.length
+    ? `${teile.join(" · ")} – werden als Namen ohne Datenblatt eingetragen; im Datenblatt mit „↗ Datenblatt“ zu eigenen Personen machen oder mit vorhandenen verbinden.`
+    : "Eltern, Ehepartner und Kinder bitte danach im Datenblatt verbinden.";
+}
 
 async function pzkiZuschneiden(art) {
   const t = PZKI[art];
@@ -504,7 +515,18 @@ async function pzkiUebernehmen() {
         todesumstand_text: v.todesumstand || null,
       };
       if (!neu.vorname && !neu.nachname) throw new Error("Bitte mindestens Vor- oder Nachnamen angeben.");
-      const { error } = await sb.from("personen").insert(Object.fromEntries(Object.entries(neu).filter(([, x]) => x !== null && x !== "")));
+      // v450: Ehepartner und Kinder als „Namen ohne Datenblatt“, Herkunft und Notiz aus der Anzeige
+      const e = PZKI.ergebnis || {};
+      const namen = (liste) => (liste || []).filter((x) => x?.vorname).map((x) => ({ name: [x.vorname, x.nachname].filter(Boolean).join(" ") }));
+      const zusatz = {
+        partner_ohne_datenblatt: namen(e.ehepartner),
+        kinder_ohne_datenblatt: namen(e.kinder),
+        herkunft_quelle: e.quelle_text || pzkiFotoTitel(),
+        Notiz: e.notiz || null,
+      };
+      const zeile = Object.fromEntries(Object.entries(neu).filter(([, x]) => x !== null && x !== ""));
+      let { error } = await sb.from("personen").insert({ ...zeile, ...Object.fromEntries(Object.entries(zusatz).filter(([, x]) => x && (!Array.isArray(x) || x.length))) });
+      if (error && /column|spalte|schema/i.test(error.message || "")) ({ error } = await sb.from("personen").insert(zeile));
       if (error) throw error;
       personId = neu.id;
       PZKI.gewaehlt = personId;   // falls danach ein Foto scheitert: erneutes „Übernehmen“ legt die Person nicht doppelt an
