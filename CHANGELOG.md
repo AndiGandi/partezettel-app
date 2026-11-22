@@ -2,6 +2,8 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v456: Gruppenfoto-Betrachter: Bezeichnung (titel) und Aufnahmedatum (Tag/Monat/Jahr) als Titelzeile über dem Bild; bei Fotos ohne Angaben ausgeblendet.
+- v455: Zusammenführen von Hand aus dem Bearbeiten-Fenster (Suche nach zweiter Person, gleicher Vergleichsdialog wie in der Datenprüfung, danach Personenansicht des bleibenden Eintrags).
 - v454: Dubletten-Regel: Gruppierung nach Datum statt nach erstem Vornamen, ähnliche Vor- und Familiennamen (Levenshtein, Präfix, Abkürzung mit einem Buchstaben), Reihenfolge der Vornamen egal; widersprüchliche Geburts-/Sterbedaten schließen aus.
 - v453: Löschen einer Person prüft das Ergebnis (delete … select), nimmt sie sofort aus Liste/Stammbaum und setzt den Abgleich zurück (vorher blieb sie sichtbar, weil der Delta-Abgleich nach einer Prüfung ohne Änderungen pausiert). Öffnen einer nicht mehr vorhandenen Person entfernt sie und lädt die Liste vollständig neu. Versionsnummer in komfort.js nachgezogen.
 - v452: Partezettel bei bestehender Person: Kinder aus der Anzeige, die im Bestand fehlen (weder mit Datenblatt noch als „Name ohne Datenblatt“), werden einzeln zum Ergänzen vorgeschlagen und an kinder_ohne_datenblatt angehängt (nichts wird überschrieben). Abgleich mit Schreibvarianten und Rufnamen (Seppl/Josef, Conny/Kornelia, Stefan/Stephan …).

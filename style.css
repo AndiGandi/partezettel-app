@@ -2371,3 +2371,9 @@ body.pzki-offen{overflow:hidden}
 .pzki-aktionen{margin-top:14px}
 .pzki-fehler{color:#9a2b2b}
 .pzki-nav{display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--accent-soft);border-radius:9px;padding:8px 10px;margin:4px 0 6px;font-size:.92rem}
+/* v456: Titel und Aufnahmedatum im Gruppenfoto */
+.detail-photo-viewer__titel{position:absolute;top:max(1rem,env(safe-area-inset-top));left:50%;transform:translateX(-50%);max-width:calc(100% - 140px);z-index:2;color:#fff;text-align:center;font-family:Georgia,"Iowan Old Style",serif;font-size:1.15rem;line-height:1.3;background:rgba(0,0,0,.35);padding:.4rem 1rem;border-radius:10px}
+.detail-photo-viewer__titel[hidden]{display:none}
+.detail-photo-viewer__titel span{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:.95rem;opacity:.9}
+.detail-photo-viewer.hat-titel .detail-photo-viewer__content{padding-top:3.6rem}
+@media(max-width:760px){.detail-photo-viewer__titel{font-size:1rem;max-width:calc(100% - 90px);left:.75rem;transform:none;text-align:left}.detail-photo-viewer.hat-titel .detail-photo-viewer__content{padding-top:3.4rem}}

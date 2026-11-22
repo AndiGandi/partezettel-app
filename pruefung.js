@@ -1,7 +1,7 @@
-// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 454
+// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 456
 // Sucht mögliche Dubletten und unwahrscheinliche Angaben. Was als „stimmt so“ oder „verschiedene Personen“
 // markiert ist (Tabelle pruef_ausnahmen, Supabase Paket 12), erscheint bei späteren Prüfungen nicht mehr.
-// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 454
+// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 456
 
 const PRUEF_REGELN = {
   dublette:             { sym: "👥", titel: "Mögliche Dubletten", text: "Gleiche oder ähnlich geschriebene Namen (Mathies/Mathis, Leo/Leopold, Ernst Emil/Emil Ernst) und passende Geburts- oder Sterbedaten.", ok: "✓ Verschiedene Personen" },
@@ -231,7 +231,49 @@ document.getElementById("pruef-neu")?.addEventListener("click", () => datenpruef
 document.querySelector('.tab-btn[data-tab="verlauf"]')?.addEventListener("click", () => { if (rolleIstEigentuemer()) void datenpruefungZeigen(false); });
 
 // ---------- Zusammenführen ----------
-function zusammenfuehrenDialog(ids) {
+// v455: Zusammenführen auch von Hand – aus „Person bearbeiten“ eine zweite Person suchen
+function manuellZusammenfuehren(personId) {
+  const ich = (personenCache || []).find((p) => p.id === personId);
+  if (!ich) return;
+  const f = komfortFenster(`
+    <h2 class="tour-titel">👥 Zusammenführen mit …</h2>
+    <p class="neuerungen-klein">Welche Person ist dieselbe wie <strong>${chrEsc(PersonSuche.label(ich))}</strong>? Name oder Datum eingeben.</p>
+    <input type="search" id="zf-suche" class="search-input" placeholder="z. B. Hanni Panholzer" autocomplete="off" style="width:100%;font-size:16px;">
+    <div id="zf-treffer" class="zf-treffer"></div>
+    <div class="tour-knoepfe"><button type="button" class="btn btn--ghost" data-zf="abbrechen">Abbrechen</button></div>`, { klasse: "komfort-fenster--zf" });
+  const eingabe = f.querySelector("#zf-suche"), liste = f.querySelector("#zf-treffer");
+  const zeigen = () => {
+    const q = eingabe.value.trim();
+    if (q.length < 2) { liste.innerHTML = `<p class="neuerungen-klein">Mindestens zwei Zeichen eingeben.</p>`; return; }
+    const treffer = personenCache.filter((p) => p.id !== personId && PersonSuche.trifft(p, q)).sort(PersonSuche.sort).slice(0, 15);
+    liste.innerHTML = treffer.length
+      ? treffer.map((p) => `<button type="button" class="btn btn--secondary btn--full zf-wahl" data-id="${chrEsc(p.id)}" style="justify-content:flex-start;margin:4px 0;text-align:left;">${chrEsc(PersonSuche.label(p))}</button>`).join("")
+      : `<p class="neuerungen-klein">Keine Person gefunden.</p>`;
+  };
+  eingabe.addEventListener("input", zeigen);
+  eingabe.value = [ich.vorname, ich.nachname].filter(Boolean).join(" ");
+  zeigen();
+  setTimeout(() => eingabe.focus(), 50);
+  f.querySelector('[data-zf="abbrechen"]').addEventListener("click", () => komfortFensterZu());
+  liste.addEventListener("click", async (e) => {
+    const b = e.target.closest(".zf-wahl"); if (!b) return;
+    liste.innerHTML = `<p class="neuerungen-klein">Daten werden geladen …</p>`;
+    try {
+      const d = await chronikDatenLaden(true);
+      pruefLetzte = { d, funde: pruefLetzte?.funde || [] };
+      komfortFensterZu();
+      zusammenfuehrenDialog([personId, b.dataset.id], {
+        nachher: (bleibt) => { const ov = document.getElementById("detail-overlay"); if (ov) ov.hidden = true; if (typeof openPersonDetail === "function") openPersonDetail(bleibt); }
+      });
+    } catch (err) { liste.innerHTML = `<p class="neuerungen-klein">Fehler: ${chrEsc(err.message || String(err))}</p>`; }
+  });
+}
+document.getElementById("d-merge-person-btn")?.addEventListener("click", () => {
+  if (!rolleIstEigentuemer()) return;
+  if (typeof currentDetailPersonId !== "undefined" && currentDetailPersonId) manuellZusammenfuehren(currentDetailPersonId);
+});
+
+function zusammenfuehrenDialog(ids, { nachher = null } = {}) {
   const d = pruefLetzte?.d; if (!d) return;
   const ps = ids.map((id) => d.personen.find((p) => p.id === id)).filter(Boolean);
   if (ps.length < 2) return;
@@ -270,6 +312,7 @@ function zusammenfuehrenDialog(ids) {
       }
       komfortFensterZu();
       await personenNachSpeichern();
+      if (nachher) { nachher(bleibt); return; }
       await datenpruefungZeigen(true);
       document.getElementById("pruef-meldung").textContent = `Zusammengeführt ✓ – ${weg.length + 1} Einträge sind jetzt einer. ` + document.getElementById("pruef-meldung").textContent;
     } catch (err) {

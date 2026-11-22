@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 454
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 456
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN
@@ -298,7 +298,7 @@ async function openPersonDetail(personId, options = {}) {
         if (!viewer || !viewerImg) return;
         detailViewerFoto = null;
         if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
-        if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+        if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; } gruppenfotoTitelZeigen(null);
         if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = true;
         setDetailPhotoViewerNumbersVisible(false);
         viewerImg.src = photo.url;
@@ -744,7 +744,7 @@ async function openPersonDetail(personId, options = {}) {
           if (viewer && viewerImg) {
             detailViewerFoto = null;
             if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
-            if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+            if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; } gruppenfotoTitelZeigen(null);
             if (detailPhotoViewerToggleNumbers) detailPhotoViewerToggleNumbers.hidden = true;
             setDetailPhotoViewerNumbersVisible(false);
             viewerImg.src = url; viewer.hidden = false;
@@ -2321,15 +2321,31 @@ function closeDetailPhotoViewer() {
   detailPhotoViewer.hidden = true;
   if (detailPhotoViewerImg) detailPhotoViewerImg.src = "";
   if (detailPhotoViewerMarkers) detailPhotoViewerMarkers.innerHTML = "";
-  if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; }
+  if (detailPhotoViewerLegend) { detailPhotoViewerLegend.innerHTML = ""; detailPhotoViewerLegend.hidden = true; } gruppenfotoTitelZeigen(null);
 }
 
 let detailViewerFoto = null;
 let detailViewerMarkierungen = [];
 let detailViewerUrl = "";
 
+// v456: Bezeichnung und Aufnahmedatum des Gruppenfotos über dem Bild
+function gruppenfotoTitelZeigen(foto) {
+  const el = document.getElementById("detail-photo-viewer-titel");
+  if (!el) return;
+  const MON = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+  const j = foto?.aufnahme_jahr, m = Number(foto?.aufnahme_monat) || 0, t = Number(foto?.aufnahme_tag) || 0;
+  const datum = j ? (t && m ? `${t}. ${MON[m - 1]} ${j}` : m ? `${MON[m - 1]} ${j}` : String(j)) : "";
+  const titel = String(foto?.titel || "").trim();
+  el.innerHTML = titel || datum
+    ? `${titel ? `<strong>${escapeHtml(titel)}</strong>` : ""}${titel && datum ? '<span class="trenner"> · </span>' : ""}${datum ? `<span>${escapeHtml(datum)}</span>` : ""}`
+    : "";
+  el.hidden = !(titel || datum);
+  detailPhotoViewer?.classList.toggle("hat-titel", !el.hidden);
+}
+
 function renderGruppenfotoViewer(url, markierungen = [], foto = null) {
   if (!detailPhotoViewer || !detailPhotoViewerImg || !url) return;
+  gruppenfotoTitelZeigen(foto);
   detailViewerFoto = foto || null;
   detailViewerMarkierungen = markierungen || [];
   detailViewerUrl = url;

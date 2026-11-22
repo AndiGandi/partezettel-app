@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 454 -->
+    <!-- Version 456 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=454">
+<link rel="stylesheet" href="style.css?v=456">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 454</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 456</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -1002,6 +1002,7 @@
       <div class="detail-actions">
         <p id="d-person-message" class="form-message"></p>
         <button type="button" id="d-save-person-btn" class="btn btn--primary btn--full">Änderungen speichern</button>
+        <button type="button" id="d-merge-person-btn" data-rolle="eigentuemer" class="btn btn--secondary btn--full">👥 Mit anderer Person zusammenführen …</button>
         <button type="button" id="d-delete-person-btn" data-rolle="eigentuemer" class="btn btn--full detail-delete-btn">Person vollständig löschen</button>
         <p id="d-delete-message" class="form-message"></p>
       </div>
@@ -1017,6 +1018,7 @@
 </div>
 
 <div id="detail-photo-viewer" class="detail-photo-viewer" hidden aria-label="Foto vergrößert">
+  <div id="detail-photo-viewer-titel" class="detail-photo-viewer__titel" hidden></div>
   <div class="detail-photo-viewer__toolbar"><button type="button" id="detail-photo-viewer-close" class="detail-photo-viewer__close" aria-label="Foto schließen">✕</button></div>
   <div class="detail-photo-viewer__content">
     <div id="detail-photo-viewer-stage" class="detail-photo-viewer__stage">
@@ -1104,18 +1106,18 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=454"></script>
+<script src="hinweise.js?v=456"></script>
 <!-- App-Logik, in dieser Reihenfolge laden (früher app.js) -->
-<script src="grundlagen.js?v=454"></script>
-<script src="erfassung.js?v=454"></script>
-<script src="bestand.js?v=454"></script>
-<script src="person.js?v=454"></script>
-<script src="export.js?v=454"></script>
-<script src="stammbaum.js?v=454"></script>
-<script src="import.js?v=454"></script>
-<script src="komfort.js?v=454"></script>
-<script src="chronik.js?v=454"></script>
-<script src="pruefung.js?v=454"></script>
-<script src="partezettel_ki.js?v=454"></script>
+<script src="grundlagen.js?v=456"></script>
+<script src="erfassung.js?v=456"></script>
+<script src="bestand.js?v=456"></script>
+<script src="person.js?v=456"></script>
+<script src="export.js?v=456"></script>
+<script src="stammbaum.js?v=456"></script>
+<script src="import.js?v=456"></script>
+<script src="komfort.js?v=456"></script>
+<script src="chronik.js?v=456"></script>
+<script src="pruefung.js?v=456"></script>
+<script src="partezettel_ki.js?v=456"></script>
 </body>
 </html>
