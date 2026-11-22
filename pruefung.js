@@ -1,10 +1,10 @@
-// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 453
+// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 454
 // Sucht mögliche Dubletten und unwahrscheinliche Angaben. Was als „stimmt so“ oder „verschiedene Personen“
 // markiert ist (Tabelle pruef_ausnahmen, Supabase Paket 12), erscheint bei späteren Prüfungen nicht mehr.
-// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 453
+// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 454
 
 const PRUEF_REGELN = {
-  dublette:             { sym: "👥", titel: "Mögliche Dubletten", text: "Gleicher Vorname, gleicher Familienname und gleiches Geburts- oder Sterbedatum.", ok: "✓ Verschiedene Personen" },
+  dublette:             { sym: "👥", titel: "Mögliche Dubletten", text: "Gleiche oder ähnlich geschriebene Namen (Mathies/Mathis, Leo/Leopold, Ernst Emil/Emil Ernst) und passende Geburts- oder Sterbedaten.", ok: "✓ Verschiedene Personen" },
   tod_vor_geburt:       { sym: "⛔", titel: "Tod vor der Geburt", text: "Das Sterbedatum liegt vor dem Geburtsdatum." },
   kind_nach_tod_mutter: { sym: "🕯️", titel: "Kind nach dem Tod der Mutter geboren", text: "Ein Kind ist nach dem Sterbedatum der Mutter geboren." },
   kind_nach_tod_vater:  { sym: "🕯️", titel: "Kind lange nach dem Tod des Vaters geboren", text: "Ein Kind ist mehr als 10 Monate nach dem Tod des Vaters geboren." },
@@ -66,18 +66,24 @@ function datenPruefen(d) {
 
   // Dubletten
   const nachnamen = (p) => new Set([n(p.nachname), n(p.Ledigenname)].filter(Boolean));
-  const passt = (a, b) => { const A = nachnamen(a), B = nachnamen(b); if (!A.size || !B.size) return true; for (const x of A) if (B.has(x)) return true; return false; };
-  // „Anna“ und „Anna Maria“ passen zusammen, „Maria Franziska“ und „Maria Berta“ nicht (oft Zwillinge)
-  const vornamePasst = (a, b) => { const A = n(a.vorname).split(" ").filter(Boolean), B = n(b.vorname).split(" ").filter(Boolean); const [k, g] = A.length <= B.length ? [A, B] : [B, A]; return k.every((t) => g.includes(t)); };
+  // v453: Schreibvarianten zählen als gleich (Mathies/Mathis, Reiner/Rainer, Leo/Leopold, Theres/Theresia)
+  const lev = (x, y) => { let v = Array.from({ length: y.length + 1 }, (_, i) => i); for (let i = 1; i <= x.length; i++) { const w = [i]; for (let j = 1; j <= y.length; j++) w[j] = Math.min(v[j] + 1, w[j - 1] + 1, v[j - 1] + (x[i - 1] === y[j - 1] ? 0 : 1)); v = w; } return v[y.length]; };
+  const aehnlich = (x, y) => { if (x === y) return true; const k = Math.min(x.length, y.length);
+    if (k === 1) return x[0] === y[0]; /* Abkürzung „M. Rosina“ = „Maria Rosina“ */ if (k >= 3 && (x.startsWith(y) || y.startsWith(x))) return true; const dd = Math.abs(x.length - y.length) <= 2 ? lev(x, y) : 9; return (dd <= 1 && k >= 4) || (dd <= 2 && k >= 6); };
+  const passt = (a, b) => { const A = nachnamen(a), B = nachnamen(b); if (!A.size || !B.size) return true; for (const x of A) for (const y of B) if (aehnlich(x, y)) return true; return false; };
+  // „Anna“ und „Anna Maria“ passen zusammen, „Maria Franziska“ und „Maria Berta“ nicht (oft Zwillinge);
+  // die Reihenfolge ist egal („Ernst Emil“ = „Emil Ernst“)
+  const vornamePasst = (a, b) => { const A = n(a.vorname).split(/[\s.\-]+/).filter(Boolean), B = n(b.vorname).split(/[\s.\-]+/).filter(Boolean); const [k, g] = A.length <= B.length ? [A, B] : [B, A]; return k.length > 0 && k.every((t) => g.some((u) => aehnlich(t, u))); };
   const gruppen = new Map();
-  const merke = (k, p) => { if (!gruppen.has(k)) gruppen.set(k, []); gruppen.get(k).push(p); };
+  const merke = (k, p) => { if (!gruppen.has(k)) gruppen.set(k, []); if (!gruppen.get(k).includes(p)) gruppen.get(k).push(p); };
   for (const p of d.personen) {
-    const vn = n(p.vorname).split(" ")[0];
-    if (!vn) continue;
-    if (vollDatum(p.sterbedatum)) merke(`t|${vn}|${vollDatum(p.sterbedatum)}`, p);
-    if (vollDatum(p.geburtsdatum)) merke(`g|${vn}|${vollDatum(p.geburtsdatum)}`, p);
+    if (!n(p.vorname)) continue;
+    const gd = vollDatum(p.geburtsdatum), td = vollDatum(p.sterbedatum);
+    // nach Datum gruppieren (Vornamen werden danach verglichen) – so fallen auch andere Reihenfolgen und Schreibweisen auf
+    if (td) merke(`t|${td}`, p);
+    if (gd) merke(`g|${gd}`, p);
     const gj = chrGebJahr(p), tj = chrTodJahr(p);
-    if (gj && tj) for (const nn of nachnamen(p)) merke(`j|${vn}|${nn}|${gj}|${tj}`, p);
+    if (gj && tj) merke(`j|${gj}|${tj}`, p);
   }
   const partnerVon = new Map();
   for (const f of d.familien) { for (const [x, y] of [[f.partner_a_id, f.partner_b_id], [f.partner_b_id, f.partner_a_id]]) if (x && y) { if (!partnerVon.has(x)) partnerVon.set(x, new Set()); partnerVon.get(x).add(y); } }
@@ -87,6 +93,15 @@ function datenPruefen(d) {
     for (let i = 0; i < liste.length; i++) for (let j = i + 1; j < liste.length; j++) {
       const a = liste[i], b = liste[j];
       if (a.id === b.id || !passt(a, b) || !vornamePasst(a, b) || partnerVon.get(a.id)?.has(b.id)) continue;
+      // v453: widersprüchliche Daten = verschiedene Personen
+      const gA = vollDatum(a.geburtsdatum), gB = vollDatum(b.geburtsdatum), tA = vollDatum(a.sterbedatum), tB = vollDatum(b.sterbedatum);
+      // Ausnahme: ein Datum stimmt auf den Tag genau und der Vorname ist identisch (ein Datum vermutlich verlesen)
+      const genauGleich = ((gA && gA === gB) || (tA && tA === tB)) && n(a.vorname) === n(b.vorname);
+      if (!genauGleich) {
+        if ((gA && gB && gA !== gB) || (tA && tB && tA !== tB)) continue;
+        const gjA = chrGebJahr(a), gjB = chrGebJahr(b), tjA = chrTodJahr(a), tjB = chrTodJahr(b);
+        if ((gjA && gjB && Math.abs(gjA - gjB) > 1) || (tjA && tjB && Math.abs(tjA - tjB) > 1)) continue;
+      }
       if (a.geschlecht && b.geschlecht && a.geschlecht !== b.geschlecht) continue;
       for (const x of [a.id, b.id]) if (!wurzel.has(x)) wurzel.set(x, x);
       wurzel.set(finde(a.id), finde(b.id));
