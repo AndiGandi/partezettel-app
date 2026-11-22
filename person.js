@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 451
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 453
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN
@@ -254,6 +254,7 @@ async function openPersonDetail(personId, options = {}) {
     pvSofort?.classList.remove("pv-laedt");
     if (error || !person) {
       debugLog(`❌ Fehler beim Laden der Person: ${error?.message || "Person nicht gefunden"}`);
+      if (!person && (!error || error.code === "PGRST116")) await personNichtMehrVorhanden(personId);   // v453
       return;
     }
     const overlay = document.getElementById("person-view-overlay");
@@ -928,7 +929,11 @@ async function openPersonEdit(personId, options = {}) {
   await ensureSession();
 
   const { data: person, error } = await sb.from("personen").select("*").eq("id", personId).single();
-  if (error) { debugLog(`❌ Fehler beim Laden der Person: ${error.message}`); return; }
+  if (error || !person) {
+    debugLog(`❌ Fehler beim Laden der Person: ${error?.message || "Person nicht gefunden"}`);
+    if (!person && (!error || error.code === "PGRST116")) { detailOverlay.hidden = true; await personNichtMehrVorhanden(personId); }   // v453
+    return;
+  }
 
   document.getElementById("d-vorname").value = person.vorname || "";
   document.getElementById("d-nachname").value = person.nachname || "";
@@ -4030,14 +4035,23 @@ document.getElementById("d-delete-person-btn").addEventListener("click", async (
       if (error) throw error;
     }
 
-    const { error: personError } = await sb.from("personen")
+    // v453: prüfen, ob wirklich gelöscht wurde (ohne Rückgabe meldet die Datenbank auch „0 gelöscht“ als Erfolg)
+    const geloeschteId = currentDetailPersonId;
+    const { data: weg, error: personError } = await sb.from("personen")
       .delete()
-      .eq("id", currentDetailPersonId);
+      .eq("id", geloeschteId)
+      .select("id");
     if (personError) throw personError;
+    if (!weg?.length) {
+      const { data: noch } = await sb.from("personen").select("id").eq("id", geloeschteId).maybeSingle();
+      if (noch) throw new Error("Die Datenbank hat das Löschen nicht ausgeführt (fehlende Berechtigung?).");
+    }
 
     detailOverlay.hidden = true;
     currentDetailPersonId = null;
     msg.textContent = "";
+    personAusListeEntfernen(geloeschteId);
+    syncPruefungSeitCacheLaden = false;   // sonst übersieht der Abgleich die Löschung
     await loadPersonen();
   } catch (err) {
     const detail = (err && (err.message || err.error_description || err.msg)) || "Unbekannter Fehler";

@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 451
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 453
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -1208,6 +1208,26 @@ async function personenNachSpeichern(neueId = null) {
     }
   })();
   return personenNachSpeichernLauf;
+}
+
+// v453: Person sofort aus Liste und Zwischenspeicher nehmen (nach dem Löschen oder wenn es sie nicht mehr gibt)
+function personAusListeEntfernen(id) {
+  personenCache = (personenCache || []).filter((p) => p.id !== id);
+  const karte = personenKartenCache.get(id);
+  if (karte) karte.li.remove();
+  personenKartenCache.delete(id);
+  try { if (Array.isArray(treeData?.personen)) treeData.personen = treeData.personen.filter((p) => p.id !== id); } catch {}
+}
+// Eine Person steht noch in der Liste, existiert in der Datenbank aber nicht mehr („Geist“):
+// aus der Liste nehmen und die Liste einmal vollständig neu laden, damit auch der gespeicherte Stand stimmt.
+async function personNichtMehrVorhanden(id) {
+  personAusListeEntfernen(id);
+  document.getElementById("person-view-overlay")?.setAttribute("hidden", "");
+  document.body.classList.remove("person-view-open");
+  const banner = document.getElementById("pending-banner");
+  if (banner) { banner.hidden = false; banner.textContent = "Diese Person gibt es nicht mehr (bereits gelöscht) – die Liste wird aktualisiert …"; setTimeout(() => { banner.hidden = true; }, 5000); }
+  debugLog(`ℹ️ Person ${id} existiert nicht mehr – Liste wird vollständig neu geladen.`);
+  try { await loadPersonen(true); } catch (e) { debugLog(`⚠️ Neu laden: ${e.message || e}`); }
 }
 
 function invalidierePersonenCache() {

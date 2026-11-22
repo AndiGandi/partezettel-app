@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 451
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 453
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -474,9 +474,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 451;   // bei jeder Version mit hochzählen
+const APP_VERSION = 453;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [453, ["Gelöschte Personen verschwinden sofort aus der Liste; ist eine Person schon gelöscht, aber noch sichtbar, wird sie beim Antippen entfernt", "Partezettel: fehlende Kinder einer bestehenden Person werden vorgeschlagen (aus Version 452)"]],
   [451, ["Partezettel-Paket: neue Personen bekommen Ehepartner und Kinder als Namen ohne Datenblatt, dazu Herkunft und eine Notiz aus der Anzeige"]],
   [450, ["📦 Partezettel-Paket einspielen (nur Eigentümer, unter Fotos): von Claude im Chat vorbereitete Anzeigen nacheinander prüfen und übernehmen – ohne KI-Schlüssel"]],
   [449, ["🕊️ Partezettel auswerten (nur Eigentümer, unter Fotos): Todesanzeige fotografieren – Person wird im Bestand gesucht, Daten, Schlüsselfoto und Partezettel werden nach Bestätigung eingetragen"]],

@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v453: Löschen einer Person prüft das Ergebnis (delete … select), nimmt sie sofort aus Liste/Stammbaum und setzt den Abgleich zurück (vorher blieb sie sichtbar, weil der Delta-Abgleich nach einer Prüfung ohne Änderungen pausiert). Öffnen einer nicht mehr vorhandenen Person entfernt sie und lädt die Liste vollständig neu. Versionsnummer in komfort.js nachgezogen.
 - v452: Partezettel bei bestehender Person: Kinder aus der Anzeige, die im Bestand fehlen (weder mit Datenblatt noch als „Name ohne Datenblatt“), werden einzeln zum Ergänzen vorgeschlagen und an kinder_ohne_datenblatt angehängt (nichts wird überschrieben). Abgleich mit Schreibvarianten und Rufnamen (Seppl/Josef, Conny/Kornelia, Stefan/Stephan …).
 - v451: Neuanlage aus Partezettel: partner_ohne_datenblatt/kinder_ohne_datenblatt aus Ehepartner/Kindern, herkunft_quelle (quelle_text) und Notiz; Rückfall ohne diese Spalten. Einstufung „möglich“ erst ab 9 Punkten (nur gleicher Name = unsicher).
 - v450: Partezettel-Paket (JSON mit Anzeigebild als data-URL, gelesenen Angaben, Porträt-Rahmen, Personenvorschlag) einspielen; gemeinsame Prüfansicht mit der KI-Auswertung, Navigation „Anzeige n von m“, Überspringen, Fototitel je Art (Partezettel/Jahresgedenken/Danksagung/Sterbebild). Neue Person wird bei erneutem „Übernehmen“ nicht doppelt angelegt.
