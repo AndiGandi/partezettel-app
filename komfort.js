@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 456
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -474,9 +474,11 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 456;   // bei jeder Version mit hochzählen
+const APP_VERSION = 458;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [458, ["„Verlauf“ und „Prüfen“ sind jetzt ein Reiter „Verwaltung“: Datenprüfung, Lücken & Inseln, Papierkorb und Änderungsprotokoll", "Die Plausibilitätsprüfung ist in der Datenprüfung aufgegangen – alles mit „✓ Stimmt so“", "Bestand: „🔎 Alles durchsuchen“ direkt unter dem Suchfeld", "Stammbaum: „Cousins & Cousinen“ entfernt"]],
+  [457, ["Neuer Bereich „Prüfen“ (nur Eigentümer): Datenprüfung, Plausibilität sowie Lücken & Inseln an einem Ort", "„Export / Sicherung“ heißt jetzt „Import / Export“ – dort auch Hausblätter-Import und 🕊️ Partezettel auswerten", "Bestand: neue Sortierung „Mit weiterführenden Links zuerst“, Links als 🔗-Abzeichen; Kirchenbuch-Abzeichen T/Tr/S deutlicher"]],
   [456, ["Gruppenfotos zeigen oben die Bezeichnung und das Aufnahmedatum (sofern eingetragen)"]],
   [455, ["Person bearbeiten → „👥 Mit anderer Person zusammenführen …“: doppelte Einträge auch von Hand zusammenführen (nur Eigentümer)"]],
   [454, ["Datenprüfung findet mehr Dubletten: ähnliche Schreibweisen (Mathies/Mathis, Reiner/Rainer), andere Vornamen-Reihenfolge, Abkürzungen (M. Rosina) und Einträge nur mit Jahrgang"]],

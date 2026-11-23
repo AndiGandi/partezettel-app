@@ -2,6 +2,8 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v458: Reiter „Verwaltung“ (Verlauf + Prüfen) mit Sprungleiste; Plausibilitätsbefunde (Fehler und Warnungen ohne Überschneidung mit eigenen Regeln) als Regeln plaus_fehler/plaus_warnung in der Datenprüfung, eigener Plausibilitäts-Abschnitt entfernt; „Alles durchsuchen“-Fenster im Bestand; Cousins-Knopf im Stammbaum entfernt.
+- v457: Aufgeräumt: neuer Reiter „Prüfen“ (Datenprüfung aus „Verlauf“, Plausibilität und Lücken & Inseln aus dem Stammbaum, Sprungleiste), „Partezettel auswerten“ von „Gruppenfoto“ nach „Import / Export“ (vorher „Export / Sicherung“), Reiter „Hilfe“ kürzer. Sortierung nach weiterführenden Links, 🔗-Abzeichen, deutlichere Kirchenbuch-Abzeichen.
 - v456: Gruppenfoto-Betrachter: Bezeichnung (titel) und Aufnahmedatum (Tag/Monat/Jahr) als Titelzeile über dem Bild; bei Fotos ohne Angaben ausgeblendet.
 - v455: Zusammenführen von Hand aus dem Bearbeiten-Fenster (Suche nach zweiter Person, gleicher Vergleichsdialog wie in der Datenprüfung, danach Personenansicht des bleibenden Eintrags).
 - v454: Dubletten-Regel: Gruppierung nach Datum statt nach erstem Vornamen, ähnliche Vor- und Familiennamen (Levenshtein, Präfix, Abkürzung mit einem Buchstaben), Reihenfolge der Vornamen egal; widersprüchliche Geburts-/Sterbedaten schließen aus.

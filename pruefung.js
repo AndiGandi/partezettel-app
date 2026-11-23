@@ -1,7 +1,7 @@
-// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 456
+// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 458
 // Sucht mögliche Dubletten und unwahrscheinliche Angaben. Was als „stimmt so“ oder „verschiedene Personen“
 // markiert ist (Tabelle pruef_ausnahmen, Supabase Paket 12), erscheint bei späteren Prüfungen nicht mehr.
-// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 456
+// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 458
 
 const PRUEF_REGELN = {
   dublette:             { sym: "👥", titel: "Mögliche Dubletten", text: "Gleiche oder ähnlich geschriebene Namen (Mathies/Mathis, Leo/Leopold, Ernst Emil/Emil Ernst) und passende Geburts- oder Sterbedaten.", ok: "✓ Verschiedene Personen" },
@@ -12,8 +12,26 @@ const PRUEF_REGELN = {
   mutter_alter:         { sym: "👵", titel: "Ungewöhnliches Alter der Mutter", text: "Mutter bei der Geburt jünger als 15 oder älter als 48." },
   ehe_jung:             { sym: "💍", titel: "Sehr junge Heirat", text: "Ein Partner war bei der Heirat jünger als 15." },
   ueber_105:            { sym: "🎂", titel: "Über 105 Jahre alt geworden", text: "Lebensdauer über 105 Jahre." },
+  plaus_fehler:         { sym: "⛔", titel: "Widersprüche in den Daten", text: "Aus der Plausibilitätsprüfung: Angaben, die nicht gleichzeitig stimmen können (z. B. Kind vor den Eltern geboren, Ehe nach dem Tod)." },
+  plaus_warnung:        { sym: "⚠️", titel: "Ungewöhnliche Abstände", text: "Aus der Plausibilitätsprüfung: z. B. großer Altersabstand in einer Ehe. Kann stimmen – bitte prüfen." },
   ohne_sterbedatum:     { sym: "❔", titel: "Vor 1900 geboren, ohne Sterbedatum", text: "Gilt als verstorben; das Sterbedatum fehlt noch.", hinweis: true }
 };
+// v458: Plausibilität (Stammbaum-Prüfung) in die Datenprüfung übernehmen – nur was hier nicht schon geprüft wird
+async function plausAlsFunde(d) {
+  if (typeof plausBerichtAnalyse !== "function") return [];
+  try { if (!treeData?.personen?.length) await loadStammbaumData(); } catch { return []; }
+  const P = new Map(d.personen.map((p) => [p.id, p]));
+  const doppelt = /Vater wäre|Mutter wäre|ohne Sterbedatum|liegt nach dem Tod|nach dem Tod der Mutter geboren|Monate nach dem Tod/i;   // schon eigene Regeln
+  const funde = [];
+  for (const b of plausBerichtAnalyse().befunde) {
+    if (b.stufe === "hinweis" || doppelt.test(b.text)) continue;
+    const ids = (b.personen || []).filter((id) => P.has(id));
+    if (!ids.length) continue;
+    const art = b.text.replace(/^[^:]*:\s*/, "").replace(/\d+/g, "#").replace(/\s+/g, " ").slice(0, 60);
+    funde.push({ regel: `plaus_${b.stufe}`, schluessel: `${[...ids].sort().join(",")}|${art}`, personen: ids.map((id) => P.get(id)), details: b.text });
+  }
+  return funde;
+}
 const PRUEF_LOKAL_KEY = "fs-pruef-ausnahmen";
 let pruefAusnahmen = new Map();   // "regel|schluessel" -> {notiz, geprueft_am}
 let pruefAusnahmenInDb = false;
@@ -171,7 +189,7 @@ async function datenpruefungZeigen(neuLaden = false) {
   meldung.textContent = "Prüfe …";
   try {
     const [d] = await Promise.all([chronikDatenLaden(neuLaden), pruefAusnahmenLaden()]);
-    pruefLetzte = { d, funde: datenPruefen(d) };
+    pruefLetzte = { d, funde: [...datenPruefen(d), ...(await plausAlsFunde(d))] };
   } catch (e) { meldung.textContent = `Prüfung nicht möglich: ${e.message || e}`; return; }
   pruefRendern();
 }
@@ -193,7 +211,7 @@ function pruefRendern() {
       <ul class="pruef-liste">${liste.slice(0, 300).map((f) => {
         const markiert = pruefAusnahmen.get(`${f.regel}|${f.schluessel}`);
         return `<li class="pruef-fund${markiert ? " is-geprueft" : ""}" data-regel="${chrEsc(f.regel)}" data-schluessel="${chrEsc(f.schluessel)}">
-          <div class="pruef-personen">${f.personen.slice(0, f.regel === "dublette" ? 10 : 1).map((p) => chrLink(p)).join(f.regel === "dublette" ? "<br>" : "")}</div>
+          <div class="pruef-personen">${f.personen.slice(0, f.regel === "dublette" || f.regel.startsWith("plaus_") ? 10 : 1).map((p) => chrLink(p)).join(f.regel === "dublette" || f.regel.startsWith("plaus_") ? "<br>" : "")}</div>
           <div class="pruef-details">${chrEsc(f.details || "")}${markiert ? `<br><small>✓ geprüft ${chrEsc(new Date(markiert.geprueft_am).toLocaleDateString("de-AT"))}${markiert.notiz ? ` – ${chrEsc(markiert.notiz)}` : ""}</small>` : ""}</div>
           <div class="pruef-knoepfe">${markiert
             ? `<button type="button" class="btn btn--ghost" data-pruef="aufheben">↩ Markierung aufheben</button>`
@@ -228,7 +246,7 @@ document.addEventListener("click", async (e) => {
 });
 document.getElementById("pruef-alle")?.addEventListener("change", () => { if (pruefLetzte) pruefRendern(); });
 document.getElementById("pruef-neu")?.addEventListener("click", () => datenpruefungZeigen(true));
-document.querySelector('.tab-btn[data-tab="verlauf"]')?.addEventListener("click", () => { if (rolleIstEigentuemer()) void datenpruefungZeigen(false); });
+document.querySelector('.tab-btn[data-tab="verlauf"]')?.addEventListener("click", () => { if (rolleIstEigentuemer()) void datenpruefungZeigen(false); });   // v458: Bereich „Verwaltung“
 
 // ---------- Zusammenführen ----------
 // v455: Zusammenführen auch von Hand – aus „Person bearbeiten“ eine zweite Person suchen
@@ -321,3 +339,41 @@ function zusammenfuehrenDialog(ids, { nachher = null } = {}) {
     }
   });
 }
+
+// v457/v458: Sprungleiste im Bereich „Verwaltung“ – Lücken & Inseln starten beim Anspringen gleich
+document.querySelector(".pruefen-nav")?.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-pruefen-zu]"); if (!b) return;
+  const ziel = document.getElementById(b.dataset.pruefenZu);
+  if (b.dataset.pruefenZu === "pruefen-plaus" && document.getElementById("tree-plaus-panel")?.hidden) document.getElementById("tree-plaus-open")?.click();
+  if (b.dataset.pruefenZu === "pruefen-luecken" && document.getElementById("tree-luecken-panel")?.hidden) document.getElementById("tree-luecken-open")?.click();
+  ziel?.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+// v458: „Alles durchsuchen“ direkt aus dem Bestand (gleiche Suche wie in der Chronik)
+function allesDurchsuchenFenster(start = "") {
+  const f = komfortFenster(`
+    <h2 class="tour-titel">🔎 Alles durchsuchen</h2>
+    <input type="search" id="alles-feld" class="search-input" placeholder="z. B. gefallen, Lawine, 1910, Innerberg 21, Amerika …" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="search" style="width:100%;font-size:16px;">
+    <p class="neuerungen-klein">Namen, Todesumstand, Notizen, Häuser, Lebensjahre und Zeitgeschehen. „gefallen“ findet auch „vermisst“; Jahre, Zeiträume („1914-1918“), „geboren 1900“, „Frauen“ grenzen ein.</p>
+    <div id="alles-ergebnis" class="chr-suche-ergebnis"></div>
+    <div class="tour-knoepfe"><button type="button" class="btn btn--ghost" data-alles="zu">Schließen</button></div>`, { klasse: "komfort-fenster--alles" });
+  const feld = f.querySelector("#alles-feld"), ziel = f.querySelector("#alles-ergebnis");
+  let timer = null, lauf = 0;
+  const suchen = async () => {
+    const q = feld.value, nr = ++lauf;
+    if (!q.trim()) { ziel.innerHTML = ""; return; }
+    try {
+      const d = await chronikDatenLaden(false);
+      if (nr !== lauf) return;
+      allgSucheRendern(allgemeineSuche(d, q, { leser: typeof zugang !== "undefined" && zugang?.rolle === "leser" }), ziel, q);
+    } catch (err) { ziel.innerHTML = `<p class="chr-suche-summe">Suche nicht möglich: ${chrEsc(err.message || err)}</p>`; }
+  };
+  feld.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(suchen, feld.value ? 220 : 0); });
+  f.querySelector('[data-alles="zu"]').addEventListener("click", () => komfortFensterZu());
+  // Person antippen: Fenster schließen, Person öffnen (das Öffnen übernimmt der allgemeine .chr-link-Klick)
+  ziel.addEventListener("click", (e) => { if (e.target.closest(".chr-link")) komfortFensterZu(); });
+  feld.value = start;
+  if (start.trim()) suchen();
+  setTimeout(() => feld.focus(), 50);
+}
+document.getElementById("alles-suchen-btn")?.addEventListener("click", () => allesDurchsuchenFenster(document.getElementById("search-input")?.value || ""));

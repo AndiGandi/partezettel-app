@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 456
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -1451,6 +1451,12 @@ function erstellePersonenKarte(p) {
 }
 
 // v443: Fingerabdruck einer Karte – ändert sich nichts, wird die Karte nicht neu befüllt
+// v457: Anzahl weiterführender Links einer Person (für Abzeichen und Sortierung)
+function anzahlWeiterfuehrendeLinks(p) {
+  const v = p?.weiterfuehrende_links;
+  if (!v || v === "[]") return 0;
+  try { return (typeof normalisiereWeiterfuehrendeLinks === "function" ? normalisiereWeiterfuehrendeLinks(v) : (Array.isArray(v) ? v : JSON.parse(v))).filter((x) => String(x?.url || "").trim()).length; } catch { return 0; }
+}
 function personenKartenSignatur(p) {
   const v = personenVerwandtschaftCache.get(p.id);
   const l = typeof stammlinienInfo !== "undefined" ? stammlinienInfo.get(p.id) : null;
@@ -1468,6 +1474,7 @@ function aktualisierePersonenKarte(karte, p) {
   if (punkt) karte.name.prepend(punkt);
   { const lb = linienBadgesElement(p.id); if (lb) karte.name.appendChild(lb); }
   { const kb = kbChipsElement(p.id); if (kb) karte.name.appendChild(kb); }   // v412
+  { const n = anzahlWeiterfuehrendeLinks(p); if (n) { const s = document.createElement("span"); s.className = "link-mini"; s.textContent = `🔗 ${n}`; s.title = `${n} weiterführende${n === 1 ? "r" : ""} Link${n === 1 ? "" : "s"}`; karte.name.appendChild(s); } }   // v457
   const kartenLedigenname = String(p.Ledigenname || p.ledigenname || "").trim();
   if (kartenLedigenname) {
     const maiden = document.createElement("span");

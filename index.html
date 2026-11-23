@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#174f3b">
 <title>Familienspuren</title>
-    <!-- Version 456 -->
+    <!-- Version 458 -->
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png?v=407">
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png?v=407">
@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Familienspuren">
-<link rel="stylesheet" href="style.css?v=456">
+<link rel="stylesheet" href="style.css?v=458">
 <style>
   .login-card--familienspuren { text-align: center; }
   .familienspuren-logo { width: 92px; height: 68px; margin: 0 auto 10px; color: #174f3b; }
@@ -113,7 +113,7 @@
       <p class="app-header__subtitle">Menschen. Generationen. Geschichten.</p>
     </div>
   </div>
-  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 456</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
+  <div class="app-header__meta"><button type="button" id="app-user" class="app-header__user" aria-label="Mein Konto" hidden></button><p id="app-version" class="app-header__version">Version 458</p><button type="button" id="logout-btn" class="btn btn--ghost login-logout">Abmelden</button></div>
 </header>
 
 <nav class="tabs" role="tablist" aria-label="Bereiche">
@@ -122,9 +122,9 @@
   <button class="tab-btn" data-tab="chronik" role="tab" aria-selected="false">Chronik</button>
   <button class="tab-btn" data-tab="erfassen" role="tab" aria-selected="false" data-rolle="bearbeiter">Ersteingabe</button>
   <button class="tab-btn" data-tab="fotos" role="tab" aria-selected="false">Gruppenfoto</button>
-  <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Export / Sicherung</button>
-  <button class="tab-btn" data-tab="verlauf" role="tab" aria-selected="false" data-rolle="eigentuemer">Verlauf</button>
-  <button class="tab-btn" data-tab="hilfe" role="tab" aria-selected="false">Hilfe / Kurzanleitung</button>
+  <button class="tab-btn" data-tab="export" role="tab" aria-selected="false">Import / Export</button>
+  <button class="tab-btn" data-tab="verlauf" role="tab" aria-selected="false" data-rolle="eigentuemer">Verwaltung</button>
+  <button class="tab-btn" data-tab="hilfe" role="tab" aria-selected="false">Hilfe</button>
 </nav>
 
 <main>
@@ -311,6 +311,7 @@
       <span id="personen-suchtreffer" class="personen-suchtreffer" aria-live="polite"></span>
       <button id="refresh-btn" class="btn btn--ghost" title="Aktualisieren">⟳</button>
     </div>
+    <button type="button" id="alles-suchen-btn" class="alles-suchen-btn">🔎 Alles durchsuchen – auch Notizen, Todesumstände, Häuser und Zeitgeschehen</button>
     <div id="lade-hinweis" class="lade-hinweis" role="status" aria-live="polite" hidden>
       <strong id="lade-hinweis-titel"></strong>
       <p id="lade-hinweis-text"></p>
@@ -329,6 +330,7 @@
           <option value="erstellt">Zuletzt erfasst</option>
           <option value="familie">Stammbaum / Familienzugehörigkeit</option>
           <option value="schluesselfoto">Mit Schlüsselfoto zuerst</option>
+          <option value="links">Mit weiterführenden Links zuerst</option>
         </select>
       </label>
       <button type="button" id="personen-sort-richtung" class="btn btn--ghost" aria-label="Sortierreihenfolge">↑</button>
@@ -386,9 +388,6 @@
       </div>
       <div class="tree-controls__actions">
         <button type="button" id="tree-relationship-open" class="btn btn--secondary tree-relationship-open">↔ Verwandtschaft ermitteln</button>
-        <button type="button" id="tree-cousins-open" class="btn btn--secondary tree-relationship-open" hidden>👥 Cousins &amp; Cousinen</button>
-        <button type="button" id="tree-luecken-open" class="btn btn--secondary tree-relationship-open" data-rolle="eigentuemer">🧩 Lücken &amp; Inseln</button>
-        <button type="button" id="tree-plaus-open" class="btn btn--secondary tree-relationship-open" data-rolle="eigentuemer">✅ Plausibilität prüfen</button>
         <div class="tree-view-switch" role="tablist" aria-label="Stammbaumansicht">
           <button type="button" id="tree-view-classic" class="btn btn--secondary is-active" role="tab" aria-selected="true" title="Eltern, Geschwister, Partner und Kinder der gewählten Person">Familie</button>
           <button type="button" id="tree-view-cards" class="btn btn--secondary" role="tab" aria-selected="false" title="Übersicht nach Generationen">Generationen</button>
@@ -405,20 +404,6 @@
         <button type="button" id="tree-cousins-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
       </div>
       <div id="tree-cousins-result" class="tree-cousins-result" aria-live="polite"></div>
-    </div>
-    <div id="tree-luecken-panel" class="tree-relationship-panel" data-rolle="eigentuemer" hidden>
-      <div class="tree-relationship-panel__header">
-        <strong>Lücken &amp; Inseln</strong>
-        <button type="button" id="tree-luecken-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
-      </div>
-      <div id="tree-luecken-result" class="tree-luecken-result" aria-live="polite"></div>
-    </div>
-    <div id="tree-plaus-panel" class="tree-relationship-panel" data-rolle="eigentuemer" hidden>
-      <div class="tree-relationship-panel__header">
-        <strong>Plausibilitätsprüfung</strong>
-        <button type="button" id="tree-plaus-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
-      </div>
-      <div id="tree-plaus-result" class="tree-luecken-result" aria-live="polite"></div>
     </div>
     <div id="tree-relationship-panel" class="tree-relationship-panel" hidden>
       <div class="tree-relationship-panel__header">
@@ -480,21 +465,6 @@
 
   <!-- ===================== TAB: FOTOS ===================== -->
   <section id="tab-fotos" class="tab-panel">
-    <fieldset class="field-group nur-eigentuemer" id="pzki-box">
-      <legend>🕊️ Partezettel auswerten</legend>
-      <p class="capture-status">Für jede Anzeige wird die Person im Bestand gesucht und vorgeschlagen, was eingetragen wird: fehlendes Geburts- und Sterbedatum, das Porträt als Schlüsselfoto und der Partezettel als eigenes Foto. Gespeichert wird erst, wenn du bestätigst.</p>
-      <label class="btn btn--primary btn--full capture-btn" style="margin-top:.5rem;">
-        <span>📦 Partezettel-Paket einspielen</span>
-        <input type="file" id="pzki-paket" accept=".json,application/json" hidden>
-      </label>
-      <p class="capture-status">Das Paket bereitet Claude im Chat aus deinen Fotos vor (gelesene Angaben + zugeschnittene Bilder).</p>
-      <label class="btn btn--secondary btn--full capture-btn" style="margin-top:.5rem;">
-        <span>📷 Einzelnes Foto mit KI auswerten</span>
-        <input type="file" id="pzki-input" accept="image/*" hidden>
-      </label>
-      <p class="capture-status">Braucht die eingerichtete Supabase-Funktion „partezettel-lesen“ mit Anthropic-Schlüssel.</p>
-      <p id="pzki-status" class="capture-status" aria-live="polite"></p>
-    </fieldset>
     <fieldset class="field-group" data-rolle="bearbeiter">
       <legend>📷 Gruppenfotos</legend>
       <p class="capture-status">Hier werden ausschließlich Fotos verwaltet, die als Gruppenfoto gekennzeichnet sind oder bereits Personen-Markierungen besitzen. Normale Personenfotos bleiben hier ausgeblendet.</p>
@@ -579,8 +549,8 @@
         <li><strong>Partner:</strong> Erst die Person wählen, dann erscheint die Art (Ehe ist vorgewählt). Beginn und Ende sind optional. Bestehende Partnerschaften erscheinen als eine Zeile, mit „✎ Bearbeiten“ änderst du Art, Beginn und Ende und tippst dort auf „Partnerschaft speichern“.</li>
         <li><strong>Eltern:</strong> Auf ✎ tippen, Vater oder Mutter wählen und „Eltern speichern“ tippen.</li>
         <li><strong>Angaben zur Person</strong> (Name, Daten, Notiz, Links) speichert die Leiste unten. Sie erscheint erst, wenn du etwas geändert hast: „Nicht gespeicherte Änderungen“ mit <em>Verwerfen</em> und <em>Speichern</em>. Danach steht kurz „Gespeichert ✓“. Schließt du das Fenster vorher, fragt die App nach.</li>
-        <li><strong>Datenprüfung</strong> (Reiter „Verlauf“, nur Eigentümer): listet mögliche Dubletten und unwahrscheinliche Angaben (Elternalter, Kind nach dem Tod der Mutter, Tod vor Geburt …). „✓ Stimmt so“ blendet einen Fund bei künftigen Prüfungen aus; Dubletten lassen sich zusammenführen.</li>
-        <li><strong>Löschen:</strong> Verknüpfungen (Partner, Kind, Eltern) kannst du mit dem 🗑️-Symbol entfernen. Personen, Fotos und Sprachnotizen löscht nur der Eigentümer. Alles Gelöschte landet zuerst im <strong>Papierkorb</strong> (Reiter „Verlauf“, nur Eigentümer) und lässt sich dort 30 Tage lang wiederherstellen; danach wird es endgültig entfernt.</li>
+        <li><strong>Datenprüfung</strong> (Reiter „Verwaltung“, nur Eigentümer): listet mögliche Dubletten und unwahrscheinliche Angaben (Elternalter, Kind nach dem Tod der Mutter, Tod vor Geburt …). „✓ Stimmt so“ blendet einen Fund bei künftigen Prüfungen aus; Dubletten lassen sich zusammenführen.</li>
+        <li><strong>Löschen:</strong> Verknüpfungen (Partner, Kind, Eltern) kannst du mit dem 🗑️-Symbol entfernen. Personen, Fotos und Sprachnotizen löscht nur der Eigentümer. Alles Gelöschte landet zuerst im <strong>Papierkorb</strong> (Reiter „Verwaltung“, nur Eigentümer) und lässt sich dort 30 Tage lang wiederherstellen; danach wird es endgültig entfernt.</li>
         <li><strong>Plausibilitätsprüfung:</strong> Beim Speichern prüft die App, ob die Daten zusammenpassen. Eine Geburt nach dem Tod oder ein Datum in der Zukunft wird nicht gespeichert. Bei ungewöhnlichen Angaben (sehr hohes Alter, Mutter bei der Geburt zu jung oder zu alt, Kind nach dem Tod der Mutter) fragt die App nach, ob du trotzdem speichern willst.</li>
       </ul>
     </div>
@@ -614,21 +584,21 @@
         <p>Gruppenfotos verwalten und Personen darauf markieren. Tippst du im Gruppenfoto auf einen Namen, öffnet sich die Person. Das ✕ führt wieder ins Gruppenfoto zurück.</p>
       </details>
       <details>
-        <summary><strong>Export / Sicherung</strong></summary>
-        <p>Alle können die <strong>Familienübersicht als PDF</strong> erstellen. Sie ist vertraulich und wird nur nach Absprache mit dem Eigentümer weitergegeben. Das vollständige <strong>Backup</strong> (Daten, Fotos, Sprachnotizen), JSON, GEDCOM und das Wiederherstellen sind dem Eigentümer vorbehalten. Ein Export ist nicht dasselbe wie ein Backup.</p>
+        <summary><strong>Import / Export</strong></summary>
+        <p>Alle können die <strong>Familienübersicht als PDF</strong> erstellen. Sie ist vertraulich und wird nur nach Absprache mit dem Eigentümer weitergegeben. Das vollständige <strong>Backup</strong> (Daten, Fotos, Sprachnotizen), JSON, GEDCOM und das Wiederherstellen sind dem Eigentümer vorbehalten. Ein Export ist nicht dasselbe wie ein Backup. Für den Eigentümer liegen hier auch der <strong>Hausblätter-Import</strong> und <strong>🕊️ Partezettel auswerten</strong>.</p>
       </details>
       <details data-rolle="eigentuemer">
-        <summary><strong>Verlauf und Lücken &amp; Inseln (nur Eigentümer)</strong></summary>
-        <p><strong>Verlauf:</strong> zeigt, wer wann was angelegt, geändert oder gelöscht hat, je Person und gesamt. <strong>Lücken &amp; Inseln</strong> (im Stammbaum) zeigt Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen.</p>
+        <summary><strong>Verwaltung (nur Eigentümer)</strong></summary>
+        <p><strong>Verwaltung:</strong> die <strong>Datenprüfung</strong> (Dubletten, unwahrscheinliche Angaben und Widersprüche in Lebensdaten, Eltern-Kind-Abständen und Ehen – alles mit „✓ Stimmt so“), <strong>Lücken &amp; Inseln</strong> (Personen ohne Eltern oder Kinder und Gruppen, die noch nicht mit dem Hauptstammbaum verbunden sind, samt Hinweisen aus den Notizen), der <strong>Papierkorb</strong> und das <strong>Änderungsprotokoll</strong> – wer wann was angelegt, geändert oder gelöscht hat.</p>
         <p><strong>Chronik:</strong> Zahlen und Rekorde aus dem Bestand, das Zeitgeschehen, das <strong>📅 Tagesblatt</strong> und <strong>🔎 Alles durchsuchen</strong>. Eine Kurzanleitung steht direkt in der Chronik unter „ⓘ So funktioniert die Chronik“.</p>
         <p><strong>Das bin ich:</strong> Unter ⚙ Konto legst du fest, wer du im Stammbaum bist. Dann steht bei jeder Person, wie sie mit dir verwandt ist („Das ist deine Großmutter“), und <strong>↔ Wie sind wir verwandt?</strong> zeigt den Weg im Stammbaum.</p>
-        <p class="nur-eigentuemer"><strong>🕊️ Partezettel auswerten</strong> (nur Eigentümer, im Bereich Fotos): Entweder ein von Claude im Chat vorbereitetes <em>Partezettel-Paket</em> einspielen (mehrere Anzeigen nacheinander) oder – mit eingerichteter KI-Funktion – ein einzelnes Foto auswerten. Aus Namen, Daten, Ehepartner und Kindern wird die passende Person im Bestand gesucht. Vorgeschlagen werden fehlendes Geburts- und Sterbedatum, das Porträt als Schlüsselfoto und der Partezettel als eigenes Foto. Mit „✂️ Ausschnitt anpassen“ lässt sich der Rahmen korrigieren. Abweichende Daten und bei Jahresgedenken nur abgeleitete Sterbejahre sind nicht angehakt. Gespeichert wird erst mit „Übernehmen“.</p>
+        <p class="nur-eigentuemer"><strong>🕊️ Partezettel auswerten</strong> (nur Eigentümer, im Bereich Import / Export): Entweder ein von Claude im Chat vorbereitetes <em>Partezettel-Paket</em> einspielen (mehrere Anzeigen nacheinander) oder – mit eingerichteter KI-Funktion – ein einzelnes Foto auswerten. Aus Namen, Daten, Ehepartner und Kindern wird die passende Person im Bestand gesucht. Vorgeschlagen werden fehlendes Geburts- und Sterbedatum, das Porträt als Schlüsselfoto und der Partezettel als eigenes Foto. Mit „✂️ Ausschnitt anpassen“ lässt sich der Rahmen korrigieren. Abweichende Daten und bei Jahresgedenken nur abgeleitete Sterbejahre sind nicht angehakt. Gespeichert wird erst mit „Übernehmen“.</p>
         <p><strong>Suchen:</strong> Es genügen die ersten Buchstaben, Umlaute und Groß-/Kleinschreibung sind egal. Auch nach <strong>Datum</strong> (Geburt oder Tod): „24.10.1875“, „24. Oktober 1875“, „24.10.“ (alle mit diesem Tag), „10.1875“ (Monat), „Okt 1875“ – auch zusammen mit einem Namen, z. B. „Ganahl 3.1.1900“. Das <strong>✕</strong> im Suchfeld löscht den Suchtext mit einem Tipp. Neue oder geänderte Personen sind gleich nach dem Speichern überall auffindbar.</p>
         <p><strong>Weiterklicken und zurück:</strong> Öffnest du aus einer Person heraus ein Kind, einen Elternteil oder Ehepartner, steht oben „← Name“. Damit oder mit ✕ geht es zur vorherigen Person zurück (auch nach dem Bearbeiten), erst danach in den Bestand. Unter jedem Kind steht klein der Ehepartner (∞), bei mehreren Ehen nummeriert; Personen im Bestand sind anklickbar. Personen ganz ohne Lebensdaten tragen im Bestand den Hinweis „nur Name“ und lassen sich über „Anzeigen“ ausblenden.</p>
         <p><strong>Todesumstand:</strong> In „Bearbeiten“ unter dem Sterbedatum lässt sich „gefallen“, „vermisst“, „verunglückt“ oder „in der Lawine umgekommen“ wählen, mit einem kurzen Zusatz (z. B. „in Galizien“ oder „seit 1960“). Angezeigt wird das in der Personenansicht und auf der Karte im Bestand, z. B. „⚔ gefallen in Galizien“.</p>
         <p><strong>Ehe nur mit Jahr:</strong> Ist von einer Hochzeit nur das Jahr bekannt, einfach nur das Jahr auswählen und Tag/Monat leer lassen. Angezeigt wird dann z. B. „Hochzeit: 1802 · ca. 17 Jahre“. Dasselbe gilt für das Ende einer Partnerschaft.</p>
         <p><strong>Kirchenbuch-Seite:</strong> Neben „Zeile“ gibt es „Seite“ (– / links / rechts). „–“ heißt, der Eintrag geht über die ganze Doppelseite; „links“ oder „rechts“, wenn auf der Doppelseite zwei Einträge stehen. Angezeigt wird z. B. „rechte Seite, Zeile 3“.</p>
-        <p><strong>Hausblätter-Import</strong> (Export / Sicherung): Import-Datei laden, dann Abweichungen bei vorhandenen Personen entscheiden („Bestand stimmt“, „Hausblatt stimmt“ oder „anderer Wert“) und bestätigen, ob eine Person schon im Bestand ist. Geändert wird nur, was du bestätigst. Danach „Vorschau erstellen“ und „Import starten“: neue Personen erhalten den Vermerk „aus Hausblatt … · ungeprüft“ (in der Personenansicht „als geprüft markieren“). Ein kleiner Punkt vor dem Namen zeigt den Stand: orange = ungeprüft, grün = geprüft. Im Bestand filtert „Anzeigen“ nach diesen Personen (aus Hausblatt, geprüft, ungeprüft, selbst erfasst). Punkte, Vermerk und Filter sieht nur der Eigentümer. Die Wohnorte (Hausnummern mit Jahr und Quelle) stehen in der Personenansicht für alle: „Geburtshaus“ (belegt), „Elternhaus“ (als Kind der Eltern im Hausblatt), „wohnte“, „zugezogen“; zieht jemand in das Elternhaus des Ehepartners, steht „Haus des Ehepartners“ dabei. Bearbeiter und Eigentümer ändern die Wohnorte mit ✏️ (Art, Jahr, entfernen, hinzufügen). „Import rückgängig“ entfernt alles, was der Import angelegt hat. Möglicherweise noch lebende Personen (ab 1921 geboren, ohne Sterbedatum) kommen in einem eigenen zweiten Durchgang mit eigenem „Rückgängig“.</p>
+        <p><strong>Hausblätter-Import</strong> (Import / Export): Import-Datei laden, dann Abweichungen bei vorhandenen Personen entscheiden („Bestand stimmt“, „Hausblatt stimmt“ oder „anderer Wert“) und bestätigen, ob eine Person schon im Bestand ist. Geändert wird nur, was du bestätigst. Danach „Vorschau erstellen“ und „Import starten“: neue Personen erhalten den Vermerk „aus Hausblatt … · ungeprüft“ (in der Personenansicht „als geprüft markieren“). Ein kleiner Punkt vor dem Namen zeigt den Stand: orange = ungeprüft, grün = geprüft. Im Bestand filtert „Anzeigen“ nach diesen Personen (aus Hausblatt, geprüft, ungeprüft, selbst erfasst). Punkte, Vermerk und Filter sieht nur der Eigentümer. Die Wohnorte (Hausnummern mit Jahr und Quelle) stehen in der Personenansicht für alle: „Geburtshaus“ (belegt), „Elternhaus“ (als Kind der Eltern im Hausblatt), „wohnte“, „zugezogen“; zieht jemand in das Elternhaus des Ehepartners, steht „Haus des Ehepartners“ dabei. Bearbeiter und Eigentümer ändern die Wohnorte mit ✏️ (Art, Jahr, entfernen, hinzufügen). „Import rückgängig“ entfernt alles, was der Import angelegt hat. Möglicherweise noch lebende Personen (ab 1921 geboren, ohne Sterbedatum) kommen in einem eigenen zweiten Durchgang mit eigenem „Rückgängig“.</p>
       </details>
     </div>
 
@@ -694,6 +664,21 @@
       <p id="imp-message" class="form-message" aria-live="polite"></p>
       <div id="imp-bereich" class="imp-bereich" hidden></div>
     </fieldset>
+    <fieldset class="field-group nur-eigentuemer" id="pzki-box">
+      <legend>🕊️ Partezettel auswerten</legend>
+      <p class="capture-status">Für jede Anzeige wird die Person im Bestand gesucht und vorgeschlagen, was eingetragen wird: fehlendes Geburts- und Sterbedatum, das Porträt als Schlüsselfoto und der Partezettel als eigenes Foto. Gespeichert wird erst, wenn du bestätigst.</p>
+      <label class="btn btn--primary btn--full capture-btn" style="margin-top:.5rem;">
+        <span>📦 Partezettel-Paket einspielen</span>
+        <input type="file" id="pzki-paket" accept=".json,application/json" hidden>
+      </label>
+      <p class="capture-status">Das Paket bereitet Claude im Chat aus deinen Fotos vor (gelesene Angaben + zugeschnittene Bilder).</p>
+      <label class="btn btn--secondary btn--full capture-btn" style="margin-top:.5rem;">
+        <span>📷 Einzelnes Foto mit KI auswerten</span>
+        <input type="file" id="pzki-input" accept="image/*" hidden>
+      </label>
+      <p class="capture-status">Braucht die eingerichtete Supabase-Funktion „partezettel-lesen“ mit Anthropic-Schlüssel.</p>
+      <p id="pzki-status" class="capture-status" aria-live="polite"></p>
+    </fieldset>
 
     <fieldset class="field-group">
       <legend>Daten exportieren</legend>
@@ -736,21 +721,40 @@
     <div id="chronik-inhalt" class="chr-raster"></div>
   </section>
 
+
   <section id="tab-verlauf" class="tab-panel">
-    <fieldset class="field-group" id="papierkorb-box" hidden>
-      <legend>🗑️ Papierkorb</legend>
-      <p class="capture-status">Gelöschte Personen, Ehen, Kinder-Zuordnungen, Fotos und Sprachnotizen. Zusammengehöriges wird gemeinsam wiederhergestellt.</p>
-      <p id="papierkorb-meldung" class="form-message"></p>
-      <ol id="papierkorb-liste" class="pk-liste"></ol>
-    </fieldset>
-    <fieldset class="field-group" id="pruef-box" hidden>
+    <nav class="pruefen-nav" aria-label="Verwaltung">
+      <button type="button" class="btn btn--secondary" data-pruefen-zu="pruef-box">🔍 Datenprüfung</button>
+      <button type="button" class="btn btn--secondary" data-pruefen-zu="pruefen-luecken">🧩 Lücken &amp; Inseln</button>
+      <button type="button" class="btn btn--secondary" data-pruefen-zu="papierkorb-box">🗑️ Papierkorb</button>
+      <button type="button" class="btn btn--secondary" data-pruefen-zu="verlauf-protokoll">🕘 Änderungsprotokoll</button>
+    </nav>
+    <fieldset class="field-group" id="pruef-box">
       <legend>🔍 Datenprüfung</legend>
       <p class="capture-status">Mögliche Dubletten und unwahrscheinliche Angaben. Was du als „stimmt so“ markierst, erscheint bei späteren Prüfungen nicht mehr. Änderungen machst du wie gewohnt in der Person (Name antippen).</p>
       <div class="pruef-kopf"><button type="button" id="pruef-neu" class="btn btn--secondary">⟳ Neu prüfen</button><label class="pruef-schalter"><input type="checkbox" id="pruef-alle"> auch bereits geprüfte zeigen</label></div>
       <p id="pruef-meldung" class="form-message"></p>
       <div id="pruef-ergebnis"></div>
     </fieldset>
-    <fieldset class="field-group">
+    <fieldset class="field-group" id="pruefen-luecken" data-rolle="eigentuemer">
+      <legend>🧩 Lücken &amp; Inseln</legend>
+      <p class="capture-status">Wer hängt nicht am Hauptstammbaum? Getrennte Familiengruppen, Personen ohne Verbindung, ohne Eltern oder ohne Kinder.</p>
+        <button type="button" id="tree-luecken-open" class="btn btn--secondary btn--full" data-rolle="eigentuemer">🧩 Lücken &amp; Inseln</button>
+    <div id="tree-luecken-panel" class="tree-relationship-panel" data-rolle="eigentuemer" hidden>
+      <div class="tree-relationship-panel__header">
+        <strong>Lücken &amp; Inseln</strong>
+        <button type="button" id="tree-luecken-close" class="btn btn--ghost" aria-label="Schließen">✕</button>
+      </div>
+      <div id="tree-luecken-result" class="tree-luecken-result" aria-live="polite"></div>
+    </div>
+    </fieldset>
+    <fieldset class="field-group" id="papierkorb-box" hidden>
+      <legend>🗑️ Papierkorb</legend>
+      <p class="capture-status">Gelöschte Personen, Ehen, Kinder-Zuordnungen, Fotos und Sprachnotizen. Zusammengehöriges wird gemeinsam wiederhergestellt.</p>
+      <p id="papierkorb-meldung" class="form-message"></p>
+      <ol id="papierkorb-liste" class="pk-liste"></ol>
+    </fieldset>
+    <fieldset class="field-group" id="verlauf-protokoll">
       <legend>🕘 Änderungsprotokoll</legend>
       <p class="capture-status">Zeigt, wer wann was angelegt, geändert oder gelöscht hat. Neueste zuerst.</p>
       <label class="field"><span>Benutzer</span><select id="verlauf-benutzer"><option value="">Alle</option></select></label>
@@ -1106,18 +1110,18 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="config.js"></script>
-<script src="hinweise.js?v=456"></script>
+<script src="hinweise.js?v=458"></script>
 <!-- App-Logik, in dieser Reihenfolge laden (früher app.js) -->
-<script src="grundlagen.js?v=456"></script>
-<script src="erfassung.js?v=456"></script>
-<script src="bestand.js?v=456"></script>
-<script src="person.js?v=456"></script>
-<script src="export.js?v=456"></script>
-<script src="stammbaum.js?v=456"></script>
-<script src="import.js?v=456"></script>
-<script src="komfort.js?v=456"></script>
-<script src="chronik.js?v=456"></script>
-<script src="pruefung.js?v=456"></script>
-<script src="partezettel_ki.js?v=456"></script>
+<script src="grundlagen.js?v=458"></script>
+<script src="erfassung.js?v=458"></script>
+<script src="bestand.js?v=458"></script>
+<script src="person.js?v=458"></script>
+<script src="export.js?v=458"></script>
+<script src="stammbaum.js?v=458"></script>
+<script src="import.js?v=458"></script>
+<script src="komfort.js?v=458"></script>
+<script src="chronik.js?v=458"></script>
+<script src="pruefung.js?v=458"></script>
+<script src="partezettel_ki.js?v=458"></script>
 </body>
 </html>

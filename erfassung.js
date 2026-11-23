@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 456
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -1261,6 +1261,12 @@ function personenVergleich(a, b) {
     const ka = sortierNachnameSchluessel(a), kb = sortierNachnameSchluessel(b);
     if (!ka && kb) return 1;
     if (ka && !kb) return -1;
+    return sortierNameVergleich(a, b) * personenSortRichtung;
+  }
+  if (personenSortierung === "links") {
+    // v457: Personen mit weiterführenden Links zuerst (meiste zuerst), innerhalb nach Namen
+    const la = anzahlWeiterfuehrendeLinks(a), lb = anzahlWeiterfuehrendeLinks(b);
+    if (la !== lb) return lb - la;
     return sortierNameVergleich(a, b) * personenSortRichtung;
   }
   if (personenSortierung === "schluesselfoto") {
