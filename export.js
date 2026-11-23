@@ -1,5 +1,5 @@
 // Familienspuren – Export und Sicherung: PDF, JSON, GEDCOM, Backup
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
 
 // ==========================================================
 // EXPORT
@@ -456,6 +456,8 @@ document.getElementById("export-gedcom-btn").addEventListener("click", async () 
     if (!d) return null;
     const [y, m, day] = String(d).slice(0, 10).split("-");
     const monate = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    if (!m) return y;
+    if (!day) return `${monate[parseInt(m, 10) - 1]} ${y}`;   // v459: Monat und Jahr („OCT 1918“)
     return `${parseInt(day, 10)} ${monate[parseInt(m, 10) - 1]} ${y}`;
   };
   const clean = (v) => String(v || "").replace(/[\r\n]+/g, " ").trim();
@@ -491,11 +493,11 @@ document.getElementById("export-gedcom-btn").addEventListener("click", async () 
     lines.push(`0 ${gidById.get(p.id)} INDI`);
     lines.push(`1 NAME ${clean(p.vorname)} /${clean(p.nachname)}/`);
     if (p.Ledigenname) lines.push(`1 NOTE Geburtsname: ${clean(p.Ledigenname)}`);
-    if (p.geburtsdatum || p.geburtsjahr) {
+    if (gebWert(p)) {
       lines.push("1 BIRT");
-      lines.push(`2 DATE ${p.geburtsdatum ? gedcomDate(p.geburtsdatum) : String(p.geburtsjahr)}`);
+      lines.push(`2 DATE ${gedcomDate(gebWert(p))}`);
     }
-    if (p.sterbedatum || p.sterbejahr) { lines.push("1 DEAT"); lines.push(`2 DATE ${p.sterbedatum ? gedcomDate(p.sterbedatum) : String(p.sterbejahr)}`); }
+    if (todWert(p)) { lines.push("1 DEAT"); lines.push(`2 DATE ${gedcomDate(todWert(p))}`); }
     if (p.Notiz) lines.push(`1 NOTE ${clean(p.Notiz)}`);
     for (const fid of famsByPerson.get(p.id) || []) lines.push(`1 FAMS ${fidById.get(fid)}`);
     for (const fid of famcByPerson.get(p.id) || []) lines.push(`1 FAMC ${fidById.get(fid)}`);
@@ -591,8 +593,8 @@ function pdfDatum(wert) {
 
 // Geboren und gestorben stehen im PDF in zwei festen Spalten (lebende Personen: nur die erste Spalte).
 function pdfLebensdaten(p) {
-  const geboren = pdfDatum(p.geburtsdatum) || (p.geburtsjahr ? String(p.geburtsjahr) : "");
-  const gestorben = pdfDatum(p.sterbedatum) || (p.sterbejahr ? String(p.sterbejahr) : "");
+  const geboren = gebWert(p) ? datumText(gebWert(p)) : "";   // v459: auch „Oktober 1918“
+  const gestorben = todWert(p) ? datumText(todWert(p)) : "";
   return { geboren: geboren ? `* ${geboren}` : "", gestorben: gestorben ? `\u2020 ${gestorben}` : "" };
 }
 

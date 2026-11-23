@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN
@@ -43,23 +43,26 @@ function aktualisiereLinkButton(id, wert) {
 
 function personViewDatum(value) {
   if (!value) return "";
+  if (datumGenau(value) === "monat") return datumText(value);   // v459: „Oktober 1918“
   const d = new Date(String(value).length === 4 ? `${value}-01-01T00:00:00` : value);
   if (Number.isNaN(d.getTime())) return String(value);
   if (/^\d{4}$/.test(String(value))) return String(value);
   return new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "numeric" }).format(d);
 }
 
+// v459: bisDatum darf auch „JJJJ-MM“ oder „JJJJ“ sein (Tod mit Monat/Jahr); die Genauigkeit entscheidet über „ca.“
 function personViewAlter(person, bisDatum = null, endeExakt = true) {
-  const birthValue = person?.geburtsdatum || person?.geburtsjahr;
-  if (!birthValue) return "";
-  const birth = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T00:00:00`);
-  if (!Number.isFinite(birth.getTime())) return "";
-  const end = bisDatum ? new Date(`${bisDatum}T00:00:00`) : new Date();
-  if (!Number.isFinite(end.getTime()) || end < birth) return "";
+  const gw = gebWert(person);
+  if (!gw) return "";
+  const birth = datumAnker(gw, "geburt");
+  if (!birth) return "";
+  const end = bisDatum ? datumAnker(String(bisDatum), "tod") : new Date();
+  if (!end || end < birth) return "";
   let years = end.getFullYear() - birth.getFullYear();
   if (end.getMonth() < birth.getMonth() || (end.getMonth() === birth.getMonth() && end.getDate() < birth.getDate())) years--;
   if (years < 0 || years > 125) return "";
-  return dauerText(birth, end, !!person.geburtsdatum && endeExakt);
+  const endGenau = bisDatum ? (endeExakt ? datumGenau(String(bisDatum)) : "jahr") : "tag";
+  return dauerMitGenauigkeit(birth, end, datumGenau(gw), endGenau);
 }
 
 // v435: Gemeinsame Regel – wer vor 1920 geboren ist und kein Sterbedatum hat, gilt als vermutlich verstorben
@@ -80,21 +83,21 @@ function personViewLebenszeile(person) {
   const umstand = todesumstandText(person);
   // Bei Todesumstand ohne Sterbedatum (z. B. vermisst, gefallen ohne Datum) kein „… Jahre alt“ wie bei Lebenden
   const ohneTod = umstand && !(person?.sterbedatum || person?.sterbejahr);
-  const geb = person?.geburtsdatum || person?.geburtsjahr;
+  const geb = gebWert(person);
   const basis = ohneTod ? (geb ? `geboren ${personViewDatum(geb)}` : "") : personViewLebenszeileBasis(person);
   return [basis, umstand].filter(Boolean).join(" · ");
 }
 function personViewLebenszeileBasis(person) {
-  const geb = person?.geburtsdatum || person?.geburtsjahr;
-  const tod = person?.sterbedatum || person?.sterbejahr;
+  const geb = gebWert(person);   // v459: „24.10.1918“ | „Oktober 1918“ | „1918“
+  const tod = todWert(person);
   const gebText = geb ? personViewDatum(geb) : "";
   const todText = tod ? personViewDatum(tod) : "";
-  const alter = personViewAlter(person, person?.sterbedatum || (person?.sterbejahr ? `${person.sterbejahr}-12-31` : null), !!person?.sterbedatum || !person?.sterbejahr);
+  const alter = personViewAlter(person, tod || null);
   const alterSatz = alter === "unter 1 Tag" ? "starb am Tag der Geburt" : alter === "unter 1 Jahr" ? "starb im ersten Lebensjahr" : alter ? `wurde ${alter} alt` : "";
   if (geb && tod) return [`${gebText} – ${todText}`, alterSatz].filter(Boolean).join(" · ");
   if (tod) return `gestorben ${todText}`;
   if (geb) {
-    const gebJahr = Number(String(person.geburtsdatum || person.geburtsjahr).slice(0, 4));
+    const gebJahr = Number(String(geb).slice(0, 4));
     if (Number.isFinite(gebJahr) && gebJahr < LEBEND_AB_JAHR) return `geboren ${gebText} · Sterbedatum unbekannt`;   // v435: vor 1920 geboren = vermutlich verstorben
     return [`geboren ${gebText}`, alter ? `${alter} alt` : ""].filter(Boolean).join(" · ");
   }
@@ -435,7 +438,7 @@ async function openPersonDetail(personId, options = {}) {
     const relatedIds = [...new Set([...spouseIds, ...childrenLinks.map(x => x.kind_id).filter(Boolean), ...parentIds])];
     let relatedPeople = [];
     if (relatedIds.length) {
-      const { data, error: relatedError } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => sb.from("personen").select(sp).in("id", relatedIds));
+      const { data, error: relatedError } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => sb.from("personen").select(sp).in("id", relatedIds));   // v459: inkl. Monat
       if (relatedError) debugLog(`⚠️ Verwandte Personen laden: ${relatedError.message}`);
       relatedPeople = data || [];
     }
@@ -443,8 +446,8 @@ async function openPersonDetail(personId, options = {}) {
     const addPersonLink = (container, related, extra = "", options = {}) => {
       const button = document.createElement("button"); button.type = "button"; button.className = "person-view-person-link";
       const name = [related.vorname, related.nachname].filter(Boolean).join(" ");
-      const birth = related.geburtsdatum || related.geburtsjahr;
-      const death = related.sterbedatum || related.sterbejahr;
+      const birth = gebWert(related);
+      const death = todWert(related);
       const life = [birth, death].filter(Boolean).map(personViewDatum).join(" – ");
       const details = [name];
       // Ledigenname steht immer dabei, wenn vorhanden (auch wenn er dem Nachnamen entspricht).
@@ -551,6 +554,8 @@ async function openPersonDetail(personId, options = {}) {
           const laterStart = String(otherFamily.beginn || "").slice(0, 10);
           // v392: nur eine wirklich SPÄTERE Ehe beendet diese (gleiches Datum = Datenfehler, nicht „unter 1 Tag“)
           if (/^\d{4}-\d{2}-\d{2}$/.test(laterStart) && laterStart > currentStart) addEndCandidate(laterStart, false);
+          // v459: spätere Ehe mit nur Jahr (in einem späteren Jahr) beendet diese ungefähr zum Jahresbeginn
+          else if (!laterStart && otherFamily.beginn_jahr && Number(otherFamily.beginn_jahr) > startDate.getFullYear()) addEndCandidate(`${otherFamily.beginn_jahr}-01-01`, true);
         });
         endCandidates.sort((a, b) => a.date - b.date);
         const earliest = endCandidates[0] || null;
@@ -585,7 +590,7 @@ async function openPersonDetail(personId, options = {}) {
     const childrenSection = document.getElementById("pv-children-section");
     const childrenList = document.getElementById("pv-children-list"); childrenList.replaceChildren();
     const uniqueChildIds = [...new Set(childrenLinks.map(x => x.kind_id).filter(id => id && id !== personId))];
-    uniqueChildIds.map(id => relatedMap.get(id)).filter(Boolean).sort((a,b) => String(a.geburtsdatum || a.geburtsjahr || "9999").localeCompare(String(b.geburtsdatum || b.geburtsjahr || "9999")) || `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de")).forEach(child => addPersonLink(childrenList, child));
+    uniqueChildIds.map(id => relatedMap.get(id)).filter(Boolean).sort((a,b) => String(gebWert(a) || "9999").localeCompare(String(gebWert(b) || "9999")) || `${a.nachname||""} ${a.vorname||""}`.localeCompare(`${b.nachname||""} ${b.vorname||""}`, "de")).forEach(child => addPersonLink(childrenList, child));
     for (const eintrag of partnerOhneListe(person.kinder_ohne_datenblatt)) { // v398
       const row = document.createElement("div"); row.className = "person-view-relation-row person-view-relation-row--ohne";
       const name = document.createElement("span"); name.className = "person-view-ohne-name"; name.textContent = eintrag.name; name.title = "ohne eigenes Datenblatt";
@@ -939,12 +944,8 @@ async function openPersonEdit(personId, options = {}) {
   document.getElementById("d-nachname").value = person.nachname || "";
   document.getElementById("d-ledigenname").value = person.Ledigenname || "";
   { const g = treePersonGender(person); document.getElementById("d-geschlecht").value = g === "m" ? "männlich" : g === "w" ? "weiblich" : ""; }
-  setDatum("d-geburtsdatum", person.geburtsdatum);
-  setDatum("d-sterbedatum", person.sterbedatum);
-  document.getElementById("d-geburtsjahr").value = person.geburtsjahr ? String(person.geburtsjahr) : "";
-  document.getElementById("d-sterbejahr").value = person.sterbejahr ? String(person.sterbejahr) : "";
-  synchronisiereNurJahrFeld("d-geburtsdatum", "d-geburtsjahr");
-  synchronisiereNurJahrFeld("d-sterbedatum", "d-sterbejahr");
+  setDatum("d-geburtsdatum", gebWert(person));   // v459: Tag/Monat/Jahr soweit bekannt
+  setDatum("d-sterbedatum", todWert(person));
   document.getElementById("d-taufbuch-link").value = person.taufbuch_link || "";
   document.getElementById("d-trauungsbuch-link").value = person.trauungsbuch_link || "";
   document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
@@ -1112,6 +1113,14 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     fokussiereFehlerFeld(document.getElementById("d-geschlecht"));
     return;
   }
+  // v459: Tag/Monat/Jahr – unbekannte Teile leer; Tag oder Monat ohne Jahr ist ein Fehler
+  const gebTeile = getDatumTeile("d-geburtsdatum"), todTeile = getDatumTeile("d-sterbedatum");
+  if (gebTeile.fehler || todTeile.fehler) {
+    const feld = gebTeile.fehler ? "d-geburtsdatum" : "d-sterbedatum";
+    msg.textContent = `${gebTeile.fehler ? "Geburtsdatum" : "Sterbedatum"}: ${gebTeile.fehler || todTeile.fehler}`;
+    fokussiereFehlerFeld(document.getElementById(`${feld}-jahr`)?.value ? document.getElementById(`${feld}-monat`) : document.getElementById(`${feld}-jahr`));
+    return;
+  }
   // v360: Plausibilität der Lebensdaten und im Vergleich mit Eltern, Kindern und Partnern
   {
     const neu = plausFormPerson("d-");
@@ -1126,10 +1135,12 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     nachname,
     "Ledigenname": document.getElementById("d-ledigenname").value.trim() || null,
     geschlecht: geschlechtWert,
-    geburtsdatum: getDatum("d-geburtsdatum"),
-    geburtsjahr: getDatum("d-geburtsdatum") ? null : (document.getElementById("d-geburtsjahr").value.trim() ? Number(document.getElementById("d-geburtsjahr").value.trim()) : null),
-    sterbedatum: getDatum("d-sterbedatum"),
-    sterbejahr: getDatum("d-sterbedatum") ? null : (document.getElementById("d-sterbejahr").value.trim() ? Number(document.getElementById("d-sterbejahr").value.trim()) : null),
+    geburtsdatum: gebTeile.datum || null,
+    geburtsjahr: gebTeile.jahr || null,
+    geburtsmonat: gebTeile.monat || null,   // v459: Paket 14
+    sterbedatum: todTeile.datum || null,
+    sterbejahr: todTeile.jahr || null,
+    sterbemonat: todTeile.monat || null,
     taufbuch_link: document.getElementById("d-taufbuch-link").value.trim() || null,
     trauungsbuch_link: document.getElementById("d-trauungsbuch-link").value.trim() || null,
     sterbebuch_link: document.getElementById("d-sterbebuch-link").value.trim() || null,
@@ -1146,12 +1157,14 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
     Notiz: document.getElementById("d-notiz").value.trim() || null,
     weiterfuehrende_links: leseWeiterfuehrendeLinksEditor(),
   };
-  const { error } = await mitKbSeite((mitSeite) => sb.from("personen").update(mitSeite ? personAenderung : ohneKbSeite(personAenderung)).eq("id", currentDetailPersonId));
+  const antwort = await mitMonatSpalten(personAenderung, (aenderung) => mitKbSeite((mitSeite) => sb.from("personen").update(mitSeite ? aenderung : ohneKbSeite(aenderung)).eq("id", currentDetailPersonId)));
+  const error = antwort?.error;
   personenFrischAm = 0;   // v340: geänderte Namen sofort in allen Auswahllisten verwenden
   if (error) {
     msg.textContent = `Fehler: ${error.message}`;
     return;
   }
+  const monatHinweis = antwort?.monatFehlt && (gebTeile.monat || todTeile.monat) ? " – Monat nicht gespeichert (Paket 14 fehlt)" : "";
 
   // Wird ein Todesdatum nachträglich eingetragen, ein bisher offenes
   // Ehe-/Partnerschaftsende automatisch übernehmen. Ein vorhandenes
@@ -1159,10 +1172,8 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   try {
     await synchronisierePartnerschaftsEndeBeiTod(
       currentDetailPersonId,
-      getDatum("d-sterbedatum"),
-      document.getElementById("d-sterbejahr").value.trim()
-        ? Number(document.getElementById("d-sterbejahr").value.trim())
-        : null
+      todTeile.datum || null,
+      todTeile.jahr || null
     );
   } catch (err) {
     debugLog(`⚠️ Partnerschaftsende durch Tod: ${err.message || err}`);
@@ -1185,18 +1196,13 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   // unmittelbar nach dem Speichern den neuen Tod berücksichtigt.
   const cachePerson = personenCache.find((p) => p.id === currentDetailPersonId);
   if (cachePerson) {
-    cachePerson.geburtsdatum = getDatum("d-geburtsdatum");
-    cachePerson.geburtsjahr = cachePerson.geburtsdatum ? null : (
-      document.getElementById("d-geburtsjahr").value.trim()
-        ? Number(document.getElementById("d-geburtsjahr").value.trim())
-        : null
-    );
-    cachePerson.sterbedatum = getDatum("d-sterbedatum");
-    cachePerson.sterbejahr = cachePerson.sterbedatum ? null : (
-      document.getElementById("d-sterbejahr").value.trim()
-        ? Number(document.getElementById("d-sterbejahr").value.trim())
-        : null
-    );
+    const mitMonat = monatSpaltenVorhanden;
+    cachePerson.geburtsdatum = gebTeile.datum || null;
+    cachePerson.geburtsjahr = gebTeile.jahr || null;
+    cachePerson.geburtsmonat = mitMonat ? (gebTeile.monat || null) : null;
+    cachePerson.sterbedatum = todTeile.datum || null;
+    cachePerson.sterbejahr = todTeile.jahr || null;
+    cachePerson.sterbemonat = mitMonat ? (todTeile.monat || null) : null;
   }
 
   // Nur das Trauungsbuch darf bei einer Ehe auf den Partner ergänzt werden.
@@ -1211,7 +1217,7 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   }
 
   if (rolleIstEigentuemer()) kbUebersichtLaden();   // v412: Kirchenbuch-Übersicht aktualisieren
-  msg.textContent = "Gespeichert ✓";
+  msg.textContent = `Gespeichert ✓${monatHinweis}`;
   void personenNachSpeichern();   // v431: geänderte Namen/Daten sofort überall
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
   aktualisiereLinkButton("d-trauungsbuch-open", document.getElementById("d-trauungsbuch-link").value.trim());
@@ -1539,8 +1545,8 @@ function fotoPersonJahrDatumAnzeige(person) {
     }
     return jahr ? String(jahr) : "";
   };
-  const geb = datum(person.geburtsdatum, person.geburtsjahr);
-  const gest = datum(person.sterbedatum, person.sterbejahr);
+  const geb = gebWert(person) ? datumText(gebWert(person)) : "";   // v459: auch „Oktober 1918“
+  const gest = todWert(person) ? datumText(todWert(person)) : "";
   const teile = [];
   if (geb) teile.push(`geb. ${geb}`);
   if (gest) teile.push(`gest. ${gest}`);
@@ -1769,20 +1775,25 @@ function fotoPersonName(id) {
 
 function gruppenfotoPersonenAlter(id, foto) {
   const p = personenCache.find(x => x.id === id);
-  if (!p || (!p.geburtsdatum && !p.geburtsjahr) || !foto) return "";
-  const birth = p.geburtsdatum ? new Date(`${p.geburtsdatum}T00:00:00`) : null;
+  const gw = gebWert(p);
+  if (!p || !gw || !foto) return "";
+  const gGenau = datumGenau(gw);   // v459: Geburt auch mit Monat und Jahr
+  const birth = gGenau === "jahr" ? null : datumAnker(gw, "geburt");
   const year = Number(foto.aufnahme_jahr || 0);
   if (!year) return "";
   let years;
   let ungefaehr = false;
   if (birth && Number.isFinite(birth.getTime())) {
-    const photoDate = foto.aufnahme_tag && foto.aufnahme_monat
+    const fotoTag = !!(foto.aufnahme_tag && foto.aufnahme_monat), fotoMonat = !!foto.aufnahme_monat;
+    const photoDate = fotoTag
       ? new Date(year, Number(foto.aufnahme_monat) - 1, Number(foto.aufnahme_tag))
-      : new Date(year, 6, 1);
+      : fotoMonat ? new Date(year, Number(foto.aufnahme_monat) - 1, 15) : new Date(year, 6, 1);
     years = photoDate.getFullYear() - birth.getFullYear();
     if (photoDate.getMonth() < birth.getMonth() ||
         (photoDate.getMonth() === birth.getMonth() && photoDate.getDate() < birth.getDate())) years--;
-    if (!(foto.aufnahme_tag && foto.aufnahme_monat)) ungefaehr = true;
+    // sicher nur, wenn beide Tage bekannt sind – oder beide Monate bekannt und verschieden
+    const sicher = (fotoTag && gGenau === "tag") || (fotoMonat && photoDate.getMonth() !== birth.getMonth());
+    if (!sicher) ungefaehr = true;
   } else {
     years = year - Number(p.geburtsjahr);
     ungefaehr = true;
@@ -3385,7 +3396,13 @@ async function loadDetailFamilie(personId) {
       const start = getDatumElemente(beginnTag, beginnMonat, beginnJahr);
       const end = getDatumElemente(endeTag, endeMonat, endeJahr);
       let text = "";
-      if (String(typEdit.value || "").trim().toLocaleLowerCase("de") === "ehe" && start) {
+      // v459: Hochzeit oder Ende nur mit Jahr → ungefähre Ehejahre („ca. 40 Jahre“), wie in der Personenansicht
+      const istEhe = String(typEdit.value || "").trim().toLocaleLowerCase("de") === "ehe";
+      if (istEhe && (!start || !(end || tod?.exakt))) {
+        jahreEl.textContent = eheJahreUngefaehr(start || beginnJahr.value || null, end || endeJahr.value || (tod?.exakt ? tod.datum : tod?.jahr) || null) || "";
+        return;
+      }
+      if (istEhe && start) {
         let endeDatum = end;
         if (!endeDatum && tod?.exakt) endeDatum = tod.datum;
         if (endeDatum) {
@@ -3477,8 +3494,8 @@ async function loadDetailFamilie(personId) {
   childLinksForPerson.sort((a, b) => {
     const childA = childPersonMap.get(a.kind_id);
     const childB = childPersonMap.get(b.kind_id);
-    const dateA = String(childA?.geburtsdatum || "");
-    const dateB = String(childB?.geburtsdatum || "");
+    const dateA = String(gebWert(childA) || "");   // v459: auch Kinder mit nur Jahr/Monat zeitlich einreihen
+    const dateB = String(gebWert(childB) || "");
     // Wie früher: Kinder chronologisch nach Geburtsdatum. Unbekannte Daten
     // stehen danach; bei Gleichstand entscheidet der Name.
     if (dateA && dateB) {
@@ -3816,6 +3833,17 @@ document.getElementById("d-save-eltern-btn").addEventListener("click", async () 
 // Partner/in auswählen löst KEIN automatisches Speichern aus.
 // Zuerst Partner/in, Art (Partnerschaft/Ehe) und optional die Daten auswählen,
 // anschließend ausdrücklich auf „Partner/in hinzufügen“ tippen.
+// v459: Ehejahre, wenn Beginn oder Ende nur ein Jahr hat (Beginn → 1. Jänner, Ende → 31. Dezember, wie in der Personenansicht).
+// Liefert null, wenn beide Seiten ein genaues Datum haben (dann rechnet die genaue Berechnung) oder etwas fehlt.
+function eheJahreUngefaehr(start, ende) {
+  if (!start || !ende) return null;
+  const s = String(start), e = String(ende);
+  if (/^\d{4}-\d{2}-\d{2}/.test(s) && /^\d{4}-\d{2}-\d{2}/.test(e)) return null;
+  const a = new Date(`${/^\d{4}$/.test(s) ? `${s}-01-01` : s.slice(0, 10)}T00:00:00`);
+  const b = new Date(`${/^\d{4}$/.test(e) ? `${e}-12-31` : e.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return null;
+  return dauerText(a, b, false);
+}
 function aktualisiereNeueEhejahre() {
   const el = document.getElementById("d-partner-ehejahre");
   if (!el) return;
@@ -3823,7 +3851,11 @@ function aktualisiereNeueEhejahre() {
   if (typ.toLocaleLowerCase("de") !== "ehe") { el.textContent = "–"; return; }
   const start = getDatum("d-partner-beginn");
   let end = getDatum("d-partner-ende");
-  if (!start || !end) { el.textContent = "–"; return; }
+  if (!start || !end) {
+    const ungefaehr = eheJahreUngefaehr(start || nurJahr("d-partner-beginn"), end || nurJahr("d-partner-ende"));
+    el.textContent = ungefaehr || "–";
+    return;
+  }
   const a = new Date(`${start}T00:00:00`);
   const b = new Date(`${end}T00:00:00`);
   if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) { el.textContent = "–"; return; }

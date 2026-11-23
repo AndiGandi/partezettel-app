@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -438,7 +438,7 @@ photoCanvas.addEventListener("pointerup", () => { fotoEditorDragging=false; foto
 photoCanvas.addEventListener("pointercancel", () => { fotoEditorDragging=false; fotoEditorResize=false; });
 
 // ---------- Datumsauswahl ----------
-const MONATE = ["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+const MONATE = ["Jänner","Feber","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
 function initDatum(prefix) {
   const tag=document.getElementById(prefix+"-tag"), monat=document.getElementById(prefix+"-monat"), jahr=document.getElementById(prefix+"-jahr");
   if (!tag || !monat || !jahr) return;
@@ -513,7 +513,6 @@ function setDatumJahrElemente(t,m,y,jahr) {
   y.value=/^\d{4}$/.test(String(jahr||"")) ? String(jahr) : "";
 }
 ["geburtsdatum","sterbedatum","d-geburtsdatum","d-sterbedatum","d-partner-beginn","d-partner-ende"].forEach(initDatum);
-["geburtsjahr","sterbejahr","d-geburtsjahr","d-sterbejahr"].forEach(initJahrOnly);
 
 // Vollständiges Datum und "nur Jahr bekannt" schließen sich gegenseitig aus.
 // Bei einem vollständigen Datum wird das reine Jahresfeld gesperrt; bei einem
@@ -558,10 +557,11 @@ function synchronisiereNurJahrFeld(datumPrefix, jahrOnlyId) {
   aktualisieren();
 }
 
-synchronisiereNurJahrFeld("geburtsdatum", "geburtsjahr");
-synchronisiereNurJahrFeld("sterbedatum", "sterbejahr");
-synchronisiereNurJahrFeld("d-geburtsdatum", "d-geburtsjahr");
-synchronisiereNurJahrFeld("d-sterbedatum", "d-sterbejahr");
+// v459: Das eigene Feld „nur Jahr bekannt“ ist entfallen – Tag und/oder Monat bleiben einfach leer.
+function getDatumTeile(prefix) {
+  const wert = (id) => document.getElementById(`${prefix}-${id}`)?.value || "";
+  return datumAusTeilen(wert("tag"), wert("monat"), wert("jahr"));
+}
 
 // ---------- Verwandtschaft direkt bei der Ersterfassung ----------
 const erstRelation = document.getElementById("erstverwandtschaft-typ");
@@ -732,16 +732,25 @@ form.addEventListener("submit", async (e) => {
   debugLog("Formular abgeschickt – Verarbeitung startet.");
   formMessage.textContent = "Speichere …";
 
+  const gebTeile = getDatumTeile("geburtsdatum"), todTeile = getDatumTeile("sterbedatum");   // v459
+  if (gebTeile.fehler || todTeile.fehler) {
+    const feld = gebTeile.fehler ? "geburtsdatum" : "sterbedatum";
+    formMessage.textContent = `${feld === "geburtsdatum" ? "Geburtsdatum" : "Sterbedatum"}: ${gebTeile.fehler || todTeile.fehler}`;
+    fokussiereFehlerFeld(document.getElementById(`${feld}-jahr`)?.value ? document.getElementById(`${feld}-monat`) : document.getElementById(`${feld}-jahr`));
+    return;
+  }
   const eintrag = {
     id: crypto.randomUUID(),
     vorname: document.getElementById("vorname").value.trim(),
     nachname: document.getElementById("nachname").value.trim(),
     ledigenname: document.getElementById("ledigenname").value.trim() || null,
     geschlecht: document.getElementById("geschlecht").value || null,
-    geburtsdatum: getDatum("geburtsdatum"),
-    geburtsjahr: getDatum("geburtsdatum") ? null : (document.getElementById("geburtsjahr").value.trim() ? Number(document.getElementById("geburtsjahr").value.trim()) : null),
-    sterbedatum: getDatum("sterbedatum"),
-    sterbejahr: getDatum("sterbedatum") ? null : (document.getElementById("sterbejahr").value.trim() ? Number(document.getElementById("sterbejahr").value.trim()) : null),
+    geburtsdatum: gebTeile.datum ?? null,
+    geburtsjahr: gebTeile.jahr ?? null,
+    geburtsmonat: gebTeile.monat ?? null,
+    sterbedatum: todTeile.datum ?? null,
+    sterbejahr: todTeile.jahr ?? null,
+    sterbemonat: todTeile.monat ?? null,
     taufbuch_link: document.getElementById("taufbuch-link").value.trim() || null,
     trauungsbuch_link: document.getElementById("trauungsbuch-link").value.trim() || null,
     sterbebuch_link: document.getElementById("sterbebuch-link").value.trim() || null,
@@ -806,8 +815,6 @@ form.addEventListener("submit", async (e) => {
 function resetForm() {
   form.reset();
   ["geburtsdatum","sterbedatum"].forEach(p=>setDatum(p,null));
-  document.getElementById("geburtsjahr").value = "";
-  document.getElementById("sterbejahr").value = "";
   document.getElementById("taufbuch-link").value = "";
   document.getElementById("trauungsbuch-link").value = "";
   document.getElementById("sterbebuch-link").value = "";
@@ -884,6 +891,8 @@ async function sendEintrag(eintrag, onProgress) {
         geburtsjahr: eintrag.geburtsjahr,
         sterbedatum: eintrag.sterbedatum,
         sterbejahr: eintrag.sterbejahr,
+        ...(eintrag.geburtsmonat ? { geburtsmonat: eintrag.geburtsmonat } : {}),   // v459: Paket 14
+        ...(eintrag.sterbemonat ? { sterbemonat: eintrag.sterbemonat } : {}),
         taufbuch_link: eintrag.taufbuch_link,
         trauungsbuch_link: eintrag.trauungsbuch_link,
         sterbebuch_link: eintrag.sterbebuch_link,
@@ -895,12 +904,14 @@ async function sendEintrag(eintrag, onProgress) {
         sterbebuch_seite: eintrag.sterbebuch_seite || null,
         Notiz: eintrag.notiz,
       };
-    const { error: personError } = await mitKbSeite((mitSeite) => mitTimeout(
-      sb.from("personen").upsert(mitSeite ? personZeile : ohneKbSeite(personZeile), { onConflict: "id" }),
+    const personAntwort = await mitMonatSpalten(personZeile, (zeile) => mitKbSeite((mitSeite) => mitTimeout(
+      sb.from("personen").upsert(mitSeite ? zeile : ohneKbSeite(zeile), { onConflict: "id" }),
       15000,
       "Zeitüberschreitung beim Speichern der Person (Netzwerk antwortet nicht)"
-    ));
+    )));
+    const personError = personAntwort?.error;
     if (personError) throw personError;
+    if (personAntwort?.monatFehlt) step("ℹ️ Monat nicht gespeichert (nur das Jahr) – dafür bitte Paket 14 in Supabase einspielen.");
     personenFrischAm = 0;   // v340: neue Person soll in allen Auswahllisten sofort verfügbar sein
 
     // Familienbeziehung nur nach erfolgreichem Personen-INSERT speichern.
@@ -1173,12 +1184,28 @@ document.addEventListener("DOMContentLoaded", () => {
 let personenSortierung = "name";
 let personenSortRichtung = 1;
 function sortierJahr(person, feld) {
-  if (feld === "geburtsjahr") return person.geburtsdatum ? Number(String(person.geburtsdatum).slice(0,4)) : (person.geburtsjahr ? Number(person.geburtsjahr) : null);
-  if (feld === "sterbejahr") return person.sterbedatum ? Number(String(person.sterbedatum).slice(0,4)) : (person.sterbejahr ? Number(person.sterbejahr) : null);
+  // v459: innerhalb eines Jahres nach Monat und Tag (nur Jahr → Jahresmitte, nur Monat → Monatsmitte)
+  const w = feld === "geburtsjahr" ? gebWert(person) : feld === "sterbejahr" ? todWert(person) : null;
+  if (!w) return null;
+  const g = datumGenau(w);
+  const [y, m = "06", t = g === "monat" ? "15" : "30"] = w.split("-");
+  return Number(y) + (Number(m) - 1) / 12 + (Number(t) - 1) / 372;
   return null;
 }
 // v364: Dauer verständlich anzeigen – ab 1 Jahr in Jahren, darunter in Monaten, darunter in Tagen (nie „0 Jahre“).
 // exakt = beide Daten taggenau bekannt; sonst „ca. N Jahre“ bzw. „unter 1 Jahr“.
+// v459: Genauigkeit beider Enden („tag“ | „monat“ | „jahr“). Sind beide Monate bekannt und verschieden,
+// stehen die vollen Jahre sicher fest – dann ohne „ca.“.
+function dauerMitGenauigkeit(start, ende, gStart, gEnde) {
+  if (!(start instanceof Date) || !(ende instanceof Date) || ende < start) return "";
+  if (gStart === "tag" && gEnde === "tag") return dauerText(start, ende, true);
+  if (gStart && gEnde && gStart !== "jahr" && gEnde !== "jahr" && start.getMonth() !== ende.getMonth()) {
+    let j = ende.getFullYear() - start.getFullYear();
+    if (ende.getMonth() < start.getMonth()) j--;
+    if (j >= 1) return `${j} ${j === 1 ? "Jahr" : "Jahre"}`;
+  }
+  return dauerText(start, ende, false);
+}
 function dauerText(start, ende, exakt = true) {
   if (!(start instanceof Date) || !(ende instanceof Date) || Number.isNaN(start.getTime()) || Number.isNaN(ende.getTime()) || ende < start) return "";
   const vorTag = (a, b) => a.getMonth() < b.getMonth() || (a.getMonth() === b.getMonth() && a.getDate() < b.getDate());
@@ -1193,48 +1220,24 @@ function dauerText(start, ende, exakt = true) {
   if (t >= 1) return `${t} ${t === 1 ? "Tag" : "Tage"}`;
   return "unter 1 Tag";
 }
-function lebensalterInTagen(person) {
-  if (!person?.geburtsdatum && !person?.geburtsjahr) return null;
-  const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T00:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T00:00:00`);
-  if (Number.isNaN(geburt.getTime())) return null;
-  let ende = null;
-  if (person.sterbedatum) {
-    ende = new Date(`${person.sterbedatum}T00:00:00`);
-  } else if (person.sterbejahr) {
-    const jahr = Number(person.sterbejahr);
-    if (!Number.isInteger(jahr) || jahr < 1000 || jahr > 3000) return null;
-    ende = new Date(`${String(jahr).padStart(4, "0")}-12-31T00:00:00`);
-  } else {
-    return null;
-  }
-  if (Number.isNaN(ende.getTime()) || ende < geburt) return null;
+// v459: Geburt/Tod auch mit Monat und Jahr (datumWert/datumAnker in grundlagen.js)
+function lebensalterInTagen(person, stunde = 0) {
+  const gw = gebWert(person), tw = todWert(person);
+  if (!gw || !tw) return null;   // ohne Tod ist das Lebensalter hier nicht verlässlich
+  const tj = Number(String(tw).slice(0, 4));
+  if (!Number.isInteger(tj) || tj < 1000 || tj > 3000) return null;
+  const geburt = datumAnker(gw, "geburt", stunde), ende = datumAnker(tw, "tod", stunde);
+  if (!geburt || !ende || ende < geburt) return null;
   return Math.floor((ende - geburt) / 86400000);
 }
 function lebensalterSortierungInTagen(person) {
-  if (!person?.geburtsdatum && !person?.geburtsjahr) return null;
-  const geburt = person.geburtsdatum ? new Date(`${person.geburtsdatum}T12:00:00`) : new Date(`${String(person.geburtsjahr).padStart(4, "0")}-07-01T12:00:00`);
-  if (Number.isNaN(geburt.getTime())) return null;
-  let ende = null;
-  if (person.sterbedatum) ende = new Date(`${person.sterbedatum}T12:00:00`);
-  else if (person.sterbejahr) {
-    const jahr = Number(person.sterbejahr);
-    if (!Number.isInteger(jahr) || jahr < 1000 || jahr > 3000) return null;
-    ende = new Date(`${String(jahr).padStart(4, "0")}-12-31T12:00:00`);
-  } else {
-    // Ohne bekanntes Sterbedatum oder Sterbejahr ist das Lebensalter
-    // für diese genealogische Sortierung nicht verlässlich und bleibt außen vor.
-    return null;
-  }
-  if (Number.isNaN(ende.getTime()) || ende < geburt) return null;
-  return Math.floor((ende - geburt) / 86400000);
+  return lebensalterInTagen(person, 12);
 }
 function lebensalterAnzeige(person) {
   const tage = lebensalterInTagen(person);
   if (tage === null) return "";
-  const exakt = !!(person.geburtsdatum && person.sterbedatum);
-  if (exakt) return dauerText(new Date(`${person.geburtsdatum}T00:00:00`), new Date(`${person.sterbedatum}T00:00:00`), true);
-  const jahre = Math.floor(tage / 365.2425);
-  return jahre >= 1 ? `ca. ${jahre} ${jahre === 1 ? "Jahr" : "Jahre"}` : "unter 1 Jahr";
+  const gw = gebWert(person), tw = todWert(person);
+  return dauerMitGenauigkeit(datumAnker(gw, "geburt"), datumAnker(tw, "tod"), datumGenau(gw), datumGenau(tw));
 }
 function sortierNachnameSchluessel(p) {
   return PersonSuche.sortSchluessel(p);

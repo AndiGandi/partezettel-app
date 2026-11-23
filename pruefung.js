@@ -1,7 +1,7 @@
-// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 458
+// Familienspuren – Datenprüfung (nur Eigentümer), ab Version 459
 // Sucht mögliche Dubletten und unwahrscheinliche Angaben. Was als „stimmt so“ oder „verschiedene Personen“
 // markiert ist (Tabelle pruef_ausnahmen, Supabase Paket 12), erscheint bei späteren Prüfungen nicht mehr.
-// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 458
+// Dubletten lassen sich zusammenführen (Funktion fs_personen_zusammenfuehren, Paket 12). Version 459
 
 const PRUEF_REGELN = {
   dublette:             { sym: "👥", titel: "Mögliche Dubletten", text: "Gleiche oder ähnlich geschriebene Namen (Mathies/Mathis, Leo/Leopold, Ernst Emil/Emil Ernst) und passende Geburts- oder Sterbedaten.", ok: "✓ Verschiedene Personen" },
@@ -303,7 +303,7 @@ function zusammenfuehrenDialog(ids, { nachher = null } = {}) {
   const fuelle = (p) => Object.entries(p).filter(([k, v]) => v !== null && v !== "" && !["id", "created_at", "erstellt_am", "import_id"].includes(k)).length;
   const punkte = (p) => { const a = anzahl(p); return fuelle(p) + 2 * (a.ehen + a.kindVon + a.stationen); };
   const vorschlag = [...ps].sort((a, b) => punkte(b) - punkte(a))[0].id;
-  const FELDER = [["vorname", "Vorname"], ["nachname", "Nachname"], ["Ledigenname", "Ledigenname"], ["geschlecht", "Geschlecht"], ["geburtsdatum", "Geburt"], ["geburtsjahr", "Geburtsjahr"], ["sterbedatum", "Tod"], ["sterbejahr", "Sterbejahr"], ["herkunft_quelle", "Quelle"], ["taufbuch_link", "Taufbuch"], ["sterbebuch_link", "Sterbebuch"], ["Notiz", "Notiz"]];
+  const FELDER = [["vorname", "Vorname"], ["nachname", "Nachname"], ["Ledigenname", "Ledigenname"], ["geschlecht", "Geschlecht"], ["geburtsdatum", "Geburt"], ["geburtsjahr", "Geburtsjahr"], ["geburtsmonat", "Geburtsmonat"], ["sterbedatum", "Tod"], ["sterbejahr", "Sterbejahr"], ["sterbemonat", "Sterbemonat"], ["herkunft_quelle", "Quelle"], ["taufbuch_link", "Taufbuch"], ["sterbebuch_link", "Sterbebuch"], ["Notiz", "Notiz"]];
   const zelle = (p, k) => { const v = p[k]; if (v === null || v === undefined || v === "") return "<td class='zf-leer'>–</td>"; const s = String(v); const anders = ps.some((q) => q[k] && String(q[k]) !== s); return `<td${anders ? " class='zf-anders'" : ""}>${chrEsc(/link/.test(k) ? "✓ vorhanden" : s.length > 80 ? s.slice(0, 77) + " …" : s)}</td>`; };
   const f = komfortFenster(`
     <h2 class="tour-titel">👥 Personen zusammenführen</h2>
@@ -328,6 +328,7 @@ function zusammenfuehrenDialog(ids, { nachher = null } = {}) {
         const { error } = await sb.rpc("fs_personen_zusammenfuehren", { behalten: bleibt, weg: w });
         if (error) throw error;
       }
+      await zusammenfuehrenMonatErgaenzen(bleibt, ps.filter((p) => p.id !== bleibt));   // v459
       komfortFensterZu();
       await personenNachSpeichern();
       if (nachher) { nachher(bleibt); return; }
@@ -377,3 +378,23 @@ function allesDurchsuchenFenster(start = "") {
   setTimeout(() => feld.focus(), 50);
 }
 document.getElementById("alles-suchen-btn")?.addEventListener("click", () => allesDurchsuchenFenster(document.getElementById("search-input")?.value || ""));
+
+// v459: Monat bei Geburt/Tod (Paket 14) beim Zusammenführen mitnehmen – nur ein leerer Monat wird ergänzt,
+// und nur wenn das Jahr des bleibenden Eintrags gleich ist und kein genaues Datum vorliegt (wie „leere Felder ergänzen“).
+async function zusammenfuehrenMonatErgaenzen(bleibtId, wegPersonen) {
+  if (!monatSpaltenVorhanden || !wegPersonen.length) return;
+  try {
+    const { data: jetzt, error } = await sb.from("personen").select("id, geburtsdatum, geburtsjahr, geburtsmonat, sterbedatum, sterbejahr, sterbemonat").eq("id", bleibtId).maybeSingle();
+    if (error || !jetzt) return;
+    const aenderung = {};
+    for (const [d, j, m] of [["geburtsdatum", "geburtsjahr", "geburtsmonat"], ["sterbedatum", "sterbejahr", "sterbemonat"]]) {
+      if (jetzt[d] || jetzt[m] || !jetzt[j]) continue;
+      const quelle = wegPersonen.find((p) => !p[d] && p[m] && Number(p[j]) === Number(jetzt[j]));
+      if (quelle) aenderung[m] = quelle[m];
+    }
+    if (Object.keys(aenderung).length) {
+      const { error: ue } = await sb.from("personen").update(aenderung).eq("id", bleibtId);
+      if (ue) debugLog(`⚠️ Monat beim Zusammenführen: ${ue.message}`);
+    }
+  } catch (err) { debugLog(`⚠️ Monat beim Zusammenführen: ${err.message || err}`); }
+}

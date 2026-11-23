@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -132,7 +132,8 @@ function vorlesenText() {
     return jahr ? `im Jahr ${jahr}` : "";
   };
   if (p) {
-    const geb = datum(p.geburtsdatum, p.geburtsjahr), tod = datum(p.sterbedatum, p.sterbejahr);
+    const monatJahr = (w) => (datumGenau(w) === "monat" ? `im ${datumText(w)}` : "");   // v459
+    const geb = monatJahr(gebWert(p)) || datum(p.geburtsdatum, p.geburtsjahr), tod = monatJahr(todWert(p)) || datum(p.sterbedatum, p.sterbejahr);
     const w = /^w/i.test(String(p.geschlecht || ""));
     if (geb) teile.push(`${w ? "Sie" : "Er"} wurde ${geb} geboren.`);
     if (tod) {
@@ -474,9 +475,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 458;   // bei jeder Version mit hochzählen
+const APP_VERSION = 459;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [459, ["Geburt und Tod gehen jetzt auch mit Monat und Jahr ohne Tag (z. B. „Oktober 1918“) – unbekannten Tag oder Monat einfach leer lassen", "Das eigene Feld „nur Jahr bekannt“ ist weggefallen: nur das Jahr wählen genügt", "Kinder mit nur Geburtsjahr stehen jetzt in der richtigen zeitlichen Reihenfolge", "Ehejahre werden auch bei Hochzeiten mit nur Jahr angezeigt (ungefähr)", "Partezettel-Paket: fehlende Ehepartner werden wie Kinder als Namen ohne Datenblatt vorgeschlagen"]],
   [458, ["„Verlauf“ und „Prüfen“ sind jetzt ein Reiter „Verwaltung“: Datenprüfung, Lücken & Inseln, Papierkorb und Änderungsprotokoll", "Die Plausibilitätsprüfung ist in der Datenprüfung aufgegangen – alles mit „✓ Stimmt so“", "Bestand: „🔎 Alles durchsuchen“ direkt unter dem Suchfeld", "Stammbaum: „Cousins & Cousinen“ entfernt"]],
   [457, ["Neuer Bereich „Prüfen“ (nur Eigentümer): Datenprüfung, Plausibilität sowie Lücken & Inseln an einem Ort", "„Export / Sicherung“ heißt jetzt „Import / Export“ – dort auch Hausblätter-Import und 🕊️ Partezettel auswerten", "Bestand: neue Sortierung „Mit weiterführenden Links zuerst“, Links als 🔗-Abzeichen; Kirchenbuch-Abzeichen T/Tr/S deutlicher"]],
   [456, ["Gruppenfotos zeigen oben die Bezeichnung und das Aufnahmedatum (sofern eingetragen)"]],

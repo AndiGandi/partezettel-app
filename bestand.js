@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -396,15 +396,18 @@ async function alleZeilenLaden(bau, seite = 1000) {
 // Fehlen die Spalten (Paket 3 nicht eingespielt), wird ohne sie weitergearbeitet.
 let pruefSpaltenVorhanden = true;
 let todesSpaltenVorhanden = true; // v377: Todesumstand (Paket 7)
-const mitPruefSpalten = (basis) => `${basis}${pruefSpaltenVorhanden ? ", herkunft_quelle, geprueft_am" : ""}${todesSpaltenVorhanden ? ", todesumstand, todesumstand_text" : ""}`;
+const mitPruefSpalten = (basis) => `${basis}${pruefSpaltenVorhanden ? ", herkunft_quelle, geprueft_am" : ""}${todesSpaltenVorhanden ? ", todesumstand, todesumstand_text" : ""}${monatSpaltenVorhanden && /geburtsjahr/.test(basis) ? ", geburtsmonat, sterbemonat" : ""}`;   // v459: Monat (Paket 14)
 function istPruefSpaltenFehler(error) {
   return pruefSpaltenVorhanden && /herkunft_quelle|geprueft_am/i.test(`${error?.code || ""} ${error?.message || ""}`);
 }
 const istTodesSpaltenFehler = (error) => todesSpaltenVorhanden && /todesumstand/i.test(`${error?.message || ""} ${error?.details || ""}`);
 async function personenMitPruefSpalten(basis, bau) {
   let r = await bau(mitPruefSpalten(basis));
-  for (let versuch = 0; versuch < 2 && r.error; versuch++) {
-    if (istTodesSpaltenFehler(r.error)) {
+  for (let versuch = 0; versuch < 3 && r.error; versuch++) {
+    if (istMonatSpaltenFehler(r.error)) {
+      monatSpaltenVorhanden = false;
+      debugLog("ℹ️ Monat bei Geburt/Tod nicht verfügbar (Paket 14 fehlt), Personen werden ohne geladen.");
+    } else if (istTodesSpaltenFehler(r.error)) {
       todesSpaltenVorhanden = false;
       debugLog("ℹ️ Todesumstand nicht verfügbar (Paket 7 fehlt), Personen werden ohne geladen.");
     } else if (istPruefSpaltenFehler(r.error) || (/42703/.test(String(r.error?.code)) && pruefSpaltenVorhanden)) {

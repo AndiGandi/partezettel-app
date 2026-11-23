@@ -409,9 +409,9 @@ function chronikAuswerten(d) {
 
   // 10 · Schicksalsschläge (v394): Familien mit vielen Todesfällen in kurzer Zeit – wird bei jeder Berechnung neu ermittelt
   {
-    const datumOderJahr = (v, j) => chrDatum(v) || (j ? new Date(`${j}-07-01T00:00:00`) : null);
-    const tod = (p) => datumOderJahr(p?.sterbedatum, p?.sterbejahr);
-    const geb = (p) => datumOderJahr(p?.geburtsdatum, p?.geburtsjahr);
+    const datumOderJahr = (w) => (w ? datumAnker(w, "geburt") : null);   // v459: Jahr → Jahresmitte, Monat → Monatsmitte
+    const tod = (p) => datumOderJahr(todWert(p));
+    const geb = (p) => datumOderJahr(gebWert(p));
     const kandidaten = [];
     for (const f of d.familien) {
       const ks = (kinderVon.get(f.id) || []).map((id) => P.get(id)).filter(Boolean);

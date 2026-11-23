@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -132,8 +132,8 @@ function treeChildrenForFamily(familyId) {
     .map((k) => ({ ...k, person: treePerson(k.kind_id) }))
     .filter((k) => k.person)
     .sort((a, b) => {
-      const dateA = a.person.geburtsdatum || "";
-      const dateB = b.person.geburtsdatum || "";
+      const dateA = gebWert(a.person) || "";   // v459: auch Kinder mit nur Jahr/Monat zeitlich einreihen
+      const dateB = gebWert(b.person) || "";
       // Kinder werden chronologisch nach dem vollständigen Geburtsdatum angezeigt.
       // Fehlende Geburtsdaten stehen am Ende.
       if (dateA && dateB) return dateA.localeCompare(dateB);
@@ -430,7 +430,7 @@ function renderAhnentafel(rootId) {
   // v390: links neben der Ausgangsperson eine Spalte „Kinder“ – antippen macht das Kind zur Mitte (eine Generation nach links)
   const kinderIds = [];
   for (const f of treeFamiliesForPerson(rootId) || []) for (const k of treeChildrenForFamily(f.id) || []) if (k.kind_id && !kinderIds.includes(k.kind_id) && treePerson(k.kind_id)) kinderIds.push(k.kind_id);
-  kinderIds.sort((a, b) => String(treePerson(a)?.geburtsdatum || treePerson(a)?.geburtsjahr || "9999").localeCompare(String(treePerson(b)?.geburtsdatum || treePerson(b)?.geburtsjahr || "9999")));
+  kinderIds.sort((a, b) => String(gebWert(treePerson(a)) || "9999").localeCompare(String(gebWert(treePerson(b)) || "9999")));
   const kw = Math.round(m.cardW * 0.8), kh = 52, kAbstand = 60;
   const ox = kinderIds.length ? kw + m.gap : 0;
   const wurzelY = mitteY(knoten.find((k) => k.gen === 0) || { idx: 0, gen: 0 });
@@ -1347,10 +1347,10 @@ function treeRelationshipPathGraphic(aId, path) {
   const partner = treeWegPartner(aId, path);
   return `<div class="tree-relationship-graphic" aria-label="Grafischer Verwandtschaftspfad">${items.map((item, index) => {
     const person = treePerson(item.id);
-    const dates = person ? [person.geburtsjahr, person.sterbejahr].filter(Boolean).join("–") : "";
+    const dates = person ? [gebWert(person), todWert(person)].filter(Boolean).map((w) => String(w).slice(0, 4)).join("–") : "";
     const p2 = partner.get(item.id);
     const p2Person = p2 ? treePerson(p2) : null;
-    const p2Daten = p2Person ? [p2Person.geburtsjahr, p2Person.sterbejahr].filter(Boolean).join("–") : "";
+    const p2Daten = p2Person ? [gebWert(p2Person), todWert(p2Person)].filter(Boolean).map((w) => String(w).slice(0, 4)).join("–") : "";
     const partnerZeile = p2 ? `<span class="tree-relationship-partner">∞ ${escTree(treePersonLabel(p2))}${p2Daten ? ` <small>${escTree(String(p2Daten))}</small>` : ""}</span>` : "";
     const card = `<div class="tree-relationship-node" data-tree-relation-node="${escTree(item.id)}"><strong>${escTree(item.label)}</strong>${dates ? `<small>${escTree(String(dates))}</small>` : ""}${partnerZeile}</div>`;
     if (index === 0) return card;
@@ -1526,7 +1526,7 @@ function treeYearsText(person) {
 // Cousins/Cousinen 1. Grades: Kinder der Geschwister der Eltern, gruppiert nach Onkel/Tante.
 // Geschwister, die nur ein Elternteil gemeinsam haben (Halbgeschwister), werden mitgeführt und markiert.
 function treeBirthSortKey(person) {
-  return person ? (person.geburtsdatum || (person.geburtsjahr ? String(person.geburtsjahr) : "") || "9999") : "9999";
+  return person ? (gebWert(person) || "9999") : "9999";
 }
 
 function treeCousinsOf(personId) {
@@ -1828,8 +1828,8 @@ function treeLueckenRender(analyse) {
     html += `<h4 class="tree-luecken__titel">Ganz ohne Verbindung (${analyse.einzeln.length})</h4><ul class="tree-luecken__liste tree-luecken__liste--karte">${analyse.einzeln.map((id) => personZeile(id, false)).join("")}</ul>`;
   }
   // v399: Listen sortierbar (Nachname, Vorname, Geburtsdatum) + Liste aller erfassten Namen
-  const gebSchluessel = (p) => { const d = String(p?.geburtsdatum || "").slice(0, 10); return d || (p?.geburtsjahr ? `${p.geburtsjahr}-99-99` : "9999-99-99"); };
-  const gebText = (p) => { const d = String(p?.geburtsdatum || "").slice(0, 10); if (/^\d{4}-\d{2}-\d{2}$/.test(d)) { const [y, m, t] = d.split("-"); return `${t}.${m}.${y}`; } return p?.geburtsjahr ? String(p.geburtsjahr) : ""; };
+  const gebSchluessel = (p) => { const w = gebWert(p); return !w ? "9999-99-99" : datumGenau(w) === "tag" ? w : datumGenau(w) === "monat" ? `${w}-99` : `${w}-99-99`; };
+  const gebText = (p) => { const w = gebWert(p); return w ? datumText(w) : ""; };
   const zeileSortierbar = (id, mitGeburt) => {
     const p = byId.get(id) || {};
     const nach = String(p.nachname || p.Ledigenname || "").toLocaleLowerCase("de") || "\uffff"; // ohne Nachname ans Ende
@@ -1915,14 +1915,15 @@ function plausZeit(wert, jahr) {
   return null;
 }
 const plausMitte = (z) => (z.von + z.bis) / 2;
-const plausGeb = (p) => plausZeit(p?.geburtsdatum, p?.geburtsjahr);
-const plausTod = (p) => plausZeit(p?.sterbedatum, p?.sterbejahr);
+const plausGeb = (p) => plausZeit(gebWert(p));   // v459: auch Monat und Jahr
+const plausTod = (p) => plausZeit(todWert(p));
 const plausJ = (ms) => Math.round(ms / PLAUS_JAHR);
 function plausGeschlecht(p) {
   const r = String(p?.geschlecht || "").trim().toLocaleLowerCase("de");
   return r.startsWith("m") ? "m" : (r.startsWith("w") || r === "f") ? "w" : "u";
 }
 function plausDatumText(wert, jahr) { return wert ? personViewDatum(wert) : (jahr ? String(jahr) : ""); }
+const plausGebText = (p) => datumText(gebWert(p)), plausTodText = (p) => datumText(todWert(p));   // v459
 function plausName(p) { return (typeof PersonSuche !== "undefined" ? PersonSuche.name(p) : [p?.vorname, p?.nachname].filter(Boolean).join(" ")) || "(ohne Namen)"; }
 const plausF = (stufe, text, personen = []) => ({ stufe, text, personen });
 
@@ -1932,7 +1933,7 @@ function plausLebensdaten(p, heute = Date.now()) {
   if (g && g.von > heute) f.push(plausF("fehler", "Das Geburtsdatum liegt in der Zukunft."));
   if (t && t.von > heute) f.push(plausF("fehler", "Das Sterbedatum liegt in der Zukunft."));
   if (g && t && g.von > t.bis) {
-    f.push(plausF("fehler", `Die Geburt (${plausDatumText(p.geburtsdatum, p.geburtsjahr)}) liegt nach dem Tod (${plausDatumText(p.sterbedatum, p.sterbejahr)}).`));
+    f.push(plausF("fehler", `Die Geburt (${plausGebText(p)}) liegt nach dem Tod (${plausTodText(p)}).`));
   } else if (g && t) {
     const minAlter = (t.von - g.bis) / PLAUS_JAHR, mitte = (plausMitte(t) - plausMitte(g)) / PLAUS_JAHR;
     if (minAlter > PLAUS.alterFehler) f.push(plausF("fehler", `Mit über ${PLAUS.alterFehler} Jahren gestorben: das ist nicht plausibel.`));
@@ -1953,7 +1954,7 @@ function plausElternKind(eltern, kind, typ = "biologisch") {
   const artikel = rolle === "Mutter" ? "Die" : rolle === "Vater" ? "Der" : "Der";
   const nachTod = !!(et && kg && (rolle === "Mutter" ? kg.von > et.bis : (kg.von - et.bis) / 86400000 > PLAUS.vaterNachTodTage));
   if (eg && kg) {
-    if (eg.von >= kg.bis) f.push(plausF("fehler", `${plausName(eltern)} (${plausDatumText(eltern.geburtsdatum, eltern.geburtsjahr)}) ist nicht älter als das Kind ${plausName(kind)} (${plausDatumText(kind.geburtsdatum, kind.geburtsjahr)}).`, ids));
+    if (eg.von >= kg.bis) f.push(plausF("fehler", `${plausName(eltern)} (${plausGebText(eltern)}) ist nicht älter als das Kind ${plausName(kind)} (${plausGebText(kind)}).`, ids));
     else if ((!typ || typ === "biologisch") && !nachTod) {
       const alter = (plausMitte(kg) - plausMitte(eg)) / PLAUS_JAHR;
       const minAlter = (kg.von - eg.bis) / PLAUS_JAHR, maxAlter = (kg.bis - eg.von) / PLAUS_JAHR;
@@ -2008,11 +2009,10 @@ async function plausFragen(befunde, titel = "") {
 }
 
 function plausFormPerson(prefix) {
-  const jahr = (id) => { const v = document.getElementById(id)?.value?.trim(); return v ? Number(v) : null; };
-  const gd = getDatum(`${prefix}geburtsdatum`), sd = getDatum(`${prefix}sterbedatum`);
+  const g = getDatumTeile(`${prefix}geburtsdatum`), s = getDatumTeile(`${prefix}sterbedatum`);   // v459
   return {
-    geburtsdatum: gd, geburtsjahr: gd ? null : jahr(`${prefix}geburtsjahr`),
-    sterbedatum: sd, sterbejahr: sd ? null : jahr(`${prefix}sterbejahr`),
+    geburtsdatum: g.datum || null, geburtsjahr: g.jahr || null, geburtsmonat: g.monat || null,
+    sterbedatum: s.datum || null, sterbejahr: s.jahr || null, sterbemonat: s.monat || null,
     geschlecht: document.getElementById(`${prefix}geschlecht`)?.value || ""
   };
 }
@@ -2020,7 +2020,7 @@ function plausFormPerson(prefix) {
 async function plausLadePersonen(ids) {
   const eindeutig = [...new Set(ids.filter(Boolean))];
   if (!eindeutig.length) return new Map();
-  const { data } = await sb.from("personen").select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr").in("id", eindeutig);
+  const { data } = await sb.from("personen").select(`id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr${monatSp()}`).in("id", eindeutig);
   return new Map((data || []).map((p) => [p.id, p]));
 }
 
@@ -2650,7 +2650,7 @@ function fillTreePersonSelect(searchValue = "", preferredId = "") {
 }
 
 function treeClassicPersonSort(aId, bId) {
-  const a=treePerson(aId), b=treePerson(bId), da=a?.geburtsdatum||"", db=b?.geburtsdatum||"";
+  const a=treePerson(aId), b=treePerson(bId), da=gebWert(a)||"", db=gebWert(b)||"";   // v459
   if(da&&db&&da!==db) return da.localeCompare(db); if(da)return -1; if(db)return 1;
   return sortierVergleicher(`${a?.nachname||""} ${a?.vorname||""}`, `${b?.nachname||""} ${b?.vorname||""}`);
 }
@@ -2783,7 +2783,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=458");
+      treeModul3D = await import("./tree3d.js?v=459");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

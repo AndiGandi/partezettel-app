@@ -1,4 +1,4 @@
-// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 458
+// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 459
 // Ablauf: Foto der Todesanzeige → KI liest Namen, Daten, Angehörige und findet Porträt/Anzeige
 // (Supabase Edge Function „partezettel-lesen“) → passende Person im Bestand suchen (Name, Geburtsdatum,
 // Ehepartner, Kinder) → Vorschlag prüfen → erst nach Bestätigung speichern.
@@ -65,20 +65,20 @@ async function pzkiAngehoerigeLaden(personId) {
   if (!personId || personId === "neu" || PZKI.angehoerige[personId]) return;
   const nachId = new Map((personenCache || []).map((p) => [p.id, p]));
   const p = nachId.get(personId) || {};
-  const erg = { kinder: [], partner: [], kinderOhne: partnerOhneListe(p.kinder_ohne_datenblatt) };
+  const erg = { kinder: [], partner: [], partnerVornamen: [], kinderOhne: partnerOhneListe(p.kinder_ohne_datenblatt), partnerOhne: partnerOhneListe(p.partner_ohne_datenblatt) };
   try {
     const { data: f } = await sb.from("familien").select("id, partner_a_id, partner_b_id").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`);
     const fam = f || [];
-    for (const x of fam) { const o = nachId.get(x.partner_a_id === personId ? x.partner_b_id : x.partner_a_id); if (o) erg.partner.push(`${o.vorname || ""} ${o.nachname || ""}`.trim()); }
+    for (const x of fam) { const o = nachId.get(x.partner_a_id === personId ? x.partner_b_id : x.partner_a_id); if (o) { erg.partner.push(`${o.vorname || ""} ${o.nachname || ""}`.trim()); erg.partnerVornamen.push(o.vorname || ""); } }
     if (fam.length) {
       const { data: k } = await sb.from("familien_kinder").select("kind_id").in("familie_id", fam.map((x) => x.id));
       for (const x of k || []) { const c = nachId.get(x.kind_id); if (c) erg.kinder.push(c.vorname || ""); }
     }
-    const { data: frisch } = await sb.from("personen").select("kinder_ohne_datenblatt").eq("id", personId).maybeSingle();
-    if (frisch) erg.kinderOhne = partnerOhneListe(frisch.kinder_ohne_datenblatt);
+    const { data: frisch } = await sb.from("personen").select("kinder_ohne_datenblatt, partner_ohne_datenblatt").eq("id", personId).maybeSingle();
+    if (frisch) { erg.kinderOhne = partnerOhneListe(frisch.kinder_ohne_datenblatt); erg.partnerOhne = partnerOhneListe(frisch.partner_ohne_datenblatt); }
   } catch (e) { debugLog(`⚠️ Partezettel: Angehörige von ${personId} nicht geladen: ${e.message || e}`); erg.fehler = true; }
   for (const o of erg.kinderOhne) erg.kinder.push(o.name || "");
-  for (const o of partnerOhneListe(p.partner_ohne_datenblatt)) erg.partner.push(o.name || "");
+  for (const o of erg.partnerOhne) { erg.partner.push(o.name || ""); erg.partnerVornamen.push(o.name || ""); }
   PZKI.angehoerige[personId] = erg;
 }
 
@@ -458,6 +458,17 @@ function pzkiVorschlaege(p) {
       if (pzkiNameBekannt(name, bisher)) continue;
       add("kind", "Kind ohne Datenblatt", name + (k.partner ? ` (mit ${k.partner})` : ""), bisher.length ? `Kinder im Bestand: ${bisher.join(", ")}` : "keine Kinder im Bestand", true, { _kind: { name } });
     }
+    // v459: Ehepartner aus der Anzeige, der im Bestand fehlt → als „Name ohne Datenblatt“ ergänzen.
+    // Verglichen wird nur der Vorname (der gemeinsame Nachname würde sonst immer „passen“).
+    // Ist schon ein anderer Ehepartner eingetragen (z. B. zweite Ehe), ist der Vorschlag abgewählt.
+    const partnerBisher = (ang.partnerVornamen || []).filter(Boolean);
+    for (const k of (e.ehepartner || []).filter((x) => x?.vorname)) {
+      if (pzkiNameBekannt(k.vorname, partnerBisher)) continue;
+      const name = [k.vorname, k.nachname].filter(Boolean).join(" ");
+      const andere = (ang.partner || []).filter(Boolean);
+      add("partner", "Ehepartner ohne Datenblatt", name + (k.bereits_verstorben ? " †" : ""), andere.length ? `Ehepartner im Bestand: ${andere.join(", ")}` : "kein Ehepartner im Bestand", !andere.length,
+        { _partner: { name } }, andere.length ? "anderer Ehepartner eingetragen – bitte prüfen" : "");
+    }
   }
   return vs;
 }
@@ -584,11 +595,12 @@ async function pzkiUebernehmen() {
       erledigt.push("neue Person angelegt");
     } else {
       const aenderung = {};
-      const neueKinder = [];
+      const neueKinder = [], neuePartner = [];
       box.querySelectorAll("[data-pzki-feld]").forEach((c) => {
         if (!c.checked) return;
         const x = box._vorschlaege[Number(c.dataset.pzkiFeld)];
         if (x.felder._kind) { neueKinder.push(x.felder._kind); return; }
+        if (x.felder._partner) { neuePartner.push(x.felder._partner); return; }
         Object.assign(aenderung, x.felder);
         erledigt.push(x.label);
       });
@@ -600,6 +612,17 @@ async function pzkiUebernehmen() {
         if (dazu.length) {
           aenderung.kinder_ohne_datenblatt = [...vorhanden, ...dazu];
           erledigt.push(`${dazu.length} ${dazu.length === 1 ? "Kind" : "Kinder"} ergänzt (${dazu.map((k) => k.name).join(", ")})`);
+        }
+        delete PZKI.angehoerige[personId];
+      }
+      if (neuePartner.length) {   // v459: an die vorhandenen „Ehepartner ohne Datenblatt“ anhängen (frisch gelesen, nichts überschreiben)
+        const { data: frisch, error: lesefehler } = await sb.from("personen").select("partner_ohne_datenblatt").eq("id", personId).maybeSingle();
+        if (lesefehler) throw lesefehler;
+        const vorhanden = partnerOhneListe(frisch?.partner_ohne_datenblatt);
+        const dazu = neuePartner.filter((k) => !vorhanden.some((o) => pzkiNorm(o.name) === pzkiNorm(k.name)));
+        if (dazu.length) {
+          aenderung.partner_ohne_datenblatt = [...vorhanden, ...dazu];
+          erledigt.push(`Ehepartner ergänzt (${dazu.map((k) => k.name).join(", ")})`);
         }
         delete PZKI.angehoerige[personId];
       }

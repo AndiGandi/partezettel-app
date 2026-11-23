@@ -1,10 +1,94 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 458
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
 
 
 // ==========================================================
 // Partezettel Archiv – App-Logik
 // ==========================================================
+// ======================================================================
+// v459: Lebensdaten mit Genauigkeit Tag / Monat / Jahr
+//   genaues Datum:   geburtsdatum = "1918-10-24"
+//   Monat und Jahr:  geburtsjahr = 1918, geburtsmonat = 10   (Spalte aus Paket 14)
+//   nur Jahr:        geburtsjahr = 1918
+// datumWert() liefert einen Teil-ISO-Wert ("1918-10-24" | "1918-10" | "1918"), der sich
+// als Text chronologisch sortieren lässt und überall dort statt „datum || jahr“ verwendet wird.
+// ======================================================================
+const MONATSNAMEN_AT = ["Jänner", "Feber", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+function datumWert(p, art) {
+  if (!p) return null;
+  const tod = art === "tod";
+  const d = tod ? p.sterbedatum : p.geburtsdatum;
+  if (d) return String(d).slice(0, 10);
+  const j = tod ? p.sterbejahr : p.geburtsjahr;
+  if (!j) return null;
+  const m = Number(tod ? p.sterbemonat : p.geburtsmonat);
+  const jj = String(j).padStart(4, "0");
+  return Number.isInteger(m) && m >= 1 && m <= 12 ? `${jj}-${String(m).padStart(2, "0")}` : jj;
+}
+const gebWert = (p) => datumWert(p, "geburt");
+const todWert = (p) => datumWert(p, "tod");
+function datumGenau(wert) {
+  const w = String(wert ?? "");
+  if (/^\d{4}-\d{2}-\d{2}/.test(w)) return "tag";
+  if (/^\d{4}-\d{2}$/.test(w)) return "monat";
+  if (/^\d{4}$/.test(w)) return "jahr";
+  return null;
+}
+// Anker für Berechnungen. Geburt: Jahr → 1. Juli, Monat → 15.; Tod/Ende: Jahr → 31. Dezember, Monat → 15.
+// (Jahreswerte genau wie bisher, damit sich bestehende Altersangaben nicht verschieben.)
+function datumAnker(wert, rolle = "geburt", stunde = 0) {
+  const w = String(wert ?? "");
+  const h = String(stunde).padStart(2, "0");
+  let iso = null;
+  const g = datumGenau(w);
+  if (g === "tag") iso = w.slice(0, 10);
+  else if (g === "monat") iso = `${w}-15`;
+  else if (g === "jahr") iso = rolle === "tod" ? `${w}-12-31` : `${w}-07-01`;
+  if (!iso) return null;
+  const d = new Date(`${iso}T${h}:00:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+// Anzeige: „24.10.1918“, „Oktober 1918“, „1918“
+function datumText(wert) {
+  const w = String(wert ?? "");
+  const g = datumGenau(w);
+  if (g === "tag") { const [y, m, t] = w.slice(0, 10).split("-"); return `${t}.${m}.${y}`; }
+  if (g === "monat") { const [y, m] = w.split("-"); return `${MONATSNAMEN_AT[Number(m) - 1]} ${y}`; }
+  if (g === "jahr") return w;
+  return w;
+}
+// Zerlegt die drei Auswahllisten Tag/Monat/Jahr in die Spalten. Fehler: Tag oder Monat ohne Jahr, Tag ohne Monat.
+function datumAusTeilen(t, m, y) {
+  t = String(t || ""); m = String(m || ""); y = String(y || "");
+  if (!y) return (t || m) ? { fehler: "Bitte auch das Jahr wählen." } : { datum: null, jahr: null, monat: null };
+  if (t && !m) return { fehler: "Bitte auch den Monat wählen (oder den Tag leer lassen)." };
+  if (t && m) return { datum: `${y}-${m}-${t}`, jahr: null, monat: null };
+  if (m) return { datum: null, jahr: Number(y), monat: Number(m) };
+  return { datum: null, jahr: Number(y), monat: null };
+}
+// Paket 14 (geburtsmonat/sterbemonat) – fehlen die Spalten, wird ohne Monat gespeichert.
+let monatSpaltenVorhanden = true;
+const istMonatSpaltenFehler = (error) => monatSpaltenVorhanden && /geburtsmonat|sterbemonat/i.test(`${error?.message || ""} ${error?.details || ""} ${error?.hint || ""}`);
+function ohneMonatSpalten(obj) {
+  const o = { ...(obj || {}) };
+  delete o.geburtsmonat; delete o.sterbemonat;
+  return o;
+}
+// Für einfache Abfragen mit fester Spaltenliste (nach dem ersten Laden ist bekannt, ob Paket 14 fehlt)
+const monatSp = () => (monatSpaltenVorhanden ? ", geburtsmonat, sterbemonat" : "");
+// Speichern mit Rückfall: bau(datensatz) liefert die Supabase-Antwort.
+async function mitMonatSpalten(datensatz, bau) {
+  if (!monatSpaltenVorhanden) return bau(ohneMonatSpalten(datensatz));
+  let r = await bau(datensatz);
+  if (r?.error && istMonatSpaltenFehler(r.error)) {
+    monatSpaltenVorhanden = false;
+    if (typeof debugLog === "function") debugLog("ℹ️ Spalten geburtsmonat/sterbemonat fehlen (Paket 14) – gespeichert nur mit Jahr.");
+    r = await bau(ohneMonatSpalten(datensatz));
+    if (r && !r.error) r.monatFehlt = true;
+  }
+  return r;
+}
+
 // ======================================================================
 // Alle Personenfelder (Bestand, Stammbaum, Verwandtschaft, Gruppenfoto, Foto-Personen,
 // Eltern-/Partner-/Kind-Auswahl) nutzen dieselben Regeln – auf iPad, iPhone, Mac und Android gleich.
@@ -58,7 +142,13 @@ const PersonSuche = (() => {
     return { rest: t, tokens };
   }
   // Datumsbausteine einer Person (Geburt und Tod), passend zu datumsBausteine()
-  const datumsSchluessel = (d) => { const m = String(d || "").match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `#${m[3]}.${m[2]}.${m[1]}#` : ""; };
+  const datumsSchluessel = (d) => {
+    const s = String(d || "");
+    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `#${m[3]}.${m[2]}.${m[1]}#`;
+    m = s.match(/^(\d{4})-(\d{2})$/);   // v459: Monat und Jahr passt auf „10.1918“ / „Oktober 1918“
+    return m ? `#.${m[2]}.${m[1]}#` : "";
+  };
 
   // Suchbegriffe: Kommas, Klammern, Punkte, „geb./gest.“ werden ignoriert (ganzes Wort, nicht „Gebhard“).
   function zerlege(wert, ohneJahre = false) {
@@ -125,7 +215,7 @@ const PersonSuche = (() => {
   const cache = new WeakMap();
   function eintrag(person) {
     const sig = [person.vorname, person.nachname, person.Ledigenname, person.ledigenname, person.geburtsname,
-      person.geburtsdatum, person.geburtsjahr, person.sterbedatum, person.sterbejahr].join("\u0001");
+      person.geburtsdatum, person.geburtsjahr, person.geburtsmonat, person.sterbedatum, person.sterbejahr, person.sterbemonat].join("\u0001");
     const vorhanden = cache.get(person);
     if (vorhanden && vorhanden.sig === sig) return vorhanden;
     const lab = label(person);
@@ -135,7 +225,7 @@ const PersonSuche = (() => {
         person.geburtsdatum, deDatum(person.geburtsdatum), person.geburtsjahr,
         person.sterbedatum, deDatum(person.sterbedatum), person.sterbejahr]
         .filter((v) => v !== null && v !== undefined && String(v).trim() !== "").join(" "))
-        + ` ${datumsSchluessel(person.geburtsdatum)} ${datumsSchluessel(person.sterbedatum)}`,
+        + ` ${datumsSchluessel(gebWert(person))} ${datumsSchluessel(todWert(person))}`,
       names: normalisiere(`${person.vorname || ""} ${person.nachname || ""} ${ledigVon(person)}`),
       nachVor: normalisiere(`${person.nachname || ""} ${person.vorname || ""}`)
     };
@@ -964,7 +1054,7 @@ const VERLAUF_TABELLEN = {
 const VERLAUF_AKTION = { einfuegen: 0, aendern: 1, loeschen: 2 };
 const VERLAUF_FELDER = {
   vorname: "Vorname", nachname: "Nachname", Ledigenname: "Ledigenname", ledigenname: "Ledigenname", geschlecht: "Geschlecht",
-  geburtsdatum: "Geburtsdatum", geburtsjahr: "Geburtsjahr", sterbedatum: "Sterbedatum", sterbejahr: "Sterbejahr", Notiz: "Notiz",
+  geburtsdatum: "Geburtsdatum", geburtsjahr: "Geburtsjahr", geburtsmonat: "Geburtsmonat", sterbedatum: "Sterbedatum", sterbejahr: "Sterbejahr", sterbemonat: "Sterbemonat", Notiz: "Notiz",
   familientyp: "Art", beginn: "Beginn", ende: "Ende", beziehungstyp: "Art", ist_schluesselfoto: "Schlüsselfoto", gruppenfoto: "Gruppenfoto",
   titel: "Titel", nummer: "Nummer", zeile: "Zeile", dateipfad: "Datei", rolle: "Rolle", aktiv: "Aktiv", anzeigename: "Name"
 };
