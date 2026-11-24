@@ -1,5 +1,5 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
 
 
 // ==========================================================

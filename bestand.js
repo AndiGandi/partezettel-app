@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -413,15 +413,21 @@ async function alleZeilenLaden(bau, seite = 1000) {
 // Fehlen die Spalten (Paket 3 nicht eingespielt), wird ohne sie weitergearbeitet.
 let pruefSpaltenVorhanden = true;
 let todesSpaltenVorhanden = true; // v377: Todesumstand (Paket 7)
-const mitPruefSpalten = (basis) => `${basis}${pruefSpaltenVorhanden ? ", herkunft_quelle, geprueft_am" : ""}${todesSpaltenVorhanden ? ", todesumstand, todesumstand_text" : ""}${monatSpaltenVorhanden && /geburtsjahr/.test(basis) ? ", geburtsmonat, sterbemonat" : ""}`;   // v459: Monat (Paket 14)
+// v461: Namen ohne Datenblatt (Paket 8/9) für den Stammbaum mitladen
+let ohneSpaltenVorhanden = true;
+const istOhneSpaltenFehler = (error) => ohneSpaltenVorhanden && /partner_ohne_datenblatt|kinder_ohne_datenblatt/i.test(`${error?.message || ""} ${error?.details || ""}`);
+const mitPruefSpalten = (basis) => `${basis}${pruefSpaltenVorhanden ? ", herkunft_quelle, geprueft_am" : ""}${todesSpaltenVorhanden ? ", todesumstand, todesumstand_text" : ""}${monatSpaltenVorhanden && /geburtsjahr/.test(basis) ? ", geburtsmonat, sterbemonat" : ""}${ohneSpaltenVorhanden && /geschlecht/.test(basis) ? ", partner_ohne_datenblatt, kinder_ohne_datenblatt" : ""}`;   // v459: Monat (Paket 14)
 function istPruefSpaltenFehler(error) {
   return pruefSpaltenVorhanden && /herkunft_quelle|geprueft_am/i.test(`${error?.code || ""} ${error?.message || ""}`);
 }
 const istTodesSpaltenFehler = (error) => todesSpaltenVorhanden && /todesumstand/i.test(`${error?.message || ""} ${error?.details || ""}`);
 async function personenMitPruefSpalten(basis, bau) {
   let r = await bau(mitPruefSpalten(basis));
-  for (let versuch = 0; versuch < 3 && r.error; versuch++) {
-    if (istMonatSpaltenFehler(r.error)) {
+  for (let versuch = 0; versuch < 4 && r.error; versuch++) {
+    if (istOhneSpaltenFehler(r.error)) {
+      ohneSpaltenVorhanden = false;
+      debugLog("ℹ️ Namen ohne Datenblatt nicht verfügbar (Paket 8/9 fehlt).");
+    } else if (istMonatSpaltenFehler(r.error)) {
       monatSpaltenVorhanden = false;
       debugLog("ℹ️ Monat bei Geburt/Tod nicht verfügbar (Paket 14 fehlt), Personen werden ohne geladen.");
     } else if (istTodesSpaltenFehler(r.error)) {
@@ -1050,7 +1056,8 @@ async function loadPersonen(force = false) {
     const lokalGeladen = await ladePersonenAusPersistentemCache();
     ersteLadung = !lokalGeladen;
     const cacheOhnePruefFelder = lokalGeladen && personenCache.length > 0 && ((pruefSpaltenVorhanden && !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geprueft_am")))
-      || !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geschlecht")));   // v460: Geschlecht für den Stammbaum aus dem Bestand
+      || !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geschlecht"))   // v460: Geschlecht für den Stammbaum aus dem Bestand
+      || (ohneSpaltenVorhanden && !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "kinder_ohne_datenblatt"))));   // v461
     if (cacheOhnePruefFelder) debugLog("ℹ️ Cache ohne Prüf-Kennzeichen: einmalige vollständige Aktualisierung.");
     // v373: Ein Cache aus der Zeit vor dem seitenweisen Laden kann bei 1000 Personen abgeschnitten sein.
     const cacheAbgeschnitten = lokalGeladen && !personenCacheSeitenweise;

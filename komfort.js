@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -475,9 +475,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 460;   // bei jeder Version mit hochzählen
+const APP_VERSION = 461;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [461, ["Stammbaum zeigt jetzt auch Kinder und Ehepartner ohne Datenblatt – als gestrichelte graue Kästchen (Familie, Generationen, Nachkommen)", "Mit dem Knopf 👤 im Stammbaum lassen sie sich ein- und ausblenden", "Antippen zeigt, bei wem der Name eingetragen ist – mit „Datenblatt anlegen“ wird daraus eine eigene Person, verbunden mit den Eltern bzw. dem Ehepartner"]],
   [460, ["Spürbar schneller: Reiterwechsel, Sortieren, Bearbeiten, Speichern und das Öffnen einer Person", "Stammbaum und Chronik werden nur noch neu geladen, wenn sich wirklich etwas geändert hat", "Weniger Datenverkehr: beim Öffnen einer Person wird nicht mehr die ganze Familienliste übertragen", "Die Chronik zeigt Änderungen jetzt sofort (früher erst nach „neu berechnen“)"]],
   [459, ["Geburt und Tod gehen jetzt auch mit Monat und Jahr ohne Tag (z. B. „Oktober 1918“) – unbekannten Tag oder Monat einfach leer lassen", "Das eigene Feld „nur Jahr bekannt“ ist weggefallen: nur das Jahr wählen genügt", "Kinder mit nur Geburtsjahr stehen jetzt in der richtigen zeitlichen Reihenfolge", "Ehejahre werden auch bei Hochzeiten mit nur Jahr angezeigt (ungefähr)", "Partezettel-Paket: fehlende Ehepartner werden wie Kinder als Namen ohne Datenblatt vorgeschlagen"]],
   [458, ["„Verlauf“ und „Prüfen“ sind jetzt ein Reiter „Verwaltung“: Datenprüfung, Lücken & Inseln, Papierkorb und Änderungsprotokoll", "Die Plausibilitätsprüfung ist in der Datenprüfung aufgegangen – alles mit „✓ Stimmt so“", "Bestand: „🔎 Alles durchsuchen“ direkt unter dem Suchfeld", "Stammbaum: „Cousins & Cousinen“ entfernt"]],

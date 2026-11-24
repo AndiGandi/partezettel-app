@@ -1625,7 +1625,7 @@ select[name*="Year"] {
 #tab-stammbaum .tree-list-controls{display:inline-flex;gap:.4rem}
 #tab-stammbaum .tree-list-controls[hidden]{display:none}
 #tab-stammbaum .tree-list-controls .btn{min-height:40px;padding:.3rem .8rem;font-size:.85rem}
-#tab-stammbaum.tree-view--descendants .tree-zoom-controls > :not(#tree-zurueck):not(#tree-vor),#tab-stammbaum.tree-view--descendants .tree-viewport-bar__hint{display:none}
+#tab-stammbaum.tree-view--descendants .tree-zoom-controls > :not(#tree-zurueck):not(#tree-vor):not(#tree-ohne-toggle),#tab-stammbaum.tree-view--descendants .tree-viewport-bar__hint{display:none}
 #tab-stammbaum.tree-view--descendants .tree-viewport-bar{justify-content:flex-end}
 .tree-descendants-stage{max-width:780px;margin:0 auto;padding:.3rem .1rem 1rem}
 .tree-descendants-stage[hidden]{display:none}
@@ -2165,7 +2165,7 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .tree-zoom-controls .tree-zurueck { font-size: 1.15rem; padding: 0 8px; margin: 0; border-radius: 0; }
 .tree-zoom-controls .tree-vor { border-right: 1px solid var(--line, #d8d2c6); margin-right: 2px; padding-right: 10px; }
 .tree-zoom-controls .tree-zurueck:disabled { opacity: 0.35; }
-#tab-stammbaum.tree-view--descendants .tree-zoom-controls .tree-vor,#tab-stammbaum.tree-view--3d .tree-zoom-controls .tree-vor{border-right:0;padding-right:.6rem}
+#tab-stammbaum.tree-view--3d .tree-zoom-controls .tree-vor{border-right:0;padding-right:.6rem}
 
 /* v414 */
 .chr-vorbehalt { margin: 6px 0 0; font-size: 0.85rem; color: var(--color-text-muted, #6b6459); max-width: 46rem; line-height: 1.45; }
@@ -2397,3 +2397,17 @@ body.pzki-offen{overflow:hidden}
 .date-hinweis--zeile{margin:.35rem 0 .7rem}
 /* v460: Bestandskarten außerhalb des Bildschirms nicht gestalten/zeichnen (spart auf dem iPad Rechenzeit) */
 .personen-list > .person-card{content-visibility:auto;contain-intrinsic-size:auto 72px}
+
+/* v461: Namen ohne Datenblatt im Stammbaum – gestrichelt und grau, klar von echten Personen unterscheidbar */
+.tree-node--ohne{border:1.5px dashed #a9b2ad !important;background:#f6f7f6 !important;box-shadow:none !important;color:#5f6b65}
+.tree-node--ohne .tree-node__placeholder{opacity:.45}
+.tree-node--ohne .tree-node__name{font-weight:500;color:#4d5853}
+.tree-node--ohne .tree-node__years{font-style:italic;color:#7a847f}
+.tree-desc__row--ohne{border:1.5px dashed #b6beb9;background:#f7f8f7;border-radius:10px;color:#5f6b65;cursor:pointer}
+.tree-desc__row--ohne .tree-desc__years{font-style:italic}
+.tree-desc__dot--ohne{background:transparent;border:1.5px dashed #9aa49f}
+.tree-desc__partner--ohne{cursor:pointer;color:#5f6b65}
+.tree-desc__partner--ohne-gruppe{color:#7a847f;font-style:italic}
+.tree-ohne-tag{font-size:.78em;font-style:italic;color:#7a847f}
+.tree-ohne-wahl{display:flex;flex-direction:column;gap:.3rem;margin:.6rem 0;font-size:.9rem}
+.tree-ohne-wahl select{font-size:16px;padding:.45rem;border-radius:8px;border:1px solid #c9d3cd}

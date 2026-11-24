@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -250,9 +250,9 @@ function treeGenerationName(distance, direction) {
 }
 
 // v384: Ehepaare innerhalb einer Generation nebeneinander als Paar (∞ mit Jahr), dazu „Eltern von …“
-function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = "", naechsteIds = null) {
+function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = "", naechsteIds = null, ohneEintraege = []) {
   const people = treeUniquePeople(personIds);
-  if (!people.length) return null;
+  if (!people.length && !ohneEintraege.length) return null;
   const section = document.createElement("div");
   section.className = `tree-deep-generation ${extraClass}`.trim();
 
@@ -287,6 +287,8 @@ function treeGenerationRow(personIds, rootId, stammlinie, label, extraClass = ""
         <div class="tree-gen-paar__ehe" aria-label="verheiratet${jahr ? ` ${jahr}` : ""}"><span>∞</span>${jahr ? `<small>${escTree(jahr)}</small>` : ""}</div>
         ${rechts ? treePersonCard(rechts, rootId, "", stammlinie) : ""}</div>${elternVon}</div>`);
   }
+  // v461: Kinder ohne Datenblatt dieser Generation als gestrichelte Kästchen
+  for (const e of ohneEintraege) teile.push(`<div class="tree-gen-einzel">${treeOhneKarte(e)}</div>`);
   const row = document.createElement("div");
   row.className = "tree-generation tree-deep-generation__row tree-gen-zeile";
   row.innerHTML = teile.join("");
@@ -480,6 +482,196 @@ function renderAhnentafel(rootId) {
 }
 
 // ---------- v338: Nachkommenliste (einklappbar) ----------
+// ---------- v461: Namen „ohne Datenblatt“ im Stammbaum ----------
+// Partner und Kinder, die nur als Name bei einer Person eingetragen sind (partner_ohne_datenblatt / kinder_ohne_datenblatt),
+// erscheinen als gestrichelte graue Kästchen in der Nachkommen- und der Generationenansicht. Antippen zeigt einen Hinweis
+// mit „Datenblatt anlegen“ (nur mit Schreibrecht, erst nach Bestätigung).
+let treeOhneAn = true;
+try { treeOhneAn = localStorage.getItem("fs-tree-ohne") !== "0"; } catch {}
+let treeOhneRegister = [];
+function treeOhneListe(p, art) {
+  if (!p) return [];
+  let l = art === "kind" ? p.kinder_ohne_datenblatt : p.partner_ohne_datenblatt;
+  if (typeof l === "string") { try { l = JSON.parse(l); } catch { l = []; } }
+  return Array.isArray(l) ? l.filter((x) => x && String(x.name || "").trim()) : [];
+}
+const treeOhneWoerter = (t) => (typeof pzkiWoerter === "function" ? pzkiWoerter(t) : String(t || "").toLowerCase().split(/\s+/).filter((w) => w.length > 1));
+const treeOhneRuf = (w) => (typeof PZKI_RUFNAMEN !== "undefined" && PZKI_RUFNAMEN[w]) || w.replace(/ph/g, "f").replace(/th/g, "t").replace(/ck/g, "k");
+const treeOhneWortGleich = (a, b) => (typeof pzkiWortAehnlich === "function" ? Math.max(pzkiWortAehnlich(a, b), pzkiWortAehnlich(treeOhneRuf(a), treeOhneRuf(b))) : (a === b ? 1 : 0)) >= 0.8;
+// Ist der Name (z. B. „Seppl“, „Maria“, „Rosi Stemer“) dieselbe Person wie p mit Datenblatt? Alle Vornamen-Wörter
+// des Eintrags müssen zu einem Vornamen von p passen (Nachnamen werden dabei nicht mitgezählt).
+function treeOhneGleichePerson(name, p) {
+  if (!p) return false;
+  const nachnamen = new Set([...treeOhneWoerter(p.nachname), ...treeOhneWoerter(p.Ledigenname)]);
+  const woerter = treeOhneWoerter(name).filter((w) => !nachnamen.has(w));
+  const vornamen = treeOhneWoerter(p.vorname);
+  return woerter.length > 0 && woerter.every((w) => vornamen.some((v) => treeOhneWortGleich(w, v)));
+}
+const treeOhneJahr = (t) => (String(t || "").match(/\b(1[5-9]\d\d|20\d\d)\b/) || [])[1] || "";
+const treeOhneSchluessel = (n) => treeOhneWoerter(n).join(" ");
+function treeOhneSortieren(liste) {
+  return liste.map((e, i) => ({ e, i })).sort((a, b) => (Number(treeOhneJahr(a.e.geburt)) || 9999) - (Number(treeOhneJahr(b.e.geburt)) || 9999) || a.i - b.i).map((x) => x.e);
+}
+// Kinder ohne Datenblatt einer Familie: Einträge beider Partner (wenn es deren einzige Familie ist), ohne Doppelte
+// und ohne Namen, die als Kind mit Datenblatt schon da sind
+function treeOhneKinderFamilie(f) {
+  if (!treeOhneAn || !f) return [];
+  const mitDatenblatt = treeChildrenForFamily(f.id).map((k) => k.person).filter(Boolean);
+  const erg = [], gesehen = new Set();
+  for (const pid of [f.partner_a_id, f.partner_b_id]) {
+    if (!pid || treeFamiliesForPerson(pid).length !== 1) continue;
+    for (const e of treeOhneListe(treePerson(pid), "kind")) {
+      const k = treeOhneSchluessel(e.name);
+      if (!k || gesehen.has(k)) continue;
+      gesehen.add(k);
+      if (mitDatenblatt.some((p) => treeOhneGleichePerson(e.name, p))) continue;
+      erg.push({ art: "kind", name: String(e.name).trim(), geburt: e.geburt || "", beiId: pid, familieId: f.id });
+    }
+  }
+  return treeOhneSortieren(erg);
+}
+// Kinder ohne Datenblatt, die keiner Ehe eindeutig zugeordnet werden können (die Person hat keine oder mehrere Familien)
+function treeOhneKinderOhneZuordnung(pid) {
+  if (!treeOhneAn) return [];
+  const fams = treeFamiliesForPerson(pid);
+  if (fams.length === 1) return [];
+  const mitDatenblatt = fams.flatMap((f) => treeChildrenForFamily(f.id).map((k) => k.person)).filter(Boolean);
+  return treeOhneSortieren(treeOhneListe(treePerson(pid), "kind")
+    .filter((e) => !mitDatenblatt.some((p) => treeOhneGleichePerson(e.name, p)))
+    .map((e) => ({ art: "kind", name: String(e.name).trim(), geburt: e.geburt || "", beiId: pid, familieId: null, eheUnbekannt: fams.length > 1 })));
+}
+function treeOhnePartner(pid) {
+  if (!treeOhneAn) return [];
+  const partner = treeFamiliesForPerson(pid).map((f) => treePerson(f.partner_a_id === pid ? f.partner_b_id : f.partner_a_id)).filter(Boolean);
+  return treeOhneListe(treePerson(pid), "partner")
+    .filter((e) => !partner.some((p) => treeOhneGleichePerson(e.name, p)))
+    .map((e) => ({ art: "partner", name: String(e.name).trim(), heirat: e.heirat || "", beiId: pid }));
+}
+function treeOhneRegistrieren(e) { treeOhneRegister.push(e); return treeOhneRegister.length - 1; }
+function treeOhneKarte(e) {
+  const i = treeOhneRegistrieren(e);
+  const jahr = e.art === "kind" ? treeOhneJahr(e.geburt) : treeOhneJahr(e.heirat);
+  const zusatz = e.art === "kind" ? (jahr ? `* ${jahr} · ` : "") : (jahr ? `∞ ${jahr} · ` : "");
+  return `<button type="button" class="tree-node tree-node--ohne" data-tree-ohne="${i}" title="${escTree(e.name)} – ohne Datenblatt">
+    <span class="tree-node__placeholder" aria-hidden="true">👤</span>
+    <span class="tree-node__name">${escTree(e.name)}</span>
+    <span class="tree-node__years">${escTree(zusatz)}ohne Datenblatt</span>
+  </button>`;
+}
+function treeOhneBinden(container) {
+  container.querySelectorAll("[data-tree-ohne]").forEach((el) => {
+    if (el.dataset.ohneGebunden) return;
+    el.dataset.ohneGebunden = "1";
+    el.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); treeOhneHinweis(treeOhneRegister[Number(el.dataset.treeOhne)]); });
+    el.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); treeOhneHinweis(treeOhneRegister[Number(el.dataset.treeOhne)]); } });
+  });
+}
+function treeOhneHinweis(e) {
+  if (!e || typeof komfortFenster !== "function") return;
+  const bei = treePerson(e.beiId);
+  const fams = treeFamiliesForPerson(e.beiId);
+  const famText = (f) => {
+    const a = treePerson(f.partner_a_id), b = treePerson(f.partner_b_id);
+    return [a, b].filter(Boolean).map((p) => treeKompaktLabel(p)).join(" & ") || "Familie";
+  };
+  const darf = typeof rolleDarfSchreiben === "function" ? rolleDarfSchreiben() : true;
+  const jahr = e.art === "kind" ? e.geburt : e.heirat;
+  const familienWahl = e.art === "kind" && !e.familieId && fams.length > 1
+    ? `<label class="tree-ohne-wahl">Eltern bzw. Ehe:<select id="tree-ohne-familie">${fams.map((f) => `<option value="${escTree(f.id)}">${escTree(famText(f))}</option>`).join("")}<option value="">nur ${escTree(treeKompaktLabel(bei))} (anderer Elternteil unbekannt)</option></select></label>`
+    : "";
+  const elternText = e.art === "kind" && e.familieId ? (() => { const f = treeData.familien.find((x) => x.id === e.familieId); return f ? famText(f) : ""; })() : "";
+  const f = komfortFenster(`
+    <h2 class="tour-titel">👤 ${escTree(e.name)}</h2>
+    <p class="neuerungen-klein">${e.art === "kind" ? "Kind" : "Ehepartner"} <strong>ohne Datenblatt</strong> – eingetragen bei ${escTree(treeKompaktLabel(bei))}${jahr ? ` · ${e.art === "kind" ? "geboren" : "Heirat"} ${escTree(jahr)}` : ""}${e.eheUnbekannt ? " · Ehe unbekannt" : ""}.</p>
+    ${elternText ? `<p class="neuerungen-klein">Eltern: ${escTree(elternText)}</p>` : ""}
+    ${darf ? `<p class="neuerungen-klein">„Datenblatt anlegen“ legt eine eigene Person an, verbindet sie ${e.art === "kind" ? "als Kind mit den Eltern" : "als Ehepartner"} und nimmt den Namen aus der Liste „ohne Datenblatt“. Danach öffnet sich das neue Datenblatt zum Ergänzen.</p>${familienWahl}` : ""}
+    <p class="neuerungen-klein" id="tree-ohne-meldung"></p>
+    <div class="tour-knoepfe"><button type="button" class="btn btn--ghost" data-ohne="zu">Schließen</button>${darf ? '<button type="button" class="btn btn--primary" data-ohne="anlegen">📝 Datenblatt anlegen</button>' : ""}</div>`, { klasse: "tree-ohne-fenster" });
+  f.querySelector('[data-ohne="zu"]').addEventListener("click", () => komfortFensterZu());
+  f.querySelector('[data-ohne="anlegen"]')?.addEventListener("click", async (ev) => {
+    const knopf = ev.currentTarget, meldung = f.querySelector("#tree-ohne-meldung");
+    const wahl = f.querySelector("#tree-ohne-familie");
+    knopf.disabled = true; meldung.textContent = "Lege an …";
+    try {
+      const neueId = await treeOhneDatenblattAnlegen(e, wahl ? (wahl.value || "nur") : null);
+      komfortFensterZu();
+      if (typeof zeigeToast === "function") zeigeToast(`Datenblatt für „${e.name}“ angelegt`);
+      await loadStammbaumData();
+      const mitte = treeAktuelleMitte();
+      if (mitte) renderStammbaum(mitte);
+      if (typeof personenNachSpeichern === "function") void personenNachSpeichern(neueId);
+      if (typeof openPersonEdit === "function") await openPersonEdit(neueId);
+    } catch (err) {
+      knopf.disabled = false;
+      meldung.textContent = `Das Datenblatt konnte nicht angelegt werden: ${err.message || err}`;
+    }
+  });
+}
+// Legt die Person an, verbindet sie und entfernt den Namen aus den Listen „ohne Datenblatt“.
+// familienWahl: Familien-ID, "nur" (nur mit der eingetragenen Person) oder null (automatisch)
+async function treeOhneDatenblattAnlegen(e, familienWahl = null) {
+  await ensureSession();
+  const { data: bei, error: beiFehler } = await sb.from("personen").select("*").eq("id", e.beiId).single();
+  if (beiFehler) throw beiFehler;
+  const beiMann = String(bei?.geschlecht || "").toLowerCase().startsWith("m");
+  // Name zerlegen: das letzte Wort ist nur dann ein Nachname, wenn es ein bekannter Familienname ist („Rosi Stemer“),
+  // sonst sind alle Wörter Vornamen („Anna Maria“)
+  const [links, geb] = String(e.name).split(/\s+geb\.\s+/);
+  const teile = String(links || "").trim().split(/\s+/).filter(Boolean);
+  const familienNamen = new Set([bei?.nachname, bei?.Ledigenname, ...treeFamiliesForPerson(e.beiId).flatMap((f) => [f.partner_a_id, f.partner_b_id]).map((id) => treePerson(id)?.nachname)]
+    .filter(Boolean).map((n) => String(n).toLowerCase()));
+  let nachname = null;
+  if (teile.length >= 2 && familienNamen.has(teile[teile.length - 1].toLowerCase())) nachname = teile.pop();
+  const neu = { vorname: teile.join(" ") || "unbekannt", nachname, Ledigenname: geb ? geb.trim() : null,
+    herkunft_quelle: `aus „ohne Datenblatt“ bei ${[bei?.vorname, bei?.nachname].filter(Boolean).join(" ")}` };
+  let familie = null;
+  const zusatz = typeof ohneDatum === "function" ? ohneDatum(e.art === "kind" ? e.geburt : e.heirat) : { datum: null, jahr: null };
+  if (e.art === "partner") {
+    if (bei?.geschlecht) neu.geschlecht = beiMann ? "weiblich" : "männlich";
+    if (!neu.nachname && beiMann) neu.nachname = bei?.nachname || null;   // Namensregel: verheiratete Frau trägt den Namen des Mannes
+  } else {
+    neu.geburtsdatum = zusatz.datum; neu.geburtsjahr = zusatz.datum ? null : zusatz.jahr;
+    if (familienWahl && familienWahl !== "nur") familie = treeData.familien.find((f) => f.id === familienWahl) || null;
+    else if (!familienWahl && e.familieId) familie = treeData.familien.find((f) => f.id === e.familieId) || null;
+    else if (!familienWahl) {
+      const fams = treeFamiliesForPerson(e.beiId);
+      if (fams.length === 1) familie = fams[0];
+    }
+    if (!neu.nachname) {
+      const vater = familie ? [familie.partner_a_id, familie.partner_b_id].map((id) => treePerson(id)).find((p) => p && treePersonGender(p) === "m") : (beiMann ? bei : null);
+      neu.nachname = vater?.nachname || bei?.nachname || null;
+    }
+  }
+  const neueId = crypto.randomUUID();
+  const zeile = { id: neueId, ...Object.fromEntries(Object.entries(neu).filter(([, v]) => v !== undefined && v !== null && v !== "")) };
+  let { error: pe } = await sb.from("personen").insert(zeile);
+  if (pe && /herkunft_quelle/i.test(pe.message || "")) { delete zeile.herkunft_quelle; ({ error: pe } = await sb.from("personen").insert(zeile)); }
+  if (pe) throw pe;
+  if (e.art === "partner") {
+    const fam = { partner_a_id: beiMann ? e.beiId : neueId, partner_b_id: beiMann ? neueId : e.beiId, familientyp: "Ehe", beginn: zusatz.datum, beginn_jahr: zusatz.datum ? null : zusatz.jahr };
+    const { error: fe } = await mitFamJahr((mitJahr) => sb.from("familien").insert(mitJahr ? fam : ohneFamJahr(fam)));
+    if (fe) throw fe;
+  } else {
+    if (!familie) familie = await findeOderErstelleFamilie(e.beiId, null, "Eltern");
+    await addKindZuFamilie(familie.id, neueId);
+  }
+  // Namen aus den Listen nehmen: bei der eingetragenen Person und – bei Kindern – auch beim anderen Elternteil der Familie
+  const spalte = e.art === "kind" ? "kinder_ohne_datenblatt" : "partner_ohne_datenblatt";
+  const schluessel = treeOhneSchluessel(e.name);
+  const betroffene = [e.beiId, ...(e.art === "kind" && familie ? [familie.partner_a_id, familie.partner_b_id] : [])].filter(Boolean);
+  for (const pid of [...new Set(betroffene)]) {
+    const { data: frisch, error: le } = await sb.from("personen").select(spalte).eq("id", pid).maybeSingle();
+    if (le || !frisch) continue;
+    const liste = treeOhneListe({ [spalte]: frisch[spalte] }, e.art);
+    const rest = liste.filter((x) => treeOhneSchluessel(x.name) !== schluessel);
+    if (rest.length !== liste.length) {
+      const { error: ue } = await sb.from("personen").update({ [spalte]: rest }).eq("id", pid);
+      if (ue) debugLog(`⚠️ Liste ${spalte}: ${ue.message}`);
+    }
+  }
+  return neueId;
+}
+
 function treeDescendants(personId, pfad = new Set()) {
   const person = treePerson(personId);
   const neuerPfad = new Set(pfad);
@@ -495,9 +687,26 @@ function treeDescendants(personId, pfad = new Set()) {
       kinder.push(unter);
       anzahl += 1 + unter.anzahl;
     }
-    familien.push({ partner: partnerId ? treePerson(partnerId) : null, kinder });
+    familien.push({ partner: partnerId ? treePerson(partnerId) : null, kinder, ohne: treeOhneKinderFamilie(familie) });
   }
-  return { person, familien, anzahl };
+  // v461: Partner und Kinder ohne Datenblatt
+  const partnerOhne = treeOhnePartner(personId);
+  for (const e of partnerOhne) familien.push({ partner: null, partnerOhne: e, kinder: [], ohne: [] });
+  const ohneZuordnung = treeOhneKinderOhneZuordnung(personId);
+  if (ohneZuordnung.length) {
+    const ziel = !treeFamiliesForPerson(personId).length && partnerOhne.length === 1 ? familien[familien.length - 1] : null;
+    if (ziel) ziel.ohne.push(...ohneZuordnung);
+    else familien.push({ partner: null, ohneGruppe: true, eheUnbekannt: ohneZuordnung.some((e) => e.eheUnbekannt), kinder: [], ohne: ohneZuordnung });
+  }
+  const anzahlOhne = familien.reduce((n, f) => n + (f.ohne?.length || 0) + (f.partnerOhne ? 1 : 0) + f.kinder.reduce((m, k) => m + (k.anzahlOhne || 0), 0), 0);
+  return { person, familien, anzahl, anzahlOhne };
+}
+function treeDescOhneHtml(e) {
+  const i = treeOhneRegistrieren(e);
+  const jahr = treeOhneJahr(e.geburt);
+  return `<li class="tree-desc__item"><div class="tree-desc__row tree-desc__row--leaf tree-desc__row--ohne" data-tree-ohne="${i}" role="button" tabindex="0">`
+    + `<span class="tree-desc__dot tree-desc__dot--ohne"></span><span class="tree-desc__text"><span class="tree-desc__name">${escTree(e.name)}</span>`
+    + `<span class="tree-desc__years">${jahr ? `* ${escTree(jahr)} · ` : ""}ohne Datenblatt</span></span></div></li>`;
 }
 
 function treeDescNameHtml(p) {
@@ -517,15 +726,31 @@ function treeDescNodeHtml(knoten, tiefe) {
   const partnerZeile = (partner) => partner
     ? `<div class="tree-desc__partner">⚭ ${treeDescNameHtml(partner)}${treeYearsText(partner) ? ` · ${escTree(treeYearsText(partner))}` : ""}</div>`
     : `<div class="tree-desc__partner">⚭ Partner unbekannt</div>`;
-  const hatKinder = knoten.familien.some((f) => f.kinder.length);
+  // v461: Partner ohne Datenblatt bzw. Gruppe „Ehe unbekannt“
+  const familienKopf = (f) => {
+    if (f.partnerOhne) {
+      const i = treeOhneRegistrieren(f.partnerOhne);
+      const j = treeOhneJahr(f.partnerOhne.heirat);
+      return `<div class="tree-desc__partner tree-desc__partner--ohne" data-tree-ohne="${i}" role="button" tabindex="0">⚭ ${escTree(f.partnerOhne.name)} <span class="tree-ohne-tag">${j ? `∞ ${escTree(j)} · ` : ""}ohne Datenblatt</span></div>`;
+    }
+    if (f.ohneGruppe) return f.eheUnbekannt ? `<div class="tree-desc__partner tree-desc__partner--ohne-gruppe">Ehe unbekannt</div>` : "";
+    return partnerZeile(f.partner);
+  };
+  const kinderListe = (f) => {
+    const eintraege = [
+      ...f.kinder.map((k, i) => ({ html: treeDescNodeHtml(k, tiefe + 1), jahr: Number(String(gebWert(k.person) || "").slice(0, 4)) || 9999, i })),
+      ...(f.ohne || []).map((e, i) => ({ html: treeDescOhneHtml(e), jahr: Number(treeOhneJahr(e.geburt)) || 9999, i: 1000 + i }))
+    ].sort((a, b) => a.jahr - b.jahr || a.i - b.i);
+    return eintraege.length ? `<ul class="tree-desc__list">${eintraege.map((x) => x.html).join("")}</ul>` : "";
+  };
+  const hatKinder = knoten.familien.some((f) => f.kinder.length || f.ohne?.length);
   if (!hatKinder) {
-    const partner = knoten.familien.filter((f) => f.partner).map((f) => partnerZeile(f.partner)).join("");
+    const partner = knoten.familien.filter((f) => f.partner || f.partnerOhne).map((f) => familienKopf(f)).join("");
     return `<li class="tree-desc__item"><div class="tree-desc__row tree-desc__row--leaf" data-tree-open="${escTree(p.id)}" role="button" tabindex="0">${kopf}</div>${partner ? `<div class="tree-desc__leafinfo">${partner}</div>` : ""}</li>`;
   }
   const teile = knoten.familien.map((f) => {
-    if (!f.kinder.length && !f.partner) return "";
-    const kinder = f.kinder.length ? `<ul class="tree-desc__list">${f.kinder.map((k) => treeDescNodeHtml(k, tiefe + 1)).join("")}</ul>` : "";
-    return partnerZeile(f.partner) + kinder;
+    if (!f.kinder.length && !f.ohne?.length && !f.partner && !f.partnerOhne) return "";
+    return familienKopf(f) + kinderListe(f);
   }).join("");
   return `<li class="tree-desc__item"><details${tiefe < 2 ? " open" : ""}><summary class="tree-desc__row">${kopf}<button type="button" class="tree-desc__open" data-tree-open="${escTree(p.id)}" aria-label="Personendaten öffnen" title="Personendaten öffnen">›</button></summary><div class="tree-desc__body">${teile}</div></details></li>`;
 }
@@ -539,12 +764,15 @@ function renderNachkommen(rootId) {
     stage.innerHTML = treeLeerHtml();
     return;
   }
+  treeOhneRegister = [];
   const baum = treeDescendants(rootId);
   const linie = treeActivePreset?.label ? ` · Linie: ${escTree(treeActivePreset.label)}` : "";
+  const ohneText = baum.anzahlOhne ? ` · dazu ${baum.anzahlOhne} ohne Datenblatt` : "";
   const titel = baum.anzahl
-    ? `Nachkommen von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${baum.anzahl} ${baum.anzahl === 1 ? "Person" : "Personen"}${linie}`
-    : `<strong>${escTree(treePersonLabel(rootId))}</strong> · keine Nachkommen erfasst${linie}`;
+    ? `Nachkommen von <strong>${escTree(treePersonLabel(rootId))}</strong> · ${baum.anzahl} ${baum.anzahl === 1 ? "Person" : "Personen"}${ohneText}${linie}`
+    : `<strong>${escTree(treePersonLabel(rootId))}</strong> · keine Nachkommen erfasst${ohneText}${linie}`;
   stage.innerHTML = `<div class="tree-desc__caption">${titel}</div><ul class="tree-desc__list tree-desc__list--root">${treeDescNodeHtml(baum, 0)}</ul>`;
+  treeOhneBinden(stage);
   if (message) message.textContent = "";
 }
 
@@ -654,6 +882,7 @@ function renderStammbaum(rootId) {
   const message = document.getElementById("tree-message");
   if (!stage) return;
   stage.innerHTML = "";
+  treeOhneRegister = [];
   const root = treePerson(rootId);
   if (!root) {
     stage.innerHTML = treeLeerHtml();
@@ -745,6 +974,19 @@ function renderStammbaum(rootId) {
         </div>`;   // v411: ohne bekannten Partner keine Platzhalter-Karte
       rootSection.appendChild(block);
     }
+  }
+  // v461: Ehepartner ohne Datenblatt neben der Person
+  const rootPartnerOhne = treeOhnePartner(rootId);
+  for (const e of rootPartnerOhne) {
+    const block = document.createElement("div");
+    block.className = "tree-family-block tree-root-family-block";
+    block.innerHTML = `<div class="tree-couple">${treePersonCard(root, rootId, "", stammlinie)}
+      <div class="tree-relationship tree-relationship--marriage" aria-label="Ehe"><span class="tree-marriage__label">Ehe</span><span class="tree-marriage__rings" aria-hidden="true">◯◯</span></div>
+      ${treeOhneKarte(e)}</div>`;
+    rootSection.appendChild(block);
+  }
+  if (visibleRootFamilies.length || rootPartnerOhne.length) {
+    // Person steht bereits in den Paar-Blöcken
   } else {
     const row = document.createElement("div");
     row.className = "tree-generation tree-deep-generation__row";
@@ -753,19 +995,38 @@ function renderStammbaum(rootId) {
   }
   stage.appendChild(rootSection);
 
-  for (let i = 0; i < descendantLevels.length; i += 1) {
+  // v461: Kinder ohne Datenblatt der Eltern aus der Generation darüber (auch wenn es dort keine Kinder mit Datenblatt gibt)
+  const ohneKinderVon = (elternIds) => {
+    const erg = [], famGesehen = new Set();
+    for (const id of elternIds) {
+      for (const f of treeFamiliesForPerson(id)) {
+        if (famGesehen.has(f.id)) continue;
+        famGesehen.add(f.id);
+        erg.push(...treeOhneKinderFamilie(f));
+      }
+      erg.push(...treeOhneKinderOhneZuordnung(id));
+    }
+    return erg;
+  };
+  for (let i = 0; i <= descendantLevels.length; i += 1) {
     const distance = i + 1;
+    const eltern = i === 0 ? [rootId] : descendantLevels[i - 1];
+    const ohne = ohneKinderVon(eltern);
+    if (i === descendantLevels.length && !ohne.length) break;
     const section = treeGenerationRow(
-      descendantLevels[i],
+      descendantLevels[i] || [],
       rootId,
       stammlinie,
       treeGenerationName(distance, "down"),
-      "tree-deep-generation--descendant"
+      "tree-deep-generation--descendant",
+      null,
+      ohne
     );
     if (section) stage.appendChild(section);
   }
 
   treeBindPersonInteractions(stage);
+  treeOhneBinden(stage);
   if (message) message.textContent = "";
 }
 
@@ -2685,8 +2946,14 @@ function treeClassicFamilyInfo(rootId){
   const families=(treeFamiliesForPerson(rootId)||[]).map(f=>({
     id:f.id, familientyp:f.familientyp||"Partnerschaft",
     spouseId:[f.partner_a_id,f.partner_b_id].find(id=>id&&id!==rootId&&treePerson(id))||null,
-    childIds:treeChildrenForFamily(f.id).map(x=>x.person?.id).filter(Boolean)
+    childIds:treeChildrenForFamily(f.id).map(x=>x.person?.id).filter(Boolean),
+    ohne:treeOhneKinderFamilie(f)   // v461: Kinder ohne Datenblatt
   }));
+  // v461: Ehepartner ohne Datenblatt und nicht zuordenbare Kinder ohne Datenblatt als eigene Blöcke
+  const partnerOhne=treeOhnePartner(rootId);
+  partnerOhne.forEach((e,i)=>families.push({id:`ohnep${i}`,familientyp:"Ehe",spouseId:null,spouseOhne:e,childIds:[],ohne:[]}));
+  const ohneZ=treeOhneKinderOhneZuordnung(rootId);
+  if(ohneZ.length){const ziel=!treeFamiliesForPerson(rootId).length&&partnerOhne.length===1?families[families.length-1]:null;if(ziel)ziel.ohne.push(...ohneZ);else families.push({id:"ohnez",familientyp:"",spouseId:null,childIds:[],ohne:ohneZ});}
   parentFamilies.forEach(f=>f.parentIds.sort(treeClassicPersonSort)); siblingIds.sort(treeClassicPersonSort); families.forEach(f=>f.childIds.sort(treeClassicPersonSort));
   return {root,parentFamilies,parentIds:[...new Set(parentFamilies.flatMap(f=>f.parentIds))],siblingIds,families};
 }
@@ -2715,7 +2982,7 @@ function treeClassicConnectParents(svg,pos,family){
   treeClassicLine(svg,j,pb,j,by); const xs=ts.map(p=>p.centerX); if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by); ts.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top));
 }
 function treeClassicConnectFamily(svg,pos,f){
-  const r=pos.get(`family:${f.id}:root`),s=pos.get(`family:${f.id}:spouse`),cs=f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)).filter(Boolean); if(!r)return;
+  const r=pos.get(`family:${f.id}:root`),s=pos.get(`family:${f.id}:spouse`),cs=[...f.childIds.map(id=>pos.get(`family:${f.id}:child:${id}`)),...(f.ohne||[]).map((_,j)=>pos.get(`family:${f.id}:child:ohne${j}`))].filter(Boolean); if(!r)return;
   if(!s){ if(!cs.length)return; const by=r.bottom+Math.max(22,Math.min(46,(Math.min(...cs.map(p=>p.top))-r.bottom)*.42)); treeClassicLine(svg,r.centerX,r.bottom,r.centerX,by); const xs=cs.map(p=>p.centerX); if(xs.length>1)treeClassicLine(svg,Math.min(...xs),by,Math.max(...xs),by); cs.forEach(p=>treeClassicLine(svg,p.centerX,by,p.centerX,p.top)); return; }
   const l=r.centerX<s.centerX?r:s, q=l===r?s:r, y=(Math.max(r.top,s.top)+Math.min(r.bottom,s.bottom))/2;
   treeClassicLine(svg,l.right,y,q.left,y,"tree-classic-spouse"); if(!cs.length)return;
@@ -2725,12 +2992,12 @@ function treeClassicConnectFamily(svg,pos,f){
 
 function renderKlassischerStammbaum(rootId){
   treeCousinsRefreshIfOpen(rootId);
-  const stage=document.getElementById("tree-classic-stage"); if(!stage)return; stage.innerHTML="";
+  const stage=document.getElementById("tree-classic-stage"); if(!stage)return; stage.innerHTML=""; treeOhneRegister=[];
   const info=treeClassicFamilyInfo(rootId); if(!info){stage.innerHTML=treeLeerHtml();return;}
   const mobile=window.innerWidth<=700, card=mobile?125:145, gap=mobile?14:20, rowH=mobile?118:132, vw=document.getElementById("tree-viewport")?.clientWidth||window.innerWidth;
   const lineSurname=treeMaleAncestorSurname(rootId)||String(info.root.nachname||"").trim();
-  const parents=[...info.parentIds].sort(treeClassicPersonSort), middle=[...info.siblingIds,rootId].sort(treeClassicPersonSort), families=info.families.filter(f=>f.spouseId||f.childIds.length);
-  const blocks=families.map(f=>{const n=Math.max(2,f.childIds.length);return n*card+Math.max(0,n-1)*gap+36;}), familyW=blocks.reduce((a,b)=>a+b,0)+Math.max(0,blocks.length-1)*28;
+  const parents=[...info.parentIds].sort(treeClassicPersonSort), middle=[...info.siblingIds,rootId].sort(treeClassicPersonSort), families=info.families.filter(f=>f.spouseId||f.spouseOhne||f.childIds.length||f.ohne?.length);
+  const blocks=families.map(f=>{const n=Math.max(2,f.childIds.length+(f.ohne?.length||0));return n*card+Math.max(0,n-1)*gap+36;}), familyW=blocks.reduce((a,b)=>a+b,0)+Math.max(0,blocks.length-1)*28;
   const rowW=ids=>Math.max(1,ids.length)*card+Math.max(0,ids.length-1)*gap;
   // v204: jede Generation bekommt eine eigene Kartenhöhe plus sicheren Zwischenraum.
   // Die Kinderzeile beginnt immer unterhalb der Partnerzeile, nicht auf Höhe der Geschwister.
@@ -2742,6 +3009,7 @@ function renderKlassischerStammbaum(rootId){
   const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.classList.add("tree-classic-svg");canvas.appendChild(svg);
   const label=(t,y)=>{const e=document.createElement("div");e.className="tree-classic-level__label";e.textContent=t;e.style.top=`${y-27}px`;canvas.appendChild(e);};
   const node=(id,key,x,y,extra="")=>{const p=treePerson(id);if(!p)return;const e=document.createElement("div");e.className=`tree-classic-node ${extra} ${id===rootId?"tree-classic-node--root":""}`.trim();e.dataset.classicPerson=id;e.dataset.classicKey=key;e.style.left=`${x}px`;e.style.top=`${y}px`;e.style.width=`${card}px`;e.innerHTML=treePersonCard(p,rootId,"",lineSurname);canvas.appendChild(e);};
+  const ohneNode=(e,key,x,y,extra="")=>{const el=document.createElement("div");el.className=`tree-classic-node ${extra}`.trim();el.dataset.classicKey=key;el.style.left=`${x}px`;el.style.top=`${y}px`;el.style.width=`${card}px`;el.innerHTML=treeOhneKarte(e);canvas.appendChild(el);};   // v461
   const row=(ids,y,text,suffix,extra="")=>{if(!ids.length)return[];label(text,y);const total=rowW(ids),keys=[];let x=(width-total)/2;ids.forEach(id=>{const k=`person:${id}:${suffix}`;node(id,k,x,y,extra);keys.push(k);x+=card+gap;});return keys;};
   row(parents,yp,"Eltern","parent","tree-classic-nodes--parents");
   row(middle,ym,info.siblingIds.length?"Ausgangsperson und Geschwister":"Ausgangsperson","middle","tree-classic-nodes--middle");
@@ -2754,7 +3022,7 @@ function renderKlassischerStammbaum(rootId){
     if(f.childIds.length){label("Kinder",ycSingle);const total=rowW(f.childIds);let x=(width-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,x,ycSingle,"tree-classic-node--children");x+=card+gap;});}
   } else if(families.length>=1){
     label(families.length===1?"Ehe / Partnerschaft":"Partnerschaften",yf);let x=(width-familyW)/2;
-    families.forEach((f,i)=>{const bw=blocks[i],pair=f.spouseId?2*card+gap:card,px=x+(bw-pair)/2;node(rootId,`family:${f.id}:root`,px,yf,"tree-classic-node--family-root");if(f.spouseId)node(f.spouseId,`family:${f.id}:spouse`,px+card+gap,yf,"tree-classic-node--spouse");if(f.childIds.length){const total=rowW(f.childIds);let cx=x+(bw-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,cx,ycMulti,"tree-classic-node--children");cx+=card+gap;});}x+=bw+28;});
+    families.forEach((f,i)=>{const bw=blocks[i],pair=(f.spouseId||f.spouseOhne)?2*card+gap:card,px=x+(bw-pair)/2;node(rootId,`family:${f.id}:root`,px,yf,"tree-classic-node--family-root");if(f.spouseId)node(f.spouseId,`family:${f.id}:spouse`,px+card+gap,yf,"tree-classic-node--spouse");else if(f.spouseOhne)ohneNode(f.spouseOhne,`family:${f.id}:spouse`,px+card+gap,yf,"tree-classic-node--spouse");const n=f.childIds.length+(f.ohne?.length||0);if(n){const total=n*card+Math.max(0,n-1)*gap;let cx=x+(bw-total)/2;f.childIds.forEach(id=>{node(id,`family:${f.id}:child:${id}`,cx,ycMulti,"tree-classic-node--children");cx+=card+gap;});(f.ohne||[]).forEach((e,j)=>{ohneNode(e,`family:${f.id}:child:ohne${j}`,cx,ycMulti,"tree-classic-node--children");cx+=card+gap;});}x+=bw+28;});
     label(families.length===1?"Kinder":"Kinder je Partnerschaft",ycMulti);
   }
   stage.appendChild(canvas);
@@ -2768,6 +3036,7 @@ function renderKlassischerStammbaum(rootId){
     if(rm)families.forEach(f=>{const fr=pos.get(`family:${f.id}:root`);if(!fr)return;const my=rm.bottom+(fr.top-rm.bottom)/2;treeClassicLine(svg,rm.centerX,rm.bottom,rm.centerX,my,"tree-classic-self");treeClassicLine(svg,rm.centerX,my,fr.centerX,my,"tree-classic-self");treeClassicLine(svg,fr.centerX,my,fr.centerX,fr.top,"tree-classic-self");});
   });
   canvas.querySelectorAll("[data-classic-person]").forEach(el=>{const id=el.dataset.classicPerson;if(id)treePersonEreignisse(el,id);}); // v385
+  treeOhneBinden(canvas);   // v461
 }
 
 // ---------- v342: 3D-Wurzelbaum (Prototyp) ----------
@@ -2799,7 +3068,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=460");
+      treeModul3D = await import("./tree3d.js?v=461");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -3225,6 +3494,21 @@ if (treePersonConfirm) treePersonConfirm.addEventListener("click", async () => {
   try { an = localStorage.getItem("fs-tree-fotos") !== "0"; } catch {}
   anwenden(an);
   btn?.addEventListener("click", () => { an = !an; try { localStorage.setItem("fs-tree-fotos", an ? "1" : "0"); } catch {} anwenden(an); });
+})();
+// v461: Namen ohne Datenblatt ein-/ausblenden (Einstellung bleibt gespeichert)
+(function treeOhneSchalter() {
+  const btn = document.getElementById("tree-ohne-toggle");
+  const anwenden = () => {
+    if (btn) { btn.classList.toggle("is-active", treeOhneAn); btn.setAttribute("aria-pressed", String(treeOhneAn)); btn.title = treeOhneAn ? "Namen ohne Datenblatt ausblenden" : "Namen ohne Datenblatt einblenden"; }
+  };
+  anwenden();
+  btn?.addEventListener("click", () => {
+    treeOhneAn = !treeOhneAn;
+    try { localStorage.setItem("fs-tree-ohne", treeOhneAn ? "1" : "0"); } catch {}
+    anwenden();
+    const mitte = treeAktuelleMitte();
+    if (mitte) renderStammbaum(mitte);
+  });
 })();
 const treeZoomIn = document.getElementById("tree-zoom-in");
 const treeZoomOut = document.getElementById("tree-zoom-out");
