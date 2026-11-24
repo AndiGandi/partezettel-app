@@ -161,17 +161,23 @@ const chrRund = (x, s = 1) => Number(x).toLocaleString("de-AT", { maximumFractio
 
 /* ---------- Daten laden ---------- */
 let chronikCache = null;
+let chronikStand = 0;   // v460: Chronik neu laden, sobald sich Daten geändert haben (früher blieb sie bis „neu“ veraltet)
 async function chronikDatenLaden(neu = false) {
-  if (chronikCache && !neu) return chronikCache;
+  if (chronikCache && !neu && chronikStand === datenStand) return chronikCache;
+  const standBeimLaden = datenStand;
+  // v460: Familien und Kinder aus dem Bestand übernehmen, wenn dieser auf dem aktuellen Stand ist
+  const ausBestand = typeof bestandAbgleichStand !== "undefined" && bestandAbgleichStand === datenStand
+    && Array.isArray(familienAuswahlCache) && familienAuswahlCache.length > 0 && Array.isArray(familienKinderAuswahlCache) && familienKinderAuswahlCache.length > 0;
   const [p, f, k, s, h] = await Promise.all([
     alleZeilenLaden(() => sb.from("personen").select("*").order("id")),
-    alleZeilenLaden(() => sb.from("familien").select("*").order("id")),
-    alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id").order("id")),
+    ausBestand ? { data: familienAuswahlCache, error: null } : alleZeilenLaden(() => sb.from("familien").select("*").order("id")),
+    ausBestand ? { data: familienKinderAuswahlCache, error: null } : alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id").order("id")),
     alleZeilenLaden(() => sb.from("person_stationen").select("id, personen_id, haus_id, art, jahr, sortierung").order("id")),
     alleZeilenLaden(() => sb.from("haeuser").select("*").order("id"))
   ]);
   for (const r of [p, f, k]) if (r.error) throw r.error;
   chronikCache = { personen: p.data || [], familien: f.data || [], kinder: k.data || [], stationen: s.error ? [] : (s.data || []), haeuser: h.error ? [] : (h.data || []), geladen: new Date() };
+  chronikStand = standBeimLaden;
   return chronikCache;
 }
 
@@ -553,15 +559,19 @@ function chronikRendern(r, ziel) {
   ziel.innerHTML = html.join("");
 }
 
+let chronikGezeichnet = "";   // v460: Datenstand + Tag der zuletzt gezeichneten Chronik
 async function zeigeChronik(neu = false) {
   const ziel = document.getElementById("chronik-inhalt");
   const status = document.getElementById("chronik-status");
   if (!ziel) return;
+  const zeichenSchluessel = () => `${chronikStand}|${datenStand}|${new Date().toDateString()}|${typeof zugang !== "undefined" ? zugang?.rolle : ""}`;
+  if (!neu && chronikCache && chronikStand === datenStand && chronikGezeichnet === zeichenSchluessel() && ziel.children.length) return;   // unverändert: nicht neu rechnen
   if (status) status.textContent = "Wird berechnet …";
   try {
     const d = await chronikDatenLaden(neu);
     const r = chronikAuswerten(d);
     chronikRendern(r, ziel);
+    chronikGezeichnet = zeichenSchluessel();
     if (status) status.textContent = `Stand: ${d.geladen.toLocaleString("de-AT", { dateStyle: "short", timeStyle: "short" })} · ${chrZahl(d.personen.length)} Personen`;
   } catch (err) {
     debugLog(`⚠️ Chronik: ${err.message || err}`);

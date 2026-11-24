@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -141,6 +141,21 @@ async function lesePersonenAusPersistentemCache() {
   }
 }
 
+// v460: Cache im Hintergrund speichern – mehrere Anlässe kurz hintereinander werden zu einem Schreibvorgang
+// zusammengefasst (der jeweils neueste Stand gewinnt); der Ablauf (Öffnen, Speichern) wartet nicht darauf.
+let cacheSpeichernTimer = null, cacheSpeichernBundle = null, cacheSpeichernLauf = Promise.resolve();
+function speicherePersonenImHintergrund(bundle) {
+  cacheSpeichernBundle = bundle;
+  clearTimeout(cacheSpeichernTimer);
+  cacheSpeichernTimer = setTimeout(() => {
+    const b = cacheSpeichernBundle; cacheSpeichernBundle = null;
+    if (!b) return;
+    cacheSpeichernLauf = cacheSpeichernLauf.then(() => speicherePersonenImPersistentenCache(b)).catch((e) => debugLog(`⚠️ Cache speichern: ${e.message || e}`));
+  }, 700);
+}
+window.addEventListener("pagehide", () => {   // beim Verlassen der App einen offenen Speicherauftrag sofort ausführen
+  if (cacheSpeichernBundle) { clearTimeout(cacheSpeichernTimer); const b = cacheSpeichernBundle; cacheSpeichernBundle = null; void speicherePersonenImPersistentenCache(b); }
+});
 async function speicherePersonenImPersistentenCache(bundle) {
   const gespeichertAm = new Date().toISOString();
   const cacheBundle = {
@@ -150,18 +165,9 @@ async function speicherePersonenImPersistentenCache(bundle) {
     ...bundle
   };
 
-  // v166: localStorage und IndexedDB sind zwei unabhängige Speicherwege.
-  // Ein Fehler in IndexedDB darf NICHT verhindern, dass der Safari-Fallback
-  // gespeichert wird.
+  // v460: IndexedDB ist der Hauptspeicher. localStorage (synchron, ~3,5 MB, nahe an der 5-MB-Grenze) wird nur
+  // noch beschrieben, wenn IndexedDB scheitert – das spart nach jeder Änderung spürbare Blockaden in Safari.
   let localGespeichert = false;
-  try {
-    localStorage.setItem(PERSONEN_LOCAL_KEY, JSON.stringify(cacheBundle));
-    localGespeichert = true;
-    debugLog(`💾 Personen-Cache in localStorage gespeichert: ${bundle.personen?.length || 0} Personen.`);
-  } catch (storageErr) {
-    debugLog(`⚠️ localStorage-Cache nicht speicherbar: ${storageErr.message || storageErr}`);
-  }
-
   let indexedGespeichert = false;
   try {
     const db = await oeffnePersonenCacheDB();
@@ -175,8 +181,18 @@ async function speicherePersonenImPersistentenCache(bundle) {
     db.close();
     indexedGespeichert = true;
     debugLog(`💾 Personen-Cache in IndexedDB gespeichert: ${bundle.personen?.length || 0} Personen.`);
+    try { localStorage.removeItem(PERSONEN_LOCAL_KEY); } catch {}   // alte Kopie freigeben
   } catch (err) {
     debugLog(`⚠️ IndexedDB-Cache nicht speicherbar: ${err.message || err}`);
+  }
+  if (!indexedGespeichert) {
+    try {
+      localStorage.setItem(PERSONEN_LOCAL_KEY, JSON.stringify(cacheBundle));
+      localGespeichert = true;
+      debugLog(`💾 Personen-Cache ersatzweise in localStorage gespeichert: ${bundle.personen?.length || 0} Personen.`);
+    } catch (storageErr) {
+      debugLog(`⚠️ localStorage-Cache nicht speicherbar: ${storageErr.message || storageErr}`);
+    }
   }
 
   return localGespeichert || indexedGespeichert;
@@ -184,27 +200,22 @@ async function speicherePersonenImPersistentenCache(bundle) {
 
 let personenCacheSeitenweise = false;
 async function ladePersonenAusPersistentemCache() {
-  // v166: Safari zuerst aus localStorage bedienen. IndexedDB bleibt als
-  // zusätzlicher dauerhafter Speicherweg erhalten.
-  let bundle = null;
-  let quelle = "";
-  try {
-    const raw = localStorage.getItem(PERSONEN_LOCAL_KEY);
-    if (raw) {
-      const fallback = JSON.parse(raw);
-      if (Array.isArray(fallback?.personen) && fallback.personen.length > 0) {
-        bundle = fallback;
-        quelle = "localStorage";
+  // v460: zuerst IndexedDB (asynchron, blockiert nicht), localStorage nur noch als Ersatz
+  let bundle = await lesePersonenAusPersistentemCache();
+  let quelle = bundle && Array.isArray(bundle.personen) && bundle.personen.length > 0 ? "IndexedDB" : "";
+  if (!quelle) {
+    bundle = null;
+    try {
+      const raw = localStorage.getItem(PERSONEN_LOCAL_KEY);
+      if (raw) {
+        const fallback = JSON.parse(raw);
+        if (Array.isArray(fallback?.personen) && fallback.personen.length > 0) {
+          bundle = fallback;
+          quelle = "localStorage";
+        }
       }
-    }
-  } catch (storageErr) {
-    debugLog(`⚠️ localStorage-Cache nicht lesbar: ${storageErr.message || storageErr}`);
-  }
-
-  if (!bundle) {
-    bundle = await lesePersonenAusPersistentemCache();
-    if (bundle && Array.isArray(bundle.personen) && bundle.personen.length > 0) {
-      quelle = "IndexedDB";
+    } catch (storageErr) {
+      debugLog(`⚠️ localStorage-Cache nicht lesbar: ${storageErr.message || storageErr}`);
     }
   }
 
@@ -381,15 +392,21 @@ async function ladeFamilienAusSupabaseFuerSync() {
 }
 
 // v371: Supabase liefert pro Abfrage höchstens 1000 Zeilen. Alle Zeilen seitenweise laden.
+// v460: Nach einer vollen ersten Seite werden die weiteren Seiten paarweise, dann zu viert gleichzeitig geholt
+// (bei ~2600 Personen zwei statt drei Runden über das Netz). Die Reihenfolge bleibt erhalten.
 async function alleZeilenLaden(bau, seite = 1000) {
   const alle = [];
-  for (let von = 0; ; von += seite) {
-    const { data, error } = await bau().range(von, von + seite - 1);
-    if (error) return { data: null, error };
-    alle.push(...(data || []));
-    if (!data || data.length < seite) break;
+  let von = 0, gleichzeitig = 1;
+  for (;;) {
+    const antworten = await Promise.all(Array.from({ length: gleichzeitig }, (_, i) => bau().range(von + i * seite, von + (i + 1) * seite - 1)));
+    for (const { data, error } of antworten) {
+      if (error) return { data: null, error };
+      alle.push(...(data || []));
+      if (!data || data.length < seite) return { data: alle, error: null };
+    }
+    von += gleichzeitig * seite;
+    gleichzeitig = Math.min(gleichzeitig * 2, 4);
   }
-  return { data: alle, error: null };
 }
 
 // v365: Prüf-Kennzeichen. Personen aus einem Import tragen herkunft_quelle; geprueft_am zeigt, ob schon geprüft.
@@ -500,9 +517,14 @@ function kbFilterOptionenAnpassen() {
 // Übersicht für die Bestandsliste: welche Bücher sind je Person verlinkt (Eigentümer)
 let kbUebersicht = new Map();   // personId -> { T, Tr, S, ehen, tot }
 let kbUebersichtLauf = null;
-async function kbUebersichtLaden() {
+// v460: Datenstand, zu dem Personen-, Familien- und Kinder-Cache des Bestands zuletzt vollständig abgeglichen wurden
+let bestandAbgleichStand = 0;
+let kbUebersichtStand = 0;   // v460: Datenstand, zu dem die Übersicht geladen wurde
+async function kbUebersichtLaden(force = false) {
   if (!rolleIstEigentuemer()) return;
+  if (!force && kbUebersichtStand === datenStand && kbUebersicht.size) return;
   if (kbUebersichtLauf) return kbUebersichtLauf;
+  const standBeimLaden = datenStand;
   kbUebersichtLauf = (async () => {
     try {
       const [pe, fa, tq] = await Promise.all([
@@ -518,12 +540,26 @@ async function kbUebersichtLaden() {
         if (!f.partner_a_id || !f.partner_b_id || f.familientyp === "Eltern") continue;
         for (const id of [f.partner_a_id, f.partner_b_id]) { const e = m.get(id); if (!e) continue; e.ehen += 1; if (mitQuelle.has(f.id)) e.Tr = true; }
       }
+      // v460: nur Karten nachziehen, deren Kürzel sich geändert haben (statt alle 2500 Karten)
+      const alt = kbUebersicht, geaendert = [];
+      const sig = (e) => (e ? `${e.T ? 1 : 0}${e.Tr ? 1 : 0}${e.S ? 1 : 0}${e.ehen}${e.tot ? 1 : 0}` : "");
+      for (const [id, e] of m) if (sig(alt.get(id)) !== sig(e)) geaendert.push(id);
+      for (const id of alt.keys()) if (!m.has(id)) geaendert.push(id);
       kbUebersicht = m;
-      document.dispatchEvent(new CustomEvent("kb-uebersicht-bereit"));
+      kbUebersichtStand = standBeimLaden;
+      if (geaendert.length) document.dispatchEvent(new CustomEvent("kb-uebersicht-bereit", { detail: { ids: geaendert, alle: !alt.size } }));
     } catch (e) { debugLog(`⚠️ Kirchenbuch-Übersicht laden: ${e.message || e}`); }
     finally { setTimeout(() => { kbUebersichtLauf = null; }, 0); }
   })();
   return kbUebersichtLauf;
+}
+// v460: Nach dem Speichern einer Person nur ihren Eintrag anpassen, statt die ganze Übersicht neu zu laden
+function kbUebersichtPersonSetzen(personId, { T, S, tot }, standVorher) {
+  const e = kbUebersicht.get(personId);
+  if (!e || kbUebersichtStand !== standVorher) return false;
+  kbUebersicht.set(personId, { ...e, T: !!T, S: !!S, tot: !!tot });
+  kbUebersichtStand = datenStand;
+  return true;
 }
 function kbChipsElement(personId) {
   if (!rolleIstEigentuemer()) return null;
@@ -535,8 +571,12 @@ function kbChipsElement(personId) {
   sp.innerHTML = `<span class="kb-mini__icon" aria-hidden="true">📖</span>` + teile.filter(([, , erw]) => erw).map(([k]) => `<span class="kb-mini__b ${e[k] ? "is-da" : "is-fehlt"}">${k}</span>`).join("");
   return sp;
 }
-document.addEventListener("kb-uebersicht-bereit", () => {
-  try { for (const karte of personenKartenCache.values()) if (karte?.person) aktualisierePersonenKarte(karte, karte.person); } catch {}
+document.addEventListener("kb-uebersicht-bereit", (e) => {
+  try {
+    const ids = e?.detail?.alle || !e?.detail?.ids ? null : e.detail.ids;
+    if (!ids) { for (const karte of personenKartenCache.values()) if (karte?.person) aktualisierePersonenKarte(karte, karte.person); return; }
+    for (const id of ids) { const karte = personenKartenCache.get(id); if (karte?.person) aktualisierePersonenKarte(karte, karte.person); }
+  } catch {}
 });
 
 // v410: Stift neben jedem Kirchenbuch in der Personenansicht – öffnet „Bearbeiten“ direkt an der richtigen Stelle
@@ -727,18 +767,25 @@ async function synchronisierePersonenDelta() {
     speichereEgressMessung();
     aktualisiereEgressMessung();
     if (!aenderungen.length) {
-      const aktuellerStand = await holeSyncMaxSeq();
+      eigeneSchreibvorgaenge.length = 0;
+      const aktuellerStand = Number(personenCacheSyncSeq || 0);   // v460: keine Änderungen → Stand bleibt (spart eine Abfrage)
       egressMessung.syncLetzteSeq = aktuellerStand;
       egressMessung.syncLetzterErfolgreicherLaufAenderungen = 0;
       egressMessung.syncLetzterErfolgreicherLaufSeq = aktuellerStand;
       egressMessung.syncLetzterErfolgreicherLaufAktualisiert = 0;
       egressMessung.syncLetzterErfolgreicherLaufGeloescht = 0;
       syncPruefungSeitCacheLaden = true;
+      bestandAbgleichStand = datenStand;   // v460: Bestand ist auf dem neuesten Stand
       speichereEgressMessung();
       aktualisiereEgressMessung();
       return false;
     }
 
+    // v460: Zwischenspeicher (Stammbaum, Chronik, Kirchenbuch) gelten nicht mehr – außer der Sync meldet nur die
+    // eigenen, gerade geschriebenen Änderungen (dann ist der Datenstand dafür schon erhöht worden)
+    const eigene = eigeneSchreibvorgaenge.splice(0);
+    const nurEigene = eigene.length > 0 && aenderungen.length <= eigene.length && aenderungen.every((a) => eigene.includes(a.tabelle));
+    if (!nurEigene) datenGeaendert(`Sync: ${aenderungen.length} Änderungen`);
     const letzteAenderung = new Map();
     for (const a of aenderungen) {
       const key = `${a.tabelle}:${a.datensatz_id}`;
@@ -760,7 +807,7 @@ async function synchronisierePersonenDelta() {
     }
 
     if (zuLadendePersonen.length) {
-      const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => sb.from("personen")
+      const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => sb.from("personen")
         .select(sp)
         .in("id", [...new Set(zuLadendePersonen)]));
       if (error) throw error;
@@ -789,7 +836,8 @@ async function synchronisierePersonenDelta() {
 
     baueAuswahlCachesAusSyncDaten();
 
-    const neuerStand = await holeSyncMaxSeq();
+    // v460: neuer Stand = höchste gelesene Änderung (keine zusätzliche Abfrage; was währenddessen dazukam, wird beim nächsten Mal geholt)
+    const neuerStand = Math.max(Number(personenCacheSyncSeq || 0), ...aenderungen.map((a) => Number(a.seq) || 0));
     personenCacheSyncSeq = neuerStand;
     egressMessung.syncLetzteSeq = neuerStand;
     egressMessung.syncLetzterErfolgreicherLaufAenderungen = aenderungen.length;
@@ -797,9 +845,10 @@ async function synchronisierePersonenDelta() {
     egressMessung.syncLetzterErfolgreicherLaufAktualisiert = egressMessung.syncPersonenAktualisiert;
     egressMessung.syncLetzterErfolgreicherLaufGeloescht = egressMessung.syncPersonenGeloescht;
     syncPruefungSeitCacheLaden = true;
+    bestandAbgleichStand = datenStand;   // v460
     speichereEgressMessung();
     aktualisiereEgressMessung();
-    await speicherePersonenImPersistentenCache({
+    speicherePersonenImHintergrund({
       personen: personenCache,
       familien: familienAuswahlCache,
       familienKinder: familienKinderAuswahlCache,
@@ -1000,7 +1049,8 @@ async function loadPersonen(force = false) {
   if (!force) {
     const lokalGeladen = await ladePersonenAusPersistentemCache();
     ersteLadung = !lokalGeladen;
-    const cacheOhnePruefFelder = lokalGeladen && pruefSpaltenVorhanden && personenCache.length > 0 && !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geprueft_am"));
+    const cacheOhnePruefFelder = lokalGeladen && personenCache.length > 0 && ((pruefSpaltenVorhanden && !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geprueft_am")))
+      || !personenCache.some((p) => Object.prototype.hasOwnProperty.call(p, "geschlecht")));   // v460: Geschlecht für den Stammbaum aus dem Bestand
     if (cacheOhnePruefFelder) debugLog("ℹ️ Cache ohne Prüf-Kennzeichen: einmalige vollständige Aktualisierung.");
     // v373: Ein Cache aus der Zeit vor dem seitenweisen Laden kann bei 1000 Personen abgeschnitten sein.
     const cacheAbgeschnitten = lokalGeladen && !personenCacheSeitenweise;
@@ -1038,7 +1088,7 @@ async function loadPersonen(force = false) {
     aktualisiereEgressMessung();
     ladeHinweisStart(ersteLadung && !force);
     ladeHinweisSchritt("Personen werden abgerufen");
-    const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => alleZeilenLaden(() => sb
+    const { data, error } = await personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr, Notiz, created_at, erstellt_am", (sp) => alleZeilenLaden(() => sb
       .from("personen")
       .select(sp)
       .order("nachname", { ascending: true })
@@ -1066,7 +1116,7 @@ async function loadPersonen(force = false) {
     try {
       const [{ data: familien }, { data: familienKinder }, { data: beziehungen }] = await Promise.all([
         alleZeilenLaden(() => sb.from("familien").select("*").order("id")),
-        alleZeilenLaden(() => sb.from("familien_kinder").select("familie_id, kind_id").order("familie_id").order("kind_id")),
+        alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("familie_id").order("kind_id")),   // v460: wie beim Sync (für den Stammbaum)
         alleZeilenLaden(() => sb.from("beziehung").select("personen_a_id, personen_b_id, beziehungstyp").order("personen_a_id").order("personen_b_id"))
       ]);
       familienAuswahlCache = familien || [];
@@ -1096,8 +1146,9 @@ async function loadPersonen(force = false) {
         ehePartnerschaften: new Set(),
         kinder: new Set(),
       }]));
+      const familieNachId = new Map((familien || []).map((f) => [f.id, f]));   // v460: statt Suche je Verknüpfung
       for (const fk of familienKinder || []) {
-        const familie = (familien || []).find((f) => f.id === fk.familie_id);
+        const familie = familieNachId.get(fk.familie_id);
         if (!familie || !fk.kind_id) continue;
         const info = personenVerwandtschaftCache.get(fk.kind_id);
         if (!info) continue;
@@ -1128,7 +1179,7 @@ async function loadPersonen(force = false) {
       try { syncSeqNachLaden = await holeSyncMaxSeq(); } catch (syncErr) { debugLog(`⚠️ Sync-Stand konnte nicht gelesen werden: ${syncErr.message || syncErr}`); }
       personenCacheSyncSeq = syncSeqNachLaden;
       personenCacheSyncInitialisiert = true;
-      await speicherePersonenImPersistentenCache({
+      speicherePersonenImHintergrund({
         personen: personenCache,
         familien: familienAuswahlCache,
         familienKinder: familienKinderAuswahlCache,
@@ -1136,6 +1187,7 @@ async function loadPersonen(force = false) {
         syncSeq: personenCacheSyncSeq,
         syncInitialisiert: true
       });
+      bestandAbgleichStand = datenStand;   // v460: frisch und vollständig geladen
       personenCacheQuelle = "Supabase";
     } catch (familyErr) {
       debugLog(`⚠️ Familien-Sortierung: ${familyErr.message}`);
@@ -1449,6 +1501,9 @@ function erstellePersonenKarte(p) {
 
   const karte = { li, img, placeholder, name, years, relations, note, audioToggle, audioPanel, person: p };
   personenKartenCache.set(p.id, karte);
+  // v460: neue Karten starten verborgen und werden erst befüllt, wenn sie angezeigt werden (Suche/Portion) –
+  // beim Start werden so nur ~150 statt ~2500 Karten aufgebaut
+  li.hidden = true;
   aktualisierePersonenKarte(karte, p);
   return karte;
 }
@@ -1467,6 +1522,8 @@ function personenKartenSignatur(p) {
   return `${JSON.stringify(p)}|${l ? JSON.stringify(l) : ""}|${k ? JSON.stringify(k) : ""}|${v ? `${v.eltern?.size}/${v.ehePartnerschaften?.size}/${v.kinder?.size}` : ""}|${rolleIstEigentuemer() ? 1 : 0}|${new Date().toDateString()}`;
 }
 function aktualisierePersonenKarte(karte, p) {
+  if (karte.li.hidden) { karte.person = p; karte.veraltet = true; return; }   // v460: verborgene Karte erst beim Anzeigen befüllen
+  karte.veraltet = false;
   const signatur = personenKartenSignatur(p);
   if (karte.signatur === signatur) { karte.person = p; setzeSchluesselfotoInKarte(p.id); return; }
   karte.signatur = signatur;
@@ -1668,9 +1725,24 @@ async function ladeBestandsSprachnotizen(personId, panel) {
 }
 
 
+// v460: Zuletzt gezeichneter Stand der Bestandsliste. Ist nichts anders (gleicher Personenbestand, gleicher Datenstand,
+// gleiche Sortierung, keine fehlenden Karten), wird die Liste nicht neu sortiert und nicht neu befüllt – das spart
+// beim Reiterwechsel und Zurückkehren auf dem iPad rund eine Sekunde Rechenzeit.
+let bestandGezeichnet = { liste: null, laenge: -1, stand: -1, schluessel: "", karten: -1, tag: "" };
+function bestandZeichenSchluessel() {
+  return `${personenSortierung}|${personenSortRichtung}|${rolleIstEigentuemer() ? 1 : 0}|${stammlinienInfo?.size || 0}|${personenVerwandtschaftCache?.size || 0}`;
+}
 async function renderPersonenList(personen) {
   const list = document.getElementById("personen-list");
   if (!list) return;
+  const g = bestandGezeichnet;
+  if (personen === personenCache && g.liste === personenCache && g.laenge === personenCache.length && g.stand === datenStand
+      && g.schluessel === bestandZeichenSchluessel() && g.karten === personenKartenCache.size && g.tag === new Date().toDateString()
+      && list.children.length) {
+    if (rolleIstEigentuemer()) kbUebersichtLaden();
+    if (typeof window.partezettelPersonenSuche === "function") window.partezettelPersonenSuche(document.getElementById("search-input")?.value || "");
+    return;
+  }
   const sortiertePersonen = sortierePersonen(personen);
   const sichtbarIds = new Set(sortiertePersonen.map(p => p.id));
 
@@ -1680,7 +1752,7 @@ async function renderPersonenList(personen) {
     if (!personenKartenCache.has(p.id)) erstellePersonenKarte(p);
     const karte = personenKartenCache.get(p.id);
     aktualisierePersonenKarte(karte, p);
-    karte.li.hidden = !sichtbarIds.has(p.id);
+    if (!sichtbarIds.has(p.id)) karte.li.hidden = true;   // v460: Anzeigen übernimmt die Suche (personenListeBegrenzen)
   }
 
   // Sortierung durch Verschieben der bestehenden DOM-Knoten, nicht durch Neuanlage.
@@ -1697,6 +1769,7 @@ async function renderPersonenList(personen) {
   if (!stammlinienInfo.size) stammlinienLaden();   // v409
   if (rolleIstEigentuemer()) kbUebersichtLaden();   // v412
   kbFilterOptionenAnpassen();
+  if (personen === personenCache) bestandGezeichnet = { liste: personenCache, laenge: personenCache.length, stand: datenStand, schluessel: bestandZeichenSchluessel(), karten: personenKartenCache.size, tag: new Date().toDateString() };
   // Trefferzähler („272 Personen“) nach jedem Neuaufbau der Liste aktualisieren.
   if (typeof window.partezettelPersonenSuche === "function") {
     window.partezettelPersonenSuche(document.getElementById("search-input")?.value || "");
@@ -1833,7 +1906,10 @@ function personenListeBegrenzen() {
     const treffer = !!karte?.treffer;
     let zeigen = false;
     if (treffer) { n++; zeigen = n <= personenListeGrenze; if (!zeigen) mehr++; }
-    if (li.hidden === zeigen) li.hidden = !zeigen;
+    if (li.hidden === zeigen) {
+      li.hidden = !zeigen;
+      if (zeigen && karte?.veraltet) aktualisierePersonenKarte(karte, karte.person);   // v460: erst jetzt befüllen
+    }
   }
   let knopf = document.getElementById("personen-mehr");
   if (!knopf) {

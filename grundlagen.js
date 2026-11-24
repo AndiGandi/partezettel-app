@@ -1,5 +1,5 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
 
 
 // ==========================================================
@@ -87,6 +87,49 @@ async function mitMonatSpalten(datensatz, bau) {
     if (r && !r.error) r.monatFehlt = true;
   }
   return r;
+}
+
+// ======================================================================
+// v460: Datenstand – zählt jede Änderung an genealogischen Daten (eigene Schreibvorgänge und
+// Änderungen anderer Geräte aus dem Delta-Sync). Zwischenspeicher (Kirchenbuch-Übersicht, Stammbaum,
+// Chronik, gezeichnete Bestandsliste) gelten, solange der Datenstand gleich bleibt – so wird nur
+// neu geladen bzw. neu gezeichnet, wenn sich wirklich etwas geändert hat.
+// ======================================================================
+let datenStand = 1;
+const eigeneSchreibvorgaenge = [];   // Tabellen der eigenen Schreibvorgänge seit dem letzten Delta-Sync
+const DATENSTAND_TABELLEN = new Set(["personen", "familien", "familien_kinder", "beziehung", "fotos", "foto_personen",
+  "familien_trauungsbuch_quellen", "person_stationen", "haeuser", "sprachnotizen", "papierkorb", "importe"]);
+function datenGeaendert(grund = "") {
+  datenStand += 1;
+  if (grund && typeof debugLog === "function" && window.__datenStandProtokoll) debugLog(`Datenstand ${datenStand}: ${grund}`);
+}
+function datenStandUeberwachen(client) {
+  if (!client || client.__datenStandUeberwacht) return;
+  client.__datenStandUeberwacht = true;
+  const nachErfolg = (builder, grund) => {
+    if (!builder || typeof builder.then !== "function") return builder;
+    const th = builder.then.bind(builder);
+    builder.then = (ok, fe) => th((res) => { if (!res?.error) { datenGeaendert(grund); eigeneSchreibvorgaenge.push(String(grund).split(" ").pop()); if (eigeneSchreibvorgaenge.length > 300) eigeneSchreibvorgaenge.splice(0, 150); } return ok ? ok(res) : res; }, fe);
+    return builder;
+  };
+  const from0 = client.from.bind(client);
+  client.from = (tabelle) => {
+    const q = from0(tabelle);
+    if (!q || !DATENSTAND_TABELLEN.has(tabelle)) return q;
+    for (const m of ["insert", "update", "upsert", "delete"]) {
+      const orig = q[m];
+      if (typeof orig !== "function") continue;
+      q[m] = (...args) => nachErfolg(orig.apply(q, args), `${m} ${tabelle}`);
+    }
+    return q;
+  };
+  if (typeof client.rpc === "function") {
+    const rpc0 = client.rpc.bind(client);
+    client.rpc = (name, ...args) => {
+      const r = rpc0(name, ...args);
+      return /^fs_ist_eigentuemer$/.test(name) ? r : nachErfolg(r, `rpc ${name}`);
+    };
+  }
 }
 
 // ======================================================================
@@ -729,6 +772,7 @@ try {
     throw new Error("Supabase-Anon-Key fehlt in config.js.");
   }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  datenStandUeberwachen(sb);
   debugLog("Supabase-Client initialisiert.");
 } catch (err) {
   debugLog(`⚠️ Supabase nicht initialisiert: ${err.message}`);

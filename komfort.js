@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -423,7 +423,7 @@ function sucheXAnbringen(input) {
 }
 function sucheXAlle(wurzel = document) { wurzel.querySelectorAll?.('input[type="search"]').forEach(sucheXAnbringen); }
 sucheXAlle();
-new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1) { if (n.tagName === "INPUT") { if (n.type === "search") sucheXAnbringen(n); } else if (n.getElementsByTagName("input").length) sucheXAlle(n); } })   // v443: schnelle Vorprüfung
+new MutationObserver((ms) => { for (const m of ms) for (const n of m.addedNodes) if (n.nodeType === 1 && n.tagName !== "LI") { if (n.tagName === "INPUT") { if (n.type === "search") sucheXAnbringen(n); } else if (n.getElementsByTagName("input").length) sucheXAlle(n); } })   // v443: schnelle Vorprüfung
   .observe(document.body, { childList: true, subtree: true });
 
 
@@ -475,9 +475,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 459;   // bei jeder Version mit hochzählen
+const APP_VERSION = 460;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [460, ["Spürbar schneller: Reiterwechsel, Sortieren, Bearbeiten, Speichern und das Öffnen einer Person", "Stammbaum und Chronik werden nur noch neu geladen, wenn sich wirklich etwas geändert hat", "Weniger Datenverkehr: beim Öffnen einer Person wird nicht mehr die ganze Familienliste übertragen", "Die Chronik zeigt Änderungen jetzt sofort (früher erst nach „neu berechnen“)"]],
   [459, ["Geburt und Tod gehen jetzt auch mit Monat und Jahr ohne Tag (z. B. „Oktober 1918“) – unbekannten Tag oder Monat einfach leer lassen", "Das eigene Feld „nur Jahr bekannt“ ist weggefallen: nur das Jahr wählen genügt", "Kinder mit nur Geburtsjahr stehen jetzt in der richtigen zeitlichen Reihenfolge", "Ehejahre werden auch bei Hochzeiten mit nur Jahr angezeigt (ungefähr)", "Partezettel-Paket: fehlende Ehepartner werden wie Kinder als Namen ohne Datenblatt vorgeschlagen"]],
   [458, ["„Verlauf“ und „Prüfen“ sind jetzt ein Reiter „Verwaltung“: Datenprüfung, Lücken & Inseln, Papierkorb und Änderungsprotokoll", "Die Plausibilitätsprüfung ist in der Datenprüfung aufgegangen – alles mit „✓ Stimmt so“", "Bestand: „🔎 Alles durchsuchen“ direkt unter dem Suchfeld", "Stammbaum: „Cousins & Cousinen“ entfernt"]],
   [457, ["Neuer Bereich „Prüfen“ (nur Eigentümer): Datenprüfung, Plausibilität sowie Lücken & Inseln an einem Ort", "„Export / Sicherung“ heißt jetzt „Import / Export“ – dort auch Hausblätter-Import und 🕊️ Partezettel auswerten", "Bestand: neue Sortierung „Mit weiterführenden Links zuerst“, Links als 🔗-Abzeichen; Kirchenbuch-Abzeichen T/Tr/S deutlicher"]],

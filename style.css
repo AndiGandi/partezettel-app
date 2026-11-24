@@ -2395,3 +2395,5 @@ body.pzki-offen{overflow:hidden}
 /* v459: Datum mit Tag/Monat/Jahr – unbekannte Teile leer lassen (statt Feld „nur Jahr bekannt“) */
 .date-hinweis{display:block;margin-top:.2rem;font-size:.72rem;line-height:1.2;color:var(--ink-soft)}
 .date-hinweis--zeile{margin:.35rem 0 .7rem}
+/* v460: Bestandskarten außerhalb des Bildschirms nicht gestalten/zeichnen (spart auf dem iPad Rechenzeit) */
+.personen-list > .person-card{content-visibility:auto;contain-intrinsic-size:auto 72px}

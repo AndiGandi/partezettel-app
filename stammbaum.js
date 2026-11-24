@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -149,13 +149,28 @@ function treeParentFamiliesForPerson(id) {
   return treeData.kinder.filter((k) => k.kind_id === id).map((k) => treeData.familien.find((f) => f.id === k.familie_id)).filter(Boolean);
 }
 
+// v460: Stammbaumdaten gelten, solange sich der Datenstand nicht ändert (höchstens 30 Minuten) –
+// beim erneuten Öffnen des Reiters wird dann nichts mehr übertragen (spart Zeit und Datenvolumen).
+let treeDataStand = 0;
+const TREE_DATEN_MAX_ALTER = 30 * 60 * 1000;
+const treeDatenGueltig = () => treeData.personen.length > 0 && treeDataStand === datenStand && treeDataGeladenAm > 0 && Date.now() - treeDataGeladenAm < TREE_DATEN_MAX_ALTER;
 async function loadStammbaumData(optionen = {}) {
   await ensureSession();
-  const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = await Promise.all([
+  const standBeimLaden = datenStand;
+  // v460: Sind Personen, Familien und Kinder im Bestand schon auf dem aktuellen Stand, werden sie direkt verwendet
+  // (keine erneute Übertragung). Sonst wie bisher aus Supabase laden.
+  const ausBestand = typeof bestandAbgleichStand !== "undefined" && bestandAbgleichStand === datenStand
+    && Array.isArray(personenCache) && personenCache.length > 0 && personenCache.every((p) => "geschlecht" in p)
+    && Array.isArray(familienAuswahlCache) && familienAuswahlCache.length > 0
+    && Array.isArray(familienKinderAuswahlCache) && familienKinderAuswahlCache.length > 0 && familienKinderAuswahlCache.every((k) => "beziehungstyp" in k);
+  const [{ data: personen, error: personenError }, { data: familien, error: familienError }, { data: kinder, error: kinderError }] = ausBestand
+    ? [{ data: [...personenCache].sort((a, b) => sortierVergleicher(a.nachname || "", b.nachname || "") || String(a.id).localeCompare(String(b.id))), error: null }, { data: familienAuswahlCache, error: null }, { data: familienKinderAuswahlCache, error: null }]
+    : await Promise.all([
     personenMitPruefSpalten("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr", (sp) => alleZeilenLaden(() => sb.from("personen").select(sp).order("nachname", { ascending: true }).order("id", { ascending: true }))),
     alleZeilenLaden(() => sb.from("familien").select("*").order("id")),
     alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id"))
   ]);
+  if (ausBestand) debugLog("ℹ️ Stammbaum aus dem Bestand übernommen (keine Übertragung).");
   if (personenError) throw personenError;
   if (familienError) throw familienError;
   if (kinderError) throw kinderError;
@@ -166,6 +181,7 @@ async function loadStammbaumData(optionen = {}) {
   treeData.kinder = bereinigt.kinder;
   treeData.photos = new Map();
   treeDataGeladenAm = Date.now();
+  treeDataStand = standBeimLaden;
   // Suchvorschläge stehen ab hier bereit – noch bevor die Schlüsselfotos geladen sind.
   if (typeof optionen.nachStruktur === "function") {
     try { optionen.nachStruktur(); } catch (err) { debugLog(`⚠️ Stammbaum-Vorschläge: ${err.message || err}`); }
@@ -2783,7 +2799,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=459");
+      treeModul3D = await import("./tree3d.js?v=460");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {
@@ -2850,7 +2866,8 @@ function setTreeViewMode(mode, rootId = "") {
 
 // Daten nur neu laden, wenn sie älter sind (spart Wartezeit und Datenverkehr bei „Auswahl bestätigen“).
 async function treeDatenAktualisieren(maxAlterMs = 120000) {
-  if (treeData.personen.length && Date.now() - treeDataGeladenAm < maxAlterMs) return;
+  if (treeDatenGueltig()) return;   // v460: unveränderter Datenstand
+  if (treeData.personen.length && treeDataStand === datenStand && Date.now() - treeDataGeladenAm < maxAlterMs) return;
   await loadStammbaumData();
 }
 
@@ -2862,7 +2879,7 @@ async function loadStammbaum() {
     message.textContent = "Stammbaum wird geladen …";
     // Vorschläge sofort aus dem Bestand anbieten, solange der Stammbaum noch lädt.
     fillTreePersonSelect(search?.value || "", select.value);
-    await loadStammbaumData({ nachStruktur: () => fillTreePersonSelect(search?.value || "", select.value) });
+    if (!treeDatenGueltig()) await loadStammbaumData({ nachStruktur: () => fillTreePersonSelect(search?.value || "", select.value) });
     if (!treeData.personen.length) {
       select.innerHTML = '<option value="">— keine Personen vorhanden —</option>';
       renderStammbaum("");

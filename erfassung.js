@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -1320,7 +1320,7 @@ function berechneFamilienSortKeys(personen,familien) {
   const ids=new Set(personen.map(p=>p.id)), adj=new Map(personen.map(p=>[p.id,new Set()]));
   for(const f of familien||[]) { const a=f.partner_a_id,b=f.partner_b_id; if(ids.has(a)&&ids.has(b)){adj.get(a).add(b);adj.get(b).add(a);} for(const k of f._kinder||[]){if(!ids.has(k))continue;if(ids.has(a)){adj.get(a).add(k);adj.get(k).add(a);}if(ids.has(b)){adj.get(b).add(k);adj.get(k).add(b);}}}
   const byId=new Map(personen.map(p=>[p.id,p])),seen=new Set();
-  for(const p of personen){if(seen.has(p.id))continue;const stack=[p.id],comp=[];seen.add(p.id);while(stack.length){const id=stack.pop();comp.push(id);for(const n of adj.get(id)||[]){if(!seen.has(n)){seen.add(n);stack.push(n);}}}const key=comp.map(id=>byId.get(id)?.nachname||"").filter(Boolean).sort((x,y)=>x.localeCompare(y,"de",{sensitivity:"base"}))[0]||p.nachname||"";for(const id of comp)byId.get(id)._familienSortKey=key; }
+  for(const p of personen){if(seen.has(p.id))continue;const stack=[p.id],comp=[];seen.add(p.id);while(stack.length){const id=stack.pop();comp.push(id);for(const n of adj.get(id)||[]){if(!seen.has(n)){seen.add(n);stack.push(n);}}}let key="";for(const id of comp){const n=byId.get(id)?.nachname||"";if(n&&(!key||sortierVergleicher(n,key)<0))key=n;}key=key||p.nachname||"";for(const id of comp)byId.get(id)._familienSortKey=key; }
 }
 
 

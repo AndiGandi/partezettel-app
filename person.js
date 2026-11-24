@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 459
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 460
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN
@@ -287,6 +287,12 @@ async function openPersonDetail(personId, options = {}) {
     ladeWohnorte(person.id);
     if (typeof zeigeZeitgeschehen === "function") zeigeZeitgeschehen(person); // v381
 
+    // v460: Familienabfragen sofort starten (laufen parallel zum Schlüsselfoto) – und nur die Verknüpfungen
+    // dieser Person statt aller ~1800 Eltern-Kind-Verknüpfungen
+    const familienVorab = Promise.all([
+      sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
+      sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").eq("kind_id", personId)
+    ]);
     const keyphoto = document.getElementById("pv-keyphoto");
     keyphoto.hidden = true; keyphoto.removeAttribute("src");
     await ladeSchluesselfotos([person]);
@@ -342,12 +348,20 @@ async function openPersonDetail(personId, options = {}) {
 
     const spouseSection = document.getElementById("pv-spouse-section");
     const spouseList = document.getElementById("pv-spouse-list"); spouseList.replaceChildren();
-    const [{ data: familyRows, error: familyError }, { data: childLinks, error: childError }] = await Promise.all([
-      sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
-      alleZeilenLaden(() => sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").order("id"))
-    ]);
+    const [{ data: familyRows, error: familyError }, { data: eigeneElternLinks, error: childError }] = await familienVorab;
     if (familyError) debugLog(`⚠️ Ehepartner laden: ${familyError.message}`);
     if (childError) debugLog(`⚠️ Kinder laden: ${childError.message}`);
+    // Runde 2 gleichzeitig: Kinder der eigenen Familien, Elternfamilien, Trauungsbuch-Quellen
+    const alleFamilienIds = (familyRows || []).map(f => f.id).filter(Boolean);
+    const elternFamIdsVorab = [...new Set((eigeneElternLinks || []).map(l => l.familie_id).filter(Boolean))];
+    const eheIdsVorab = (familyRows || []).filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern").map(f => f.id).filter(Boolean);
+    const [kinderLinksAntwort, elternFamAntwort, eheQuellenAntwort] = await Promise.all([
+      alleFamilienIds.length ? sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").in("familie_id", alleFamilienIds) : Promise.resolve({ data: [] }),
+      elternFamIdsVorab.length ? sb.from("familien").select("id, partner_a_id, partner_b_id, familientyp").in("id", elternFamIdsVorab) : Promise.resolve({ data: [] }),
+      eheIdsVorab.length ? sb.from("familien_trauungsbuch_quellen").select("*").in("familie_id", eheIdsVorab) : Promise.resolve({ data: [] })
+    ]);
+    if (kinderLinksAntwort.error) debugLog(`⚠️ Kinder laden: ${kinderLinksAntwort.error.message}`);
+    const childLinks = [...(eigeneElternLinks || []), ...(kinderLinksAntwort.data || [])];
     const partnerFamilies = (familyRows || [])
       .filter(f => f.partner_a_id && f.partner_b_id && f.familientyp !== "Eltern")
       .sort((a, b) => {
@@ -361,10 +375,7 @@ async function openPersonDetail(personId, options = {}) {
     if (partnerFamilies.length) {
       const eheFamilienIds = partnerFamilies.map(f => f.id).filter(Boolean);
       try {
-        const { data: eheQuellen, error: eheQuellenError } = await sb
-          .from("familien_trauungsbuch_quellen")
-          .select("*")
-          .in("familie_id", eheFamilienIds);
+        const { data: eheQuellen, error: eheQuellenError } = eheQuellenAntwort;   // v460: schon vorab geladen
         if (eheQuellenError) throw eheQuellenError;
 
         const bereitsAngezeigt = new Set(
@@ -424,9 +435,7 @@ async function openPersonDetail(personId, options = {}) {
     const ownParentFamilyIds = [...new Set((childLinks || []).filter(link => link.kind_id === personId).map(link => link.familie_id).filter(Boolean))];
     let ownParentFamilies = [];
     if (ownParentFamilyIds.length) {
-      const { data: parentFamilyData, error: parentFamilyError } = await sb.from("familien")
-        .select("id, partner_a_id, partner_b_id, familientyp")
-        .in("id", ownParentFamilyIds);
+      const { data: parentFamilyData, error: parentFamilyError } = elternFamAntwort;   // v460: schon vorab geladen
       if (parentFamilyError) debugLog(`⚠️ Eltern in Bestand laden: ${parentFamilyError.message}`);
       // Entscheidend ist die tatsächliche Kind-Verknüpfung in familien_kinder,
       // nicht der Text in familientyp. Ältere Datensätze können Eltern trotz
@@ -927,6 +936,7 @@ function leseWeiterfuehrendeLinksEditor() {
 const weiterfuehrendeLinksAddButton = document.getElementById("d-weiterfuehrende-links-add");
 if (weiterfuehrendeLinksAddButton) weiterfuehrendeLinksAddButton.addEventListener("click", () => fuegeWeiterfuehrendenLinkHinzu());
 
+let detailGeladen = null;   // v460
 async function openPersonEdit(personId, options = {}) {
   currentDetailPersonId = personId;
   detailOpenedFromTree = options.fromTree === true;
@@ -946,6 +956,8 @@ async function openPersonEdit(personId, options = {}) {
   { const g = treePersonGender(person); document.getElementById("d-geschlecht").value = g === "m" ? "männlich" : g === "w" ? "weiblich" : ""; }
   setDatum("d-geburtsdatum", gebWert(person));   // v459: Tag/Monat/Jahr soweit bekannt
   setDatum("d-sterbedatum", todWert(person));
+  // v460: geladener Stand – beim Speichern werden unveränderte Teile (Verwandten-Prüfung, Ehe-Ende, Trauungsbuch) übersprungen
+  detailGeladen = { id: person.id, geb: gebWert(person) || "", tod: todWert(person) || "", geschlecht: person.geschlecht || "", trau: String(person.trauungsbuch_link || "").trim(), taufe: String(person.taufbuch_link || "").trim(), sterbe: String(person.sterbebuch_link || "").trim() };
   document.getElementById("d-taufbuch-link").value = person.taufbuch_link || "";
   document.getElementById("d-trauungsbuch-link").value = person.trauungsbuch_link || "";
   document.getElementById("d-sterbebuch-link").value = person.sterbebuch_link || "";
@@ -983,16 +995,20 @@ async function openPersonEdit(personId, options = {}) {
     if (detailSheet) detailSheet.scrollTop = 0;
   });
 
-  try { await loadDetailFotos(personId); } catch (err) { debugLog(`⚠️ Fotos der Person konnten nicht geladen werden: ${err.message || err}`); }
-  try { await loadDetailAudio(personId); } catch (err) { debugLog(`⚠️ Sprachnotizen der Person konnten nicht geladen werden: ${err.message || err}`); }
-  // Für die Familienansicht immer aktuelle Personennamen verwenden.
-  // v445: nur den Änderungsstand holen – die Bestandsliste hinter dem Fenster wird erst beim Schließen neu gezeichnet
-  // (vorher wurde sie hier jedes Mal komplett neu aufgebaut und hat Tippen auf Tag/Monat/Jahr sekundenlang blockiert).
-  try {
-    if (personenCacheGeladen && personenCacheSyncInitialisiert) await synchronisierePersonenDelta();
-    else await loadPersonen();
-  } catch (_) {}
-  try { await loadDetailFamilie(personId); } catch (err) { debugLog(`⚠️ Familienangaben konnten nicht geladen werden: ${err.message || err}`); }
+  // v460: Fotos, Sprachnotizen und Familie gleichzeitig laden (früher nacheinander – auf dem iPad mehrere Sekunden)
+  await Promise.all([
+    loadDetailFotos(personId).catch((err) => debugLog(`⚠️ Fotos der Person konnten nicht geladen werden: ${err.message || err}`)),
+    loadDetailAudio(personId).catch((err) => debugLog(`⚠️ Sprachnotizen der Person konnten nicht geladen werden: ${err.message || err}`)),
+    // Änderungsstand des Bestands abgleichen (v445: ohne die Liste dahinter neu zu zeichnen) – v460: gleichzeitig mit der Familie,
+    // denn die Familie liest ihre Personen ohnehin frisch aus der Datenbank
+    (async () => {
+      try {
+        if (personenCacheGeladen && personenCacheSyncInitialisiert) await synchronisierePersonenDelta();
+        else if (!personenCacheGeladen) await loadPersonen();
+      } catch (_) {}
+    })(),
+    loadDetailFamilie(personId).catch((err) => debugLog(`⚠️ Familienangaben konnten nicht geladen werden: ${err.message || err}`))
+  ]);
 }
 
 document.getElementById("detail-close-btn").addEventListener("click", async () => {
@@ -1095,7 +1111,10 @@ async function speichereOffeneEhen() {
 document.getElementById("d-save-person-btn").addEventListener("click", async () => {
   const msg = document.getElementById("d-person-message");
   msg.textContent = "Speichere …";
+  const kbStandVorSpeichern = kbUebersichtStand === datenStand ? datenStand : -1;   // v460
+  const ehenOffen = [...document.querySelectorAll("#d-partner-list .familie-item")].some((i) => i.dataset.eheGeaendert === "1" || i.dataset.quelleGeaendert === "1");
   if (!(await speichereOffeneEhen())) { msg.textContent = "Ehe-Angaben konnten nicht gespeichert werden."; return; }
+  const ehenGespeichert = ehenOffen;
   // Elternauswahl vor dem allgemeinen Speichern sichern. Die allgemeinen
   // Personendaten dürfen bereits gespeicherte Elternbeziehungen nicht verlieren.
   const elternVaterId = document.getElementById("d-vater")?.value || null;
@@ -1124,7 +1143,10 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   // v360: Plausibilität der Lebensdaten und im Vergleich mit Eltern, Kindern und Partnern
   {
     const neu = plausFormPerson("d-");
-    const befunde = [...plausLebensdaten(neu), ...(await plausVerwandteDerPerson(currentDetailPersonId, neu))];
+    const g0 = detailGeladen?.id === currentDetailPersonId ? detailGeladen : null;
+    const datenGleich = g0 && g0.geb === (gebWert(neu) || "") && g0.tod === (todWert(neu) || "") && g0.geschlecht === (geschlechtWert || "");
+    // v460: Lebensdaten und Geschlecht unverändert → Vergleich mit Eltern/Kindern/Partnern überspringen (spart mehrere Abfragen)
+    const befunde = [...plausLebensdaten(neu), ...(datenGleich ? [] : await plausVerwandteDerPerson(currentDetailPersonId, neu))];
     if (!(await plausFragen(befunde))) {
       msg.textContent = `Nicht gespeichert: ${befunde.find((b) => b.stufe === "fehler")?.text || "bitte die Angaben prüfen."}`;
       return;
@@ -1169,8 +1191,10 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   // Wird ein Todesdatum nachträglich eingetragen, ein bisher offenes
   // Ehe-/Partnerschaftsende automatisch übernehmen. Ein vorhandenes
   // manuelles Ende wird dabei niemals verändert.
+  const geladenVorher = detailGeladen?.id === currentDetailPersonId ? detailGeladen : null;   // v460
+  const todUnveraendert = geladenVorher && geladenVorher.tod === (todWert({ sterbedatum: todTeile.datum, sterbejahr: todTeile.jahr, sterbemonat: todTeile.monat }) || "");
   try {
-    await synchronisierePartnerschaftsEndeBeiTod(
+    if (!todUnveraendert) await synchronisierePartnerschaftsEndeBeiTod(
       currentDetailPersonId,
       todTeile.datum || null,
       todTeile.jahr || null
@@ -1182,7 +1206,10 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   // Elternbeziehungen nach dem Personendatensatz erneut absichern. Wenn beide
   // Auswahlfelder leer sind, wird bewusst nichts an bestehenden Beziehungen
   // geändert; das Löschen von Eltern erfolgt ausschließlich über „Eltern speichern“.
-  if (elternVaterId || elternMutterId) {
+  // v460: nur wenn sich die Eltern geändert haben (oder alte Mehrfach-Verknüpfungen zu bereinigen sind)
+  const vSel = document.getElementById("d-vater"), mSel = document.getElementById("d-mutter");
+  const elternUnveraendert = vSel?.dataset.geladen !== undefined && vSel.dataset.geladen === (elternVaterId || "") && mSel?.dataset.geladen === (elternMutterId || "") && vSel.dataset.mehrfach !== "1";
+  if ((elternVaterId || elternMutterId) && !elternUnveraendert) {
     try {
       await speichereElternZuKind(currentDetailPersonId, elternVaterId, elternMutterId);
     } catch (err) {
@@ -1208,15 +1235,23 @@ document.getElementById("d-save-person-btn").addEventListener("click", async () 
   // Nur das Trauungsbuch darf bei einer Ehe auf den Partner ergänzt werden.
   // Leere Partnerfelder werden gefüllt; bestehende Partner-Links bleiben unangetastet.
   try {
-    await synchronisiereTrauungsbuchEhepartner(
+    const trauLink = document.getElementById("d-trauungsbuch-link").value.trim();
+    if (!(geladenVorher && geladenVorher.trau === trauLink)) await synchronisiereTrauungsbuchEhepartner(   // v460: nur bei geändertem Link
       currentDetailPersonId,
-      document.getElementById("d-trauungsbuch-link").value.trim()
+      trauLink
     );
   } catch (err) {
     debugLog(`⚠️ Trauungsbuch-Synchronisierung: ${err.message || err}`);
   }
 
-  if (rolleIstEigentuemer()) kbUebersichtLaden();   // v412: Kirchenbuch-Übersicht aktualisieren
+  // v412/v460: Kirchenbuch-Übersicht – nur den eigenen Eintrag anpassen, wenn sonst nichts Familiäres geändert wurde
+  if (rolleIstEigentuemer()) {
+    const nurPerson = !ehenGespeichert && elternUnveraendert && geladenVorher && geladenVorher.trau === document.getElementById("d-trauungsbuch-link").value.trim();
+    const ok = nurPerson && kbUebersichtPersonSetzen(currentDetailPersonId, {
+      T: document.getElementById("d-taufbuch-link").value.trim(), S: document.getElementById("d-sterbebuch-link").value.trim(),
+      tot: todTeile.datum || todTeile.jahr }, kbStandVorSpeichern);
+    if (!ok) kbUebersichtLaden();
+  }
   msg.textContent = `Gespeichert ✓${monatHinweis}`;
   void personenNachSpeichern();   // v431: geänderte Namen/Daten sofort überall
   aktualisiereLinkButton("d-taufbuch-open", document.getElementById("d-taufbuch-link").value.trim());
@@ -1257,12 +1292,14 @@ async function loadDetailFotos(personId) {
   ]);
   if (eigeneError) { debugLog(`❌ Fotos laden: ${eigeneError.message}`); return; }
   if (linksError) { debugLog(`❌ Foto-Verknüpfungen laden: ${linksError.message}`); return; }
-  const ids = [...new Set([...(eigene || []).map(f => f.id), ...(links || []).map(x => x.foto_id)])];
-  let verknuepfte = [];
-  if (ids.length) {
-    const { data, error } = await sb.from("fotos").select("*").in("id", ids);
+  // v460: eigene Fotos nicht ein zweites Mal holen – nur die über Markierungen verknüpften nachladen
+  const eigeneIds = new Set((eigene || []).map(f => String(f.id)));
+  const fehlendeIds = [...new Set((links || []).map(x => x.foto_id).filter(id => !eigeneIds.has(String(id))))];
+  let verknuepfte = [...(eigene || [])];
+  if (fehlendeIds.length) {
+    const { data, error } = await sb.from("fotos").select("*").in("id", fehlendeIds);
     if (error) { debugLog(`❌ Verknüpfte Fotos laden: ${error.message}`); return; }
-    verknuepfte = data || [];
+    verknuepfte = [...verknuepfte, ...(data || [])];
   }
   const personLinkByPhotoId = new Map((links || []).map(link => [String(link.foto_id), link]));
   const sortValue = foto => {
@@ -1309,13 +1346,18 @@ async function loadDetailFotos(personId) {
   // Alle Fotos beim Öffnen der Personendetails laden, damit auch normale
   // Fotos (nicht nur Schlüsselfotos und Gruppenfotos) als Vorschaubilder erscheinen.
   const direktLadenPfade = fotos.filter(f => f.dateipfad).map(f => f.dateipfad);
-  const fotoUrls = await ladeFotoBilder(direktLadenPfade);
+  // v460: Bild-Adressen und alle Markierungen gleichzeitig und in einer Abfrage holen (früher eine Abfrage je Foto)
+  const [fotoUrls, markierungsAntwort] = await Promise.all([
+    ladeFotoBilder(direktLadenPfade),
+    fotos.length
+      ? sb.from("foto_personen").select("id, foto_id, personen_id, nummer, position_x, position_y, position_format").in("foto_id", fotos.map(f => f.id)).order("nummer", { ascending: true })
+      : Promise.resolve({ data: [] })
+  ]);
+  const markierungenJeFoto = new Map();
+  for (const m of markierungsAntwort?.data || []) { const k = String(m.foto_id); if (!markierungenJeFoto.has(k)) markierungenJeFoto.set(k, []); markierungenJeFoto.get(k).push(m); }
   for (const foto of fotos) {
     const fotoUrl = foto.dateipfad ? (fotoUrls.get(foto.dateipfad) || "") : "";
-    const { data: markierungen } = await sb.from("foto_personen")
-      .select("id, personen_id, nummer, position_x, position_y, position_format")
-      .eq("foto_id", foto.id)
-      .order("nummer", { ascending: true });
+    const markierungen = markierungenJeFoto.get(String(foto.id)) || [];
     // Nur ausdrücklich als Gruppenfoto gespeicherte Datensätze als Gruppenfoto
     // darstellen. Eine vorhandene Personen-Verknüpfung allein darf normale Fotos
     // nicht in die Gruppenfoto-Ansicht umleiten.
@@ -2988,33 +3030,36 @@ async function loadDetailFamilie(personId) {
     }
   }
 
-  const [{ data: childLinks, error: childError }, partnerAResult, partnerBResult] = await Promise.all([
+  // v460: Familie in drei gleichzeitigen Runden statt rund zehn Abfragen nacheinander laden
+  //   1) Elternverknüpfungen + eigene Ehen   2) Elternfamilien + Kinderverknüpfungen + Trauungsbuch-Quellen
+  //   3) alle beteiligten Personen (Eltern, Partner, Kinder) in einer Abfrage
+  const [{ data: childLinks, error: childError }, partnerResult] = await Promise.all([
     sb.from("familien_kinder").select("id, familie_id, beziehungstyp").eq("kind_id", personId),
-    sb.from("familien").select("*").eq("partner_a_id", personId),
-    sb.from("familien").select("*").eq("partner_b_id", personId),
+    sb.from("familien").select("*").or(`partner_a_id.eq.${personId},partner_b_id.eq.${personId}`),
   ]);
   if (childError) debugLog(`❌ Eltern laden: ${childError.message}`);
-  if (partnerAResult.error) debugLog(`❌ Familien laden (A): ${partnerAResult.error.message}`);
-  if (partnerBResult.error) debugLog(`❌ Familien laden (B): ${partnerBResult.error.message}`);
-  const partnerFamilies = [
-    ...(partnerAResult.data || []),
-    ...(partnerBResult.data || []),
-  ].filter((f, index, arr) => arr.findIndex((x) => x.id === f.id) === index);
+  if (partnerResult.error) debugLog(`❌ Familien laden: ${partnerResult.error.message}`);
+  const partnerFamilies = (partnerResult.data || [])
+    .filter((f, index, arr) => arr.findIndex((x) => x.id === f.id) === index);
 
   const parentFamilyIds = (childLinks || []).map((x) => x.familie_id);
+  const vorabFamilienIds = partnerFamilies.map((f) => f.id).filter(Boolean);
+  const [parentResult, kinderLinksResult, quellenResult] = await Promise.all([
+    parentFamilyIds.length ? sb.from("familien").select("*").in("id", parentFamilyIds) : Promise.resolve({ data: [] }),
+    vorabFamilienIds.length ? sb.from("familien_kinder").select("id, familie_id, kind_id, beziehungstyp").in("familie_id", vorabFamilienIds) : Promise.resolve({ data: [] }),
+    vorabFamilienIds.length ? sb.from("familien_trauungsbuch_quellen").select("*").in("familie_id", vorabFamilienIds) : Promise.resolve({ data: [] }),
+  ]);
   let parentFamilies = [];
-  if (parentFamilyIds.length) {
-    const { data, error } = await sb.from("familien")
-      .select("*")
-      .in("id", parentFamilyIds);
-    if (error) {
-      debugLog(`❌ Elternfamilien laden: ${error.message}`);
-    } else {
-      // Jede Familienverknüpfung eines Kindes definiert seine Elternfamilie.
-      // Der Familientyp kann "Partnerschaft", "Ehe" oder "Eltern" sein.
-      parentFamilies = data || [];
-    }
+  if (parentResult.error) {
+    debugLog(`❌ Elternfamilien laden: ${parentResult.error.message}`);
+  } else {
+    // Jede Familienverknüpfung eines Kindes definiert seine Elternfamilie.
+    // Der Familientyp kann "Partnerschaft", "Ehe" oder "Eltern" sein.
+    parentFamilies = parentResult.data || [];
   }
+  // Vorab geladene Kinderverknüpfungen und Trauungsbuch-Quellen (null = Abfrage fehlgeschlagen → später einzeln)
+  const vorabKinderLinks = kinderLinksResult.error ? null : (kinderLinksResult.data || []);
+  const vorabQuellen = quellenResult.error ? null : new Map((quellenResult.data || []).map((q) => [q.familie_id, q]));
 
   const detailPersonIds = new Set([personId]);
   for (const f of partnerFamilies) {
@@ -3023,16 +3068,19 @@ async function loadDetailFamilie(personId) {
   for (const f of parentFamilies) {
     for (const id of [f.partner_a_id, f.partner_b_id]) if (id) detailPersonIds.add(id);
   }
+  const vorabKindIds = [...new Set((vorabKinderLinks || []).map((x) => x.kind_id).filter(Boolean))];
   const detailPersonMap = new Map(personenCache.map((p) => [p.id, p]));
-  if (detailPersonIds.size) {
+  const vorabPersonen = new Map();   // vollständige Datensätze (Kinder, Trauungsquellen der Partner)
+  {
+    const alleIds = [...new Set([...detailPersonIds, ...vorabKindIds])];
     const { data: detailPersons, error: detailPersonsError } = await sb
       .from("personen")
-      .select("id, vorname, nachname, Ledigenname, geschlecht, geburtsdatum, geburtsjahr, sterbedatum, sterbejahr")
-      .in("id", Array.from(detailPersonIds));   // v406: geschlecht nötig für Vater/Mutter
+      .select("*")
+      .in("id", alleIds);   // v406: geschlecht nötig für Vater/Mutter
     if (detailPersonsError) {
       debugLog(`❌ Personendaten für Familienanzeige: ${detailPersonsError.message}`);
     } else {
-      for (const p of detailPersons || []) detailPersonMap.set(p.id, p);
+      for (const p of detailPersons || []) { detailPersonMap.set(p.id, p); vorabPersonen.set(p.id, p); }
     }
   }
   const detailPerson = (id) => detailPersonMap.get(id) || personenCache.find((p) => p.id === id) || null;
@@ -3080,6 +3128,10 @@ async function loadDetailFamilie(personId) {
 
   parentSelectVater.value = vaterId || "";
   parentSelectMutter.value = mutterId || "";
+  // v460: geladener Stand der Eltern – „Speichern“ schreibt die Eltern nur bei einer Änderung neu
+  parentSelectVater.dataset.geladen = vaterId || "";
+  parentSelectMutter.dataset.geladen = mutterId || "";
+  parentSelectVater.dataset.mehrfach = parentFamilies.length > 1 ? "1" : "";
   const aktualisiereElternLink = (select, button) => {
     const gewaehlt = select.value;   // v445: nur einmal lesen (vorher je Person ein Lesezugriff auf die 2500er-Liste)
     const person = gewaehlt ? personenCache.find(p => p.id === gewaehlt) : null;
@@ -3250,18 +3302,26 @@ async function loadDetailFamilie(personId) {
     const sourceRowInput = div.querySelector(".familie-source-row");
     let eheQuelle = null;
     try {
-      const { data: eheQuelleData, error: eheQuelleError } = await sb
-        .from("familien_trauungsbuch_quellen")
-        .select("*")
-        .eq("familie_id", f.id)
-        .maybeSingle();
-      if (eheQuelleError) throw eheQuelleError;
-      eheQuelle = eheQuelleData || null;
-      if (!eheQuelle) {
-        const { data: quellenPersonen, error: quellenError } = await sb.from("personen")
+      if (vorabQuellen) {
+        eheQuelle = vorabQuellen.get(f.id) || null;   // v460: schon vorab geladen
+      } else {
+        const { data: eheQuelleData, error: eheQuelleError } = await sb
+          .from("familien_trauungsbuch_quellen")
           .select("*")
-          .in("id", [personId, otherId]);
-        if (quellenError) throw quellenError;
+          .eq("familie_id", f.id)
+          .maybeSingle();
+        if (eheQuelleError) throw eheQuelleError;
+        eheQuelle = eheQuelleData || null;
+      }
+      if (!eheQuelle) {
+        let quellenPersonen = [personId, otherId].map((id) => vorabPersonen.get(id)).filter(Boolean);
+        if (quellenPersonen.length < [personId, otherId].filter(Boolean).length) {
+          const { data: qp, error: quellenError } = await sb.from("personen")
+            .select("*")
+            .in("id", [personId, otherId]);
+          if (quellenError) throw quellenError;
+          quellenPersonen = qp || [];
+        }
         const legacyQuelle = await eindeutigeAlteTrauungsQuelle(quellenPersonen || []);
         if (legacyQuelle) eheQuelle = {
           alt: true,
@@ -3464,7 +3524,9 @@ async function loadDetailFamilie(personId) {
   // Kinderverknüpfungen werden danach über genau diese Familien gelesen.
   const partnerFamilyIds = (partnerFamilies || []).map((f) => f.id).filter(Boolean);
   let childLinksForPerson = [];
-  if (partnerFamilyIds.length) {
+  if (vorabKinderLinks) {
+    childLinksForPerson = vorabKinderLinks.filter((x) => partnerFamilyIds.includes(x.familie_id));   // v460: vorab geladen
+  } else if (partnerFamilyIds.length) {
     const { data, error } = await sb.from("familien_kinder")
       .select("id, familie_id, kind_id, beziehungstyp")
       .in("familie_id", partnerFamilyIds);
@@ -3479,7 +3541,9 @@ async function loadDetailFamilie(personId) {
   // wird der bereits geladene vollständige Personen-Cache verwendet.
   const childIds = [...new Set(childLinksForPerson.map((x) => x.kind_id).filter(Boolean))];
   let childPersons = [];
-  if (childIds.length) {
+  if (childIds.length && childIds.every((id) => vorabPersonen.has(id))) {
+    childPersons = childIds.map((id) => vorabPersonen.get(id));   // v460: vorab geladen
+  } else if (childIds.length) {
     const { data, error } = await sb.from("personen").select("*").in("id", childIds);
     if (error) {
       debugLog(`❌ Kinderdaten direkt laden: ${error.message}`);
