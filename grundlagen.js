@@ -1,5 +1,5 @@
 // Familienspuren – Grundlagen: Supabase-Verbindung, Debug-Protokoll, Bild-Zwischenspeicher, Rollen, Anmeldung
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 464
 
 
 // ==========================================================
@@ -88,6 +88,147 @@ async function mitMonatSpalten(datensatz, bau) {
   }
   return r;
 }
+
+// ======================================================================
+// v462: Offline-Lesemodus (Stufe 1)
+// Ohne Internet startet die App mit dem zuletzt bestätigten Zugang (Rolle, Hinweise) und beantwortet Leseabfragen
+// auf personen / familien / familien_kinder / beziehung aus dem Bestands-Zwischenspeicher des Geräts. Andere Tabellen
+// liefern leere Listen, Schreibvorgänge werden mit „Offline“ abgelehnt. Bearbeiten, Import/Export, Verwaltung,
+// Gruppenfotos und Chronik sind ausgeblendet; die Ersteingabe nutzt wie bisher die Warteschlange.
+// ======================================================================
+let offlineModus = false;
+const OFFLINE_FEHLER = { code: "OFFLINE", message: "Offline – das geht nur mit Internetverbindung." };
+const istNetzFehler = (err) => !navigator.onLine || /load failed|failed to fetch|networkerror|network request failed|fetch|AuthRetryableFetchError|timeout|zeitüberschreitung/i.test(`${err?.name || ""} ${err?.message || err || ""}`);
+function offlineQuelle(tabelle) {
+  if (tabelle === "personen") return personenCache;
+  if (tabelle === "familien") return familienAuswahlCache;
+  if (tabelle === "familien_kinder") return familienKinderAuswahlCache;
+  if (tabelle === "beziehung") return beziehungenAuswahlCache;
+  return [];
+}
+function offlineAbfrage(tabelle) {
+  const filter = [], ordnung = [];
+  let einzel = null, schreiben = false, von = null, bis = null, grenze = null;
+  const q = {
+    select() { return q; },
+    eq(k, v) { filter.push((r) => String(r?.[k]) === String(v)); return q; },
+    neq(k, v) { filter.push((r) => String(r?.[k]) !== String(v)); return q; },
+    is(k, v) { filter.push((r) => (r?.[k] ?? null) === v); return q; },
+    in(k, werte) { const m = new Set((werte || []).map(String)); filter.push((r) => m.has(String(r?.[k]))); return q; },
+    or(ausdruck) {
+      const teile = String(ausdruck).split(",").map((t) => t.match(/^([\w]+)\.eq\.(.*)$/)).filter(Boolean).map((m) => [m[1], m[2]]);
+      if (teile.length) filter.push((r) => teile.some(([k, v]) => String(r?.[k]) === v));
+      return q;
+    },
+    not() { return q; }, gt() { return q; }, gte() { return q; }, lt() { return q; }, lte() { return q; }, ilike() { return q; }, like() { return q; }, filter() { return q; }, match() { return q; }, contains() { return q; },
+    order(k, opt) { ordnung.push([k, opt?.ascending !== false]); return q; },
+    range(a, b) { von = a; bis = b; return q; },
+    limit(n) { grenze = n; return q; },
+    single() { einzel = "single"; return q; },
+    maybeSingle() { einzel = "maybe"; return q; },
+    insert() { schreiben = true; return q; }, update() { schreiben = true; return q; }, upsert() { schreiben = true; return q; }, delete() { schreiben = true; return q; },
+    then(ok, fe) { return Promise.resolve().then(ergebnis).then(ok, fe); }
+  };
+  function ergebnis() {
+    if (schreiben) return { data: null, error: OFFLINE_FEHLER };
+    let zeilen = offlineQuelle(tabelle).filter((r) => filter.every((f) => f(r)));
+    for (const [k, auf] of [...ordnung].reverse()) zeilen = [...zeilen].sort((a, b) => (String(a?.[k] ?? "") < String(b?.[k] ?? "") ? -1 : String(a?.[k] ?? "") > String(b?.[k] ?? "") ? 1 : 0) * (auf ? 1 : -1));
+    if (von !== null) zeilen = zeilen.slice(von, bis + 1);
+    if (grenze !== null) zeilen = zeilen.slice(0, grenze);
+    zeilen = zeilen.map((r) => ({ ...r }));
+    // Wichtig: nie „PGRST116“ melden – das würde eine Person als gelöscht behandeln
+    if (einzel === "single") return zeilen.length === 1 ? { data: zeilen[0], error: null } : { data: null, error: OFFLINE_FEHLER };
+    if (einzel === "maybe") return { data: zeilen[0] || null, error: null };
+    return { data: zeilen, error: null, count: zeilen.length };
+  }
+  return q;
+}
+function offlineSchichtEinbauen(client) {
+  if (!client || client.__offlineSchicht) return;
+  client.__offlineSchicht = true;
+  const from0 = client.from.bind(client);
+  client.from = (tabelle) => (offlineModus ? offlineAbfrage(tabelle) : from0(tabelle));
+  if (typeof client.rpc === "function") {
+    const rpc0 = client.rpc.bind(client);
+    client.rpc = (...a) => (offlineModus ? Promise.resolve({ data: null, error: OFFLINE_FEHLER }) : rpc0(...a));
+  }
+}
+// Zuletzt online bestätigter Zugang (nur Rolle und Name – keine Zugangsdaten)
+const ZUGANG_MERK_KEY = "fs-zugang-zuletzt";
+function zugangMerken(uid) {
+  try { localStorage.setItem(ZUGANG_MERK_KEY, JSON.stringify({ uid, rolle: zugang.echteRolle || zugang.rolle, name: zugang.name || "", kompatibel: !!zugang.kompatibel, hinweis: window.HINWEIS?.version || "", zeit: Date.now() })); } catch {}
+}
+function gespeicherteSitzungUid() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (/^sb-.*-auth-token$/.test(k || "")) { const v = JSON.parse(localStorage.getItem(k) || "null"); const uid = v?.user?.id || v?.currentSession?.user?.id; if (uid) return uid; }
+    }
+  } catch {}
+  return null;
+}
+function offlineModusSetzen(an) {
+  offlineModus = !!an;
+  document.body.classList.toggle("offline-modus", offlineModus);
+  let leiste = document.getElementById("offline-leiste");
+  if (offlineModus) {
+    if (!leiste) {
+      leiste = document.createElement("div");
+      leiste.id = "offline-leiste";
+      leiste.className = "offline-leiste";
+      leiste.setAttribute("role", "status");
+      document.body.prepend(leiste);
+    }
+    leiste.innerHTML = `<span>📴 <strong>Offline – nur lesen.</strong> Bestand, Personen und Stammbaum aus dem Speicher dieses Geräts; Ändern geht erst wieder mit Internet.</span><button type="button" class="btn btn--ghost" id="offline-neu-verbinden">Neu verbinden</button>`;
+    leiste.querySelector("#offline-neu-verbinden").addEventListener("click", () => location.reload());
+    // Reiter, die offline nicht funktionieren, verlassen
+    const aktiv = document.querySelector(".tab-btn.is-active")?.dataset.tab;
+    if (["chronik", "fotos", "export", "verlauf"].includes(aktiv)) document.querySelector('.tab-btn[data-tab="liste"]')?.click();
+  } else {
+    leiste?.remove();
+  }
+}
+function offlineHinweis(text) {
+  const leiste = document.getElementById("offline-leiste");
+  if (!leiste) { alert(text); return; }
+  leiste.classList.remove("offline-leiste--blitz"); void leiste.offsetWidth; leiste.classList.add("offline-leiste--blitz");
+  let z = leiste.querySelector(".offline-meldung");
+  if (!z) { z = document.createElement("span"); z.className = "offline-meldung"; leiste.querySelector("span")?.after(z); }
+  z.textContent = `⚠️ ${text}`;
+  leiste.scrollIntoView?.({ block: "nearest" });
+}
+// Start ohne Netz: nur mit einem früher online bestätigten Zugang desselben Kontos und gültigen Hinweisen
+async function offlineStartVersuchen(err, session = null) {
+  if (!istNetzFehler(err)) return false;
+  let gemerkt = null;
+  try { gemerkt = JSON.parse(localStorage.getItem(ZUGANG_MERK_KEY) || "null"); } catch {}
+  const uid = session?.user?.id || gespeicherteSitzungUid();
+  if (!gemerkt || !uid || gemerkt.uid !== uid) return false;
+  if (window.HINWEIS?.version && gemerkt.hinweis !== window.HINWEIS.version) return false;
+  zugang = { rolle: gemerkt.rolle || "leser", name: gemerkt.name || "", kompatibel: !!gemerkt.kompatibel };
+  setzeRollenAnzeige();
+  zugangGeprueftFuer = uid;
+  offlineModusSetzen(true);
+  document.getElementById("login-screen").hidden = true;
+  document.getElementById("app-shell").hidden = false;
+  debugLog("📴 Ohne Internet gestartet – Offline-Lesemodus.");
+  if (typeof geheZuBestand === "function") geheZuBestand();
+  return true;
+}
+// Mitten in der Nutzung offline gegangen: in den Lesemodus wechseln
+window.addEventListener("offline", () => {
+  if (!offlineModus && zugangGeprueftFuer && !document.getElementById("app-shell")?.hidden) offlineModusSetzen(true);
+});
+// Wieder online: kurz Bescheid geben (neu verbinden lädt die App frisch)
+window.addEventListener("online", () => {
+  const leiste = document.getElementById("offline-leiste");
+  if (offlineModus && leiste && !leiste.querySelector(".offline-wieder")) {
+    const hinweis = document.createElement("span");
+    hinweis.className = "offline-wieder";
+    hinweis.textContent = " Internet ist wieder da – bitte „Neu verbinden“.";
+    leiste.querySelector("span")?.appendChild(hinweis);
+  }
+});
 
 // ======================================================================
 // v460: Datenstand – zählt jede Änderung an genealogischen Daten (eigene Schreibvorgänge und
@@ -772,6 +913,7 @@ try {
     throw new Error("Supabase-Anon-Key fehlt in config.js.");
   }
   sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  offlineSchichtEinbauen(sb);   // v462: ohne Netz Leseabfragen aus dem Zwischenspeicher
   datenStandUeberwachen(sb);
   debugLog("Supabase-Client initialisiert.");
 } catch (err) {
@@ -1001,11 +1143,13 @@ async function pruefeZugangUndHinweise(session) {
         zugang = { rolle: "eigentuemer", name: "", kompatibel: true };
         setzeRollenAnzeige();
         zugangGeprueftFuer = uid;
+        zugangMerken(uid);   // v462
         return true;
       }
       throw error;
     }
     if (!data || data.aktiv === false) {
+      try { localStorage.removeItem(ZUGANG_MERK_KEY); } catch {}   // v462: offline nicht mehr zulassen
       zugang = { rolle: "leser", name: "", kompatibel: false };
       setzeRollenAnzeige();
       await zugangOverlayZeigen("kein-zugriff");
@@ -1023,6 +1167,7 @@ async function pruefeZugangUndHinweise(session) {
       }
     }
     zugangGeprueftFuer = uid;
+    zugangMerken(uid);   // v462: für den Start ohne Internet
     debugLog(`⏱ Zugang und Hinweise geprüft in ${Math.round(performance.now() - pruefStart)} ms.`);
     return true;
   } finally {
@@ -1277,6 +1422,7 @@ document.addEventListener("visibilitychange", () => {
 // ---------- Anmeldung ----------
 async function ensureSession() {
   if (!sb) throw new Error("Supabase ist nicht verfügbar. Bitte config.js prüfen.");
+  if (offlineModus) return { user: { id: zugangGeprueftFuer }, offline: true };   // v462: Lesen aus dem Speicher braucht keine Sitzung
   const { data: { session }, error: getSessionError } = await sb.auth.getSession();
   if (getSessionError) throw getSessionError;
   if (!session) throw new Error("Nicht angemeldet.");
@@ -1295,9 +1441,11 @@ async function zeigeAppWennAngemeldet() {
   const appShell = document.getElementById("app-shell");
   const loginMessage = document.getElementById("login-message");
   if (!loginScreen || !appShell) return;
+  let sitzung = null;   // v462: für den Offline-Start
   try {
     const { data: { session }, error } = await sb.auth.getSession();
     if (error) throw error;
+    sitzung = session;
     if (session) {
       const warSchonAngemeldet = zugangGeprueftFuer === session.user.id;
       const frei = await pruefeZugangUndHinweise(session);
@@ -1322,9 +1470,11 @@ async function zeigeAppWennAngemeldet() {
       appShell.hidden = true;
     }
   } catch (err) {
+    // v462: ohne Internet mit dem zuletzt bestätigten Zugang im Lesemodus starten
+    try { if (await offlineStartVersuchen(err, sitzung)) return; } catch (_) {}
     loginScreen.hidden = false;
     appShell.hidden = true;
-    if (loginMessage) loginMessage.textContent = err.message;
+    if (loginMessage) loginMessage.textContent = istNetzFehler(err) ? "Keine Internetverbindung. Ohne Internet startet die App erst, nachdem du dich auf diesem Gerät einmal online angemeldet hast." : err.message;
   }
 }
 
@@ -1357,6 +1507,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   if (logoutBtn) {
     logoutBtn.addEventListener("click", async () => {
+      try { localStorage.removeItem(ZUGANG_MERK_KEY); } catch {}   // v462: nach dem Abmelden kein Offline-Start
+      if (offlineModus) { offlineModusSetzen(false); }
       await sb.auth.signOut();
       await zeigeAppWennAngemeldet();
     });
@@ -1369,6 +1521,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         // Zugang und Hinweise werden in zeigeAppWennAngemeldet() geprüft (einmal je Anmeldung).
         if (zugangGeprueftFuer !== session.user.id && !zugangPruefLaeuft) void zeigeAppWennAngemeldet();
       } else {
+        if (offlineModus) return;   // v462: im Offline-Lesemodus bleibt die App offen (Sitzung lässt sich nur nicht erneuern)
         zugangZuruecksetzen();
         loginScreen.hidden = false;
         appShell.hidden = true;

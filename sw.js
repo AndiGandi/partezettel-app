@@ -1,10 +1,18 @@
-const CACHE_NAME = "partezettel-shell-v461";
+const CACHE_NAME = "partezettel-shell-v464";
 const LIB_CACHE = "partezettel-libs-v1";   // Bibliotheken (three.js) bleiben über App-Versionen hinweg erhalten
 const THREE_PREFIX = "https://cdn.jsdelivr.net/npm/three@0.160.0/";
+// v462: Supabase und jsPDF für den Start ohne Internet – online immer frisch vom Netz, offline aus dem Zwischenspeicher
+const START_LIBS = ["https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js", "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"];
 const SHELL_FILES = ["./index.html", "./style.css", "./grundlagen.js", "./erfassung.js", "./bestand.js", "./person.js", "./export.js", "./stammbaum.js", "./import.js", "./komfort.js", "./tree3d.js", "./chronik.js", "./pruefung.js", "./partezettel_ki.js", "./hinweise.js", "./config.js", "./manifest.json"];
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES)));
+  event.waitUntil(Promise.all([
+    caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL_FILES)),
+    // Bibliotheken vorab holen; scheitert das (z. B. offline), bleibt die Installation trotzdem gültig
+    caches.open(LIB_CACHE).then(cache => Promise.all(START_LIBS.map(url =>
+      fetch(new Request(url, { mode: "no-cors" })).then(antwort => cache.put(url, antwort)).catch(() => {})
+    )))
+  ]));
   self.skipWaiting();
 });
 
@@ -29,6 +37,20 @@ self.addEventListener("fetch", event => {
         if (antwort.ok) cache.put(event.request, antwort.clone());
         return antwort;
       })
+    );
+    return;
+  }
+
+  // v462: Start-Bibliotheken – zuerst das Netz, ohne Netz der Zwischenspeicher
+  if (START_LIBS.includes(event.request.url)) {
+    event.respondWith(
+      fetch(event.request)
+        .then(antwort => {
+          const kopie = antwort.clone();
+          caches.open(LIB_CACHE).then(cache => cache.put(event.request.url, kopie));
+          return antwort;
+        })
+        .catch(() => caches.open(LIB_CACHE).then(cache => cache.match(event.request.url)).then(t => t || Response.error()))
     );
     return;
   }

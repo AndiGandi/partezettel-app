@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 464
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -436,12 +436,15 @@ async function verwandtschaftImStammbaum(aId, bId) {
   document.body.classList.remove("person-view-open");
   document.querySelector('.tab-btn[data-tab="stammbaum"]')?.click();
   await loadStammbaum();
-  // v432: Person setzen, ohne dass der Stammbaum die Seite zu sich scrollt (sonst landet man im Familienstammbaum)
-  if (treeSelect && treePerson(aId)) { treeSelect.value = aId; treePresetZuruecksetzen(); renderStammbaum(aId); treeLinieMittigZeigen(aId, { seite: false }); }
+  // v432: Person setzen, ohne dass der Stammbaum die Seite zu sich scrollt
+  // v463: unten steht die Familie der angetippten Person (nicht mehr die eigene) – der Weg zwischen beiden steht im Gebirge
+  const unten = treePerson(bId) ? bId : aId;
+  if (treeSelect && treePerson(unten)) { treeSelect.value = unten; treePresetZuruecksetzen(); renderStammbaum(unten); treeLinieMittigZeigen(unten, { seite: false }); }
   document.getElementById("tree-relationship-open")?.click();
   treeRelationSetPerson("a", aId);
   treeRelationSetPerson("b", bId);
   document.getElementById("tree-relationship-calc")?.click();
+  setTimeout(() => treeFamilieUnten(unten, { scrollen: false }), 60);
   // nach dem Neuzeichnen des Stammbaums zum Fenster mit Ergebnis und Gebirge scrollen
   // v433: direkt zum Ergebnis mit „So ergibt sich die Beziehung“ und dem Gebirge
   const zumFenster = () => {
@@ -475,9 +478,12 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 461;   // bei jeder Version mit hochzählen
+const APP_VERSION = 464;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [464, ["Tagesblatt nach dem Bauernkalender: Namenstage, Feiertage und der Sonntag im Kirchenjahr (z. B. „2. Adventsonntag“)", "Mond mit Uhrzeit: Neumond, Viertel, Vollmond, über sich / unter sich, Knoten, Erdnähe/Erdferne und Eintritt der Sonne in ein Zeichen", "Ab Jänner 2027 steht im Tagesblatt auch das Monatswetter nach dem Hundertjährigen Kalender"]],
+  [463, ["„Wie sind wir verwandt?“: Unter dem Gebirge steht jetzt die Familie der angetippten Person (früher deine eigene)", "Tippe im Gebirge auf eine Person – unten erscheint deren Familie mit Eltern, Geschwistern, Ehe und Kindern"]],
+  [462, ["Ohne Internet: Die App startet jetzt im Lesemodus – Bestand, Personen, Stammbaum und „Wie sind wir verwandt?“ funktionieren aus dem Speicher des Geräts", "Voraussetzung: auf dem Gerät einmal mit Internet angemeldet; ändern geht erst wieder mit Verbindung (gelbe Leiste oben, „Neu verbinden“)", "Neue Personen in der Ersteingabe werden offline gemerkt und später übertragen"]],
   [461, ["Stammbaum zeigt jetzt auch Kinder und Ehepartner ohne Datenblatt – als gestrichelte graue Kästchen (Familie, Generationen, Nachkommen)", "Mit dem Knopf 👤 im Stammbaum lassen sie sich ein- und ausblenden", "Antippen zeigt, bei wem der Name eingetragen ist – mit „Datenblatt anlegen“ wird daraus eine eigene Person, verbunden mit den Eltern bzw. dem Ehepartner"]],
   [460, ["Spürbar schneller: Reiterwechsel, Sortieren, Bearbeiten, Speichern und das Öffnen einer Person", "Stammbaum und Chronik werden nur noch neu geladen, wenn sich wirklich etwas geändert hat", "Weniger Datenverkehr: beim Öffnen einer Person wird nicht mehr die ganze Familienliste übertragen", "Die Chronik zeigt Änderungen jetzt sofort (früher erst nach „neu berechnen“)"]],
   [459, ["Geburt und Tod gehen jetzt auch mit Monat und Jahr ohne Tag (z. B. „Oktober 1918“) – unbekannten Tag oder Monat einfach leer lassen", "Das eigene Feld „nur Jahr bekannt“ ist weggefallen: nur das Jahr wählen genügt", "Kinder mit nur Geburtsjahr stehen jetzt in der richtigen zeitlichen Reihenfolge", "Ehejahre werden auch bei Hochzeiten mit nur Jahr angezeigt (ungefähr)", "Partezettel-Paket: fehlende Ehepartner werden wie Kinder als Namen ohne Datenblatt vorgeschlagen"]],

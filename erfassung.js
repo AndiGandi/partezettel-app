@@ -1,5 +1,5 @@
 // Familienspuren – Reiter, Ersteingabe (Foto, Sprachaufnahme, Datum, Verwandtschaft), Senden, Offline-Warteschlange
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 464
 
 // ---------- Tabs ----------
 document.querySelectorAll(".tab-btn").forEach((btn) => {
@@ -794,7 +794,7 @@ form.addEventListener("submit", async (e) => {
     if (eintrag.erstverwandtschaftTyp === "halb" && !eintrag.erstverwandtschaftElternteil) { formMessage.textContent = "Bitte den gemeinsamen Elternteil auswählen."; return; }
   }
 
-  if (navigator.onLine) {
+  if (navigator.onLine && !offlineModus) {   // v462: im Offline-Lesemodus direkt in die Warteschlange
     const result = await sendEintrag(eintrag, (msg) => { formMessage.textContent = msg; });
     if (result.ok) {
       formMessage.textContent = "Gespeichert ✓";
@@ -1168,7 +1168,7 @@ async function flushQueue() {
 // Eine Sperre verhindert parallele Läufe (der Grund für die damalige Abschaltung).
 let queueLaeuft = false;
 async function flushQueueSicher() {
-  if (queueLaeuft || !navigator.onLine) return;
+  if (queueLaeuft || !navigator.onLine || offlineModus) return;
   queueLaeuft = true;
   try { await flushQueue(); } catch (e) { debugLog(`⚠️ Warteschlange senden: ${e.message || e}`); }
   finally { queueLaeuft = false; }

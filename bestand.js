@@ -1,5 +1,5 @@
 // Familienspuren – Partnerschaften, Personen-Zwischenspeicher, Abgleich, Bestandsliste und Suche
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 464
 
 // ---------- Partnerschaftslogik ----------
 function datumAnzeige(datum) {
@@ -145,6 +145,7 @@ async function lesePersonenAusPersistentemCache() {
 // zusammengefasst (der jeweils neueste Stand gewinnt); der Ablauf (Öffnen, Speichern) wartet nicht darauf.
 let cacheSpeichernTimer = null, cacheSpeichernBundle = null, cacheSpeichernLauf = Promise.resolve();
 function speicherePersonenImHintergrund(bundle) {
+  if (offlineModus) return;   // v462: offline nie den Gerätespeicher überschreiben
   cacheSpeichernBundle = bundle;
   clearTimeout(cacheSpeichernTimer);
   cacheSpeichernTimer = setTimeout(() => {
@@ -157,6 +158,7 @@ window.addEventListener("pagehide", () => {   // beim Verlassen der App einen of
   if (cacheSpeichernBundle) { clearTimeout(cacheSpeichernTimer); const b = cacheSpeichernBundle; cacheSpeichernBundle = null; void speicherePersonenImPersistentenCache(b); }
 });
 async function speicherePersonenImPersistentenCache(bundle) {
+  if (offlineModus) return;   // v462
   const gespeichertAm = new Date().toISOString();
   const cacheBundle = {
     id: "aktuell",
@@ -527,7 +529,7 @@ let kbUebersichtLauf = null;
 let bestandAbgleichStand = 0;
 let kbUebersichtStand = 0;   // v460: Datenstand, zu dem die Übersicht geladen wurde
 async function kbUebersichtLaden(force = false) {
-  if (!rolleIstEigentuemer()) return;
+  if (!rolleIstEigentuemer() || offlineModus) return;   // v462: offline fehlen die Kirchenbuch-Spalten
   if (!force && kbUebersichtStand === datenStand && kbUebersicht.size) return;
   if (kbUebersichtLauf) return kbUebersichtLauf;
   const standBeimLaden = datenStand;

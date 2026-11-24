@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 464
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -574,7 +574,7 @@ function treeOhneHinweis(e) {
     const a = treePerson(f.partner_a_id), b = treePerson(f.partner_b_id);
     return [a, b].filter(Boolean).map((p) => treeKompaktLabel(p)).join(" & ") || "Familie";
   };
-  const darf = typeof rolleDarfSchreiben === "function" ? rolleDarfSchreiben() : true;
+  const darf = (typeof rolleDarfSchreiben === "function" ? rolleDarfSchreiben() : true) && !offlineModus;   // v462: offline nur lesen
   const jahr = e.art === "kind" ? e.geburt : e.heirat;
   const familienWahl = e.art === "kind" && !e.familieId && fams.length > 1
     ? `<label class="tree-ohne-wahl">Eltern bzw. Ehe:<select id="tree-ohne-familie">${fams.map((f) => `<option value="${escTree(f.id)}">${escTree(famText(f))}</option>`).join("")}<option value="">nur ${escTree(treeKompaktLabel(bei))} (anderer Elternteil unbekannt)</option></select></label>`
@@ -852,6 +852,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function renderStammbaum(rootId) {
   if (!treeFilterAktiv) treeVerlaufMerken(rootId);
+  { const zeile = document.getElementById("tree-familie-von"); if (zeile && zeile.dataset.id !== rootId) zeile.hidden = true; }   // v463
   // v417: Suchfeld zeigt immer die aktuell dargestellte Person (vorher blieb dort der Name der vorigen Person stehen)
   if (!treeFilterAktiv && rootId) {
     const such = document.getElementById("tree-person-search");
@@ -1576,9 +1577,25 @@ function mtnZoomSetzen(rahmen, zoom, { merken = true } = {}) {
   const w = rahmen?.querySelector(".tree-mtn-zoomwert"); if (w) w.textContent = `${Math.round(zoom * 100)} %`;
   return zoom;
 }
+// v463: Antippen einer Person im Gebirge zeigt unten im Stammbaum deren Familie (Eltern, Geschwister, Ehe, Kinder)
+function treeFamilieUnten(personId, { scrollen = true } = {}) {
+  if (!personId || !treePerson(personId)) return;
+  if (treeSelect) treeSelect.value = personId;
+  treePresetZuruecksetzen();
+  renderStammbaum(personId);
+  treeLinieMittigZeigen(personId, { seite: false });
+  const zeile = document.getElementById("tree-familie-von");
+  if (zeile) {
+    zeile.dataset.id = personId;
+    zeile.innerHTML = `👪 Unten: Familie von <strong>${escTree(treePersonLabel(personId))}</strong> <span class="tree-familie-von__tipp">– tippe im Gebirge auf eine andere Person, um deren Familie zu sehen</span>`;
+    zeile.hidden = false;
+  }
+  document.querySelectorAll(".tree-mtn-karte[data-rel-person]").forEach((k) => k.classList.toggle("is-unten", k.dataset.relPerson === personId));
+  if (scrollen) (zeile || document.getElementById("tree-viewport"))?.scrollIntoView({ block: "start", behavior: "smooth" });
+}
 document.addEventListener("click", (e) => {
   const k = e.target.closest?.("[data-rel-person]");
-  if (k) { e.preventDefault(); openPersonDetail(k.dataset.relPerson, { fromTree: true }); return; }
+  if (k) { e.preventDefault(); treeFamilieUnten(k.dataset.relPerson); return; }   // v463 (früher: Personenansicht)
   const z = e.target.closest?.("[data-mtn-zoom]");
   if (z) {
     const rahmen = z.closest(".tree-mtn-rahmen"), skala = rahmen?.querySelector(".tree-mtn-skala"), mtn = rahmen?.querySelector(".tree-mtn");
@@ -3068,7 +3085,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=461");
+      treeModul3D = await import("./tree3d.js?v=464");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 461
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 464
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN
@@ -938,6 +938,7 @@ if (weiterfuehrendeLinksAddButton) weiterfuehrendeLinksAddButton.addEventListene
 
 let detailGeladen = null;   // v460
 async function openPersonEdit(personId, options = {}) {
+  if (offlineModus) { offlineHinweis("Bearbeiten geht nur mit Internetverbindung."); return; }   // v462
   currentDetailPersonId = personId;
   detailOpenedFromTree = options.fromTree === true;
   detailReturnTreePersonId = detailOpenedFromTree ? personId : null;

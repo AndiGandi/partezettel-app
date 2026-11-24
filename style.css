@@ -2222,6 +2222,9 @@ body.tree-ohne-fotos #tab-stammbaum .tree-ped-node__photo{display:none}
 .tb-mond__art { color: #3d5a73; font-size: .92rem; }
 .tb-mond__zeiten, .tb-ort, .tb-klein, .tb-hinweis { font-size: .84rem; color: var(--color-text-muted, #6b6459); }
 .tb-namenstag, .tb-regel { margin: 8px 0; line-height: 1.5; }
+.tb-kirche, .tb-hundert { margin: 8px 0; line-height: 1.5; }   /* v464 */
+.tb-kirche--fest strong { color: var(--accent, #8a2b2b); }
+.tb-hundert { font-size: .95em; }
 .tb-titel { font: 600 1.05rem/1.3 Georgia, serif; color: var(--color-primary, #174f3b); margin: 14px 0 6px; }
 .heute-liste li.is-rund { font-weight: 600; }
 .heute-liste li.is-verwandt { background: #eef6f0; border-radius: 6px; padding: 0 4px; }
@@ -2411,3 +2414,18 @@ body.pzki-offen{overflow:hidden}
 .tree-ohne-tag{font-size:.78em;font-style:italic;color:#7a847f}
 .tree-ohne-wahl{display:flex;flex-direction:column;gap:.3rem;margin:.6rem 0;font-size:.9rem}
 .tree-ohne-wahl select{font-size:16px;padding:.45rem;border-radius:8px;border:1px solid #c9d3cd}
+
+/* v462: Offline-Lesemodus */
+.offline-leiste{position:sticky;top:0;z-index:2000;display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap;padding:.55rem .9rem;padding-top:max(.55rem, env(safe-area-inset-top));background:#fff4d6;border-bottom:1px solid #e6cf8c;color:#5a4710;font-size:.9rem}
+.offline-leiste .btn{min-height:36px;padding:.3rem .8rem;font-size:.85rem}
+body.offline-modus .tab-btn[data-tab="chronik"],body.offline-modus .tab-btn[data-tab="fotos"],body.offline-modus .tab-btn[data-tab="export"],body.offline-modus .tab-btn[data-tab="verlauf"],
+body.offline-modus #pv-edit,body.offline-modus [data-nur-online]{display:none !important}
+.offline-meldung{font-weight:600;flex-basis:100%;order:3}
+@keyframes offlineBlitz{0%{background:#ffd98a}100%{background:#fff4d6}}
+.offline-leiste--blitz{animation:offlineBlitz .9s ease-out}
+body.offline-modus .person-card__audio-toggle,body.offline-modus .person-card__audio-panel{display:none !important}
+
+/* v463: unter dem Gebirge – wessen Familie unten steht */
+.tree-familie-von{margin:.2rem 0 .5rem;padding:.55rem .8rem;border-radius:10px;background:#edf3eb;border:1px solid #cbdacb;color:#174f3b;font-size:.92rem;line-height:1.35}
+.tree-familie-von__tipp{color:#5f6b65;font-size:.82rem}
+.tree-mtn-karte.is-unten{box-shadow:0 0 0 3px #2f7a55;border-color:#2f7a55}
