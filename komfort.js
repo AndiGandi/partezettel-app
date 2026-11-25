@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 464
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 465
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -233,7 +233,7 @@ let komfortUserId = null;
 function einfuehrungGesehen() { if (komfortUserId) lsSet(KOMFORT.tour + komfortUserId, "1"); }
 
 // ---------- Heute vor … Jahren (einmal am Tag) ----------
-async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
+async function heuteVorJahrenZeigen({ auchLeer = true, scroll = 0 } = {}) {
   // v419: Tagesblatt – Mondkalender, Namenstag, Bauernregel, Jahrestage (runde hervorgehoben, Verwandte zuerst)
   if (typeof chronikDatenLaden !== "function" || typeof tagesblattAuswerten !== "function") return false;
   const d = await chronikDatenLaden(false);
@@ -247,9 +247,29 @@ async function heuteVorJahrenZeigen({ auchLeer = true } = {}) {
     <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-heute="ok">Schließen</button></div>`, { klasse: "komfort-fenster--heute" });
   f.querySelector("#heute-aus-cb").addEventListener("change", (e) => lsSet(KOMFORT.heuteAus, e.target.checked ? "1" : null));
   f.querySelector('[data-heute="ok"]').addEventListener("click", komfortFensterZu);
-  f.querySelectorAll(".chr-link").forEach((b) => b.addEventListener("click", () => komfortFensterZu()));
+  f.querySelectorAll(".chr-link").forEach((b) => b.addEventListener("click", () => {
+    // v465: Rücksprung merken – „Zurück“ bzw. Schließen der Person führt wieder ins Tagesblatt (an dieselbe Stelle)
+    tagesblattRueck = { warten: true, scroll: f.scrollTop };
+    komfortFensterZu();
+  }));
+  if (scroll) requestAnimationFrame(() => { f.scrollTop = scroll; });
   return true;
 }
+// v465: Rückkehr ins Tagesblatt nach dem Öffnen einer Person daraus
+let tagesblattRueck = null;
+function tagesblattWiederZeigen(scroll = 0) {
+  tagesblattRueck = null;
+  void heuteVorJahrenZeigen({ scroll }).catch(() => {});
+}
+function tagesblattNachPersonPruefen() {
+  setTimeout(() => {
+    if (!tagesblattRueck?.warten) return;
+    if (!document.getElementById("person-view-overlay")?.hidden || komfortFensterOffen()) return;
+    tagesblattWiederZeigen(tagesblattRueck.scroll);
+  }, 0);
+}
+document.getElementById("pv-close")?.addEventListener("click", tagesblattNachPersonPruefen);
+document.getElementById("person-view-overlay")?.addEventListener("click", (e) => { if (e.target.id === "person-view-overlay") tagesblattNachPersonPruefen(); });
 
 // ---------- Ablauf nach dem Start ----------
 async function komfortNachStart(session) {
@@ -304,7 +324,12 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest?.(".tab-btn");
   if (!b) return;
   const vorher = document.querySelector(".tab-btn.is-active")?.dataset.tab;
-  if (!tabWechselDurchZurueck && vorher && vorher !== b.dataset.tab) { tabVerlauf.push(vorher); if (tabVerlauf.length > 30) tabVerlauf.shift(); }
+  if (!tabWechselDurchZurueck && vorher && vorher !== b.dataset.tab) {
+    // v465: kam der Wechsel aus einer Person, die im Tagesblatt angetippt wurde, führt „Zurück“ wieder ins Tagesblatt
+    if (tagesblattRueck?.warten) { tabVerlauf.push({ tab: vorher, tagesblatt: tagesblattRueck.scroll || 0 }); tagesblattRueck = null; }
+    else tabVerlauf.push(vorher);
+    if (tabVerlauf.length > 30) tabVerlauf.shift();
+  }
 }, true);
 function appZurueck() {
   if (komfortFensterOffen()) { komfortFensterZu(); return; }
@@ -313,11 +338,14 @@ function appZurueck() {
   if (sichtbar("detail-overlay")) { document.getElementById("detail-close-btn")?.click(); return; }
   if (sichtbar("person-view-overlay")) { document.getElementById("pv-close")?.click(); return; }
   const aktiv = document.querySelector(".tab-btn.is-active")?.dataset.tab;
-  if (aktiv === "stammbaum" && treeVerlaufPos > 0) { treeZurueck(); return; }
-  const ziel = tabVerlauf.pop() || (aktiv !== "liste" ? "liste" : null);
-  if (!ziel) return;
+  const oben = tabVerlauf[tabVerlauf.length - 1];
+  if (aktiv === "stammbaum" && treeVerlaufPos > 0 && !(oben && typeof oben === "object" && oben.tagesblatt !== undefined)) { treeZurueck(); return; }   // v465: aus dem Tagesblatt direkt zurück
+  const eintrag = tabVerlauf.pop() || (aktiv !== "liste" ? "liste" : null);
+  if (!eintrag) return;
+  const ziel = typeof eintrag === "string" ? eintrag : eintrag.tab;
   tabWechselDurchZurueck = true;
   try { document.querySelector(`.tab-btn[data-tab="${ziel}"]`)?.click(); } finally { tabWechselDurchZurueck = false; }
+  if (typeof eintrag === "object" && eintrag.tagesblatt !== undefined) tagesblattWiederZeigen(eintrag.tagesblatt);
 }
 document.getElementById("app-zurueck")?.addEventListener("click", appZurueck);
 
@@ -478,9 +506,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 464;   // bei jeder Version mit hochzählen
+const APP_VERSION = 465;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [465, ["Tagesblatt: Wer daraus eine Person öffnet (auch weiter zu „Wie sind wir verwandt?“), kommt mit „Zurück“ wieder ins Tagesblatt – an dieselbe Stelle"]],
   [464, ["Tagesblatt nach dem Bauernkalender: Namenstage, Feiertage und der Sonntag im Kirchenjahr (z. B. „2. Adventsonntag“)", "Mond mit Uhrzeit: Neumond, Viertel, Vollmond, über sich / unter sich, Knoten, Erdnähe/Erdferne und Eintritt der Sonne in ein Zeichen", "Ab Jänner 2027 steht im Tagesblatt auch das Monatswetter nach dem Hundertjährigen Kalender"]],
   [463, ["„Wie sind wir verwandt?“: Unter dem Gebirge steht jetzt die Familie der angetippten Person (früher deine eigene)", "Tippe im Gebirge auf eine Person – unten erscheint deren Familie mit Eltern, Geschwistern, Ehe und Kindern"]],
   [462, ["Ohne Internet: Die App startet jetzt im Lesemodus – Bestand, Personen, Stammbaum und „Wie sind wir verwandt?“ funktionieren aus dem Speicher des Geräts", "Voraussetzung: auf dem Gerät einmal mit Internet angemeldet; ändern geht erst wieder mit Verbindung (gelbe Leiste oben, „Neu verbinden“)", "Neue Personen in der Ersteingabe werden offline gemerkt und später übertragen"]],
