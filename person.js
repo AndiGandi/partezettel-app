@@ -1,5 +1,5 @@
 // Familienspuren – Personenansicht und Bearbeiten: Felder, Fotos, Gruppenfoto, Sprachnotizen, Familie, Löschen
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 465
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 466
 
 // ==========================================================
 // PERSON-DETAIL / BEARBEITEN

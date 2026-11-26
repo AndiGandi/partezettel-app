@@ -1,5 +1,5 @@
 // Familienspuren – Hausblätter-Import (nur Eigentümer)
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 465
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 466
 
 // ===================== v362: Hausblätter-Import, Stufe 1 (nur Eigentümer) =====================
 // Lädt eine Import-Datei (format „familienspuren-import“), zeigt Abweichungen bei vorhandenen
@@ -249,6 +249,7 @@ const ImportAssistent = (() => {
     return `<div class="imp-karte">
       <ul class="imp-zahlen">
         <li>Neue Personen: ${zahl(plan.personen.length)} <span class="imp-klein">(davon ${plan.frauenUmbenannt} Frauen mit Nachname des Mannes, Geburtsname als „geb.“)</span></li>
+        ${plan.ohneNamen ? `<li>Ehepartner und Kinder nur als Name (ohne Datenblatt): ${zahl(plan.ohneNamen)}</li>` : ""}
         <li>Neue Familien: ${zahl(plan.familien.length)} · neue Eltern-Kind-Verbindungen: ${zahl(plan.kinder.length)}</li>
         <li>Neue Häuser/Orte: ${zahl(plan.haeuser.length)} · Stationen: ${zahl(plan.stationen.length)} (davon ${plan.stationenBestand} bei vorhandenen Personen)</li>
         ${plan.modus === "lebend" ? "" : `<li>Nicht importiert: ${plan.ausgelassen.lebend} evtl. lebend (eigener Durchgang danach), ${plan.ausgelassen.nicht} nicht ausgewählt</li>`}
@@ -302,8 +303,15 @@ const ImportAssistent = (() => {
     return {
       vorname: hp.vorname, nachname, Ledigenname: hp.import_ledigenname || null, geschlecht: hp.geschlecht || null,
       geburtsdatum: g.geburtsdatum, geburtsjahr: g.geburtsjahr, sterbedatum: t.sterbedatum, sterbejahr: t.sterbejahr,
-      Notiz: notiz || null, herkunft_quelle: haeuserText
+      Notiz: notiz || null, herkunft_quelle: haeuserText,
+      // v466: Ehepartner und Kinder, die (noch) keine eigene Person sind, als Namen (Paket 8/9)
+      ...(ohneListe(hp.partner_ohne_datenblatt).length ? { partner_ohne_datenblatt: ohneListe(hp.partner_ohne_datenblatt) } : {}),
+      ...(ohneListe(hp.kinder_ohne_datenblatt).length ? { kinder_ohne_datenblatt: ohneListe(hp.kinder_ohne_datenblatt) } : {})
     };
+  }
+  function ohneListe(liste) {
+    return (Array.isArray(liste) ? liste : []).map((x) => (typeof x === "string" ? { name: x } : x)).filter((x) => x && String(x.name || "").trim())
+      .map((x) => ({ name: String(x.name).trim(), ...(x.geburt ? { geburt: x.geburt } : {}), ...(x.heirat !== undefined ? { heirat: x.heirat || null } : {}) }));
   }
   const signatur = (o) => [o.vorname, o.nachname || "", o.Ledigenname || "", String(o.geburtsdatum || "").slice(0, 10), o.geburtsjahr || "", String(o.sterbedatum || "").slice(0, 10), o.sterbejahr || "", o.herkunft_quelle || ""].join("|");
   // Zuordnung Datei-Schlüssel → Personen-ID des ersten Imports (gespeichert oder über die Daten wiedergefunden)
@@ -365,6 +373,7 @@ const ImportAssistent = (() => {
       if (obj.Ledigenname && obj.Ledigenname !== obj.nachname) p.frauenUmbenannt++;
       zu.set(hp.key, { id: obj.id, neu: true, obj });
       p.personen.push(obj);
+      p.ohneNamen = (p.ohneNamen || 0) + (obj.partner_ohne_datenblatt?.length || 0) + (obj.kinder_ohne_datenblatt?.length || 0);
       p.befunde.push(...plausLebensdaten(obj));
     }
     const bestIds = [...new Set([...zu.values()].filter((x) => !x.neu).map((x) => x.id))];
@@ -479,6 +488,15 @@ const ImportAssistent = (() => {
       for (const hn of plan.hausNamen || []) {
         const { error: hnErr } = await sb.from("haeuser").update({ name: hn.name }).eq("id", hn.id).or("name.is.null,name.eq.");
         if (hnErr) debugLog(`⚠️ Hausname ${hn.name}: ${hnErr.message}`);
+      }
+      // v466: ohne die Spalten für Namen ohne Datenblatt (Paket 8/9) die Namen in die Notiz schreiben statt abzubrechen
+      if (plan.personen.some((x) => x.partner_ohne_datenblatt || x.kinder_ohne_datenblatt)) {
+        const { error: spErr } = await sb.from("personen").select("partner_ohne_datenblatt, kinder_ohne_datenblatt").limit(1);
+        if (spErr) for (const x of plan.personen) {
+          const namen = [...(x.partner_ohne_datenblatt || []).map((n) => `∞ ${n.name}`), ...(x.kinder_ohne_datenblatt || []).map((n) => `Kind ${n.name}${n.geburt ? ` (${n.geburt})` : ""}`)];
+          if (namen.length) x.Notiz = [x.Notiz, `Laut Hausblatt: ${namen.join(", ")}`].filter(Boolean).join("\n");
+          delete x.partner_ohne_datenblatt; delete x.kinder_ohne_datenblatt;
+        }
       }
       await schreibe("personen", plan.personen, "Personen", importId);
       await schreibe("familien", plan.familien, "Familien", importId);
