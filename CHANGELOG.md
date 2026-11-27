@@ -2,6 +2,7 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v468: Tagesblatt blättern: tagesblattAuswerten(d, { datum }), heuteVorJahrenZeigen({ versatz }) mit Knöpfen Vortag/Heute/Folgetag und Wischgeste (ontouchstart/ontouchend am Fenster, werden bei jedem komfortFenster zurückgesetzt); Texte „An diesem Tag vor … Jahren“; Rücksprung aus einer Person merkt den Tag; neuer Test tagesblatt_blaettern_test.py.
 - v467: Hausblätter-Import: Sammel-Insert setzte bei Personen ohne Namensliste partner_ohne_datenblatt/kinder_ohne_datenblatt auf NULL (NOT NULL) → Abbruch. Jetzt bekommen alle Zeilen beide Listen (leer, wenn nichts da). Test nachtrag_import_test.py prüft das.
 - v466: Hausblätter-Import: neuePersonZeile übernimmt partner_ohne_datenblatt/kinder_ohne_datenblatt aus der Datei (Namen, optional geburt/heirat), Vorschau zählt sie; fehlen die Spalten (Paket 8/9), kommen die Namen in die Notiz. Grundlage für den Nachtrag „Geschwister“ (Variante B) aus den Abschriften; neuer Test nachtrag_import_test.py.
 - v465: Rücksprung ins Tagesblatt: Antippen einer Person im Tagesblatt merkt Ausgangsreiter und Scrollstelle (tagesblattRueck); Schließen der Personenansicht öffnet das Tagesblatt wieder, ein Reiterwechsel daraus (z. B. „Wie sind wir verwandt?“) legt einen Verlaufseintrag {tab, tagesblatt} an, den „← Zurück“ (appZurueck) einlöst – im Stammbaum ohne Umweg über den Baumverlauf; neuer Test tagesblatt_zurueck_test.py.

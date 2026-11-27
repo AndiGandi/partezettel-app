@@ -1,4 +1,4 @@
-const CACHE_NAME = "partezettel-shell-v467";
+const CACHE_NAME = "partezettel-shell-v468";
 const LIB_CACHE = "partezettel-libs-v1";   // Bibliotheken (three.js) bleiben über App-Versionen hinweg erhalten
 const THREE_PREFIX = "https://cdn.jsdelivr.net/npm/three@0.160.0/";
 // v462: Supabase und jsPDF für den Start ohne Internet – online immer frisch vom Netz, offline aus dem Zwischenspeicher

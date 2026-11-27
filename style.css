@@ -2429,3 +2429,7 @@ body.offline-modus .person-card__audio-toggle,body.offline-modus .person-card__a
 .tree-familie-von{margin:.2rem 0 .5rem;padding:.55rem .8rem;border-radius:10px;background:#edf3eb;border:1px solid #cbdacb;color:#174f3b;font-size:.92rem;line-height:1.35}
 .tree-familie-von__tipp{color:#5f6b65;font-size:.82rem}
 .tree-mtn-karte.is-unten{box-shadow:0 0 0 3px #2f7a55;border-color:#2f7a55}
+
+/* v468: Tagesblatt blättern */
+.tb-blaettern { display: flex; gap: .5rem; justify-content: center; margin: .25rem 0 .75rem; }
+.tb-blaettern .btn { flex: 1 1 0; max-width: 11rem; padding: .45rem .6rem; touch-action: manipulation; }

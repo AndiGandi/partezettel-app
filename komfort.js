@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 467
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 468
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -185,6 +185,7 @@ function komfortFenster(inhaltHtml, { klasse = "" } = {}) {
   }
   const f = ov.querySelector(".komfort-fenster");
   f.className = `komfort-fenster ${klasse}`; f.innerHTML = inhaltHtml;
+  f.ontouchstart = null; f.ontouchend = null;   // v468: Wischen gehört nur zum Tagesblatt
   ov.hidden = false; document.body.classList.add("komfort-offen");
   return f;
 }
@@ -233,15 +234,23 @@ let komfortUserId = null;
 function einfuehrungGesehen() { if (komfortUserId) lsSet(KOMFORT.tour + komfortUserId, "1"); }
 
 // ---------- Heute vor … Jahren (einmal am Tag) ----------
-async function heuteVorJahrenZeigen({ auchLeer = true, scroll = 0 } = {}) {
+async function heuteVorJahrenZeigen({ auchLeer = true, scroll = 0, versatz = 0 } = {}) {
   // v419: Tagesblatt – Mondkalender, Namenstag, Bauernregel, Jahrestage (runde hervorgehoben, Verwandte zuerst)
   if (typeof chronikDatenLaden !== "function" || typeof tagesblattAuswerten !== "function") return false;
   const d = await chronikDatenLaden(false);
-  const r = tagesblattAuswerten(d, { leser: zugang?.rolle === "leser" });   // v420: ohne Personalisierung
+  // v468: Blättern – versatz in Tagen ab heute (Mittag, damit Sommerzeit-Wechsel nicht stört)
+  const h = typeof tagesMonatTag === "function" ? tagesMonatTag() : null;
+  const tag = h ? new Date(Date.UTC(h.jahr, h.monat - 1, h.tag + versatz, 11)) : new Date(Date.now() + versatz * 86400000);
+  const r = tagesblattAuswerten(d, { leser: zugang?.rolle === "leser", datum: tag });   // v420: ohne Personalisierung
   if (!r.ereignisse.length && !auchLeer) return false;
   const f = komfortFenster(`
-    <div class="tb-kalenderblatt" aria-hidden="true"><span>${new Date().toLocaleDateString("de-AT", { month: "short", timeZone: "Europe/Vienna" }).replace(".", "").toUpperCase()}</span><b>${new Date().toLocaleDateString("de-AT", { day: "numeric", timeZone: "Europe/Vienna" }).replace(".", "")}</b></div>
+    <div class="tb-kalenderblatt" aria-hidden="true"><span>${tag.toLocaleDateString("de-AT", { month: "short", timeZone: "Europe/Vienna" }).replace(".", "").toUpperCase()}</span><b>${tag.toLocaleDateString("de-AT", { day: "numeric", timeZone: "Europe/Vienna" }).replace(".", "")}</b></div>
     <h2 class="tour-titel">Tagesblatt</h2>
+    <div class="tb-blaettern">
+      <button type="button" class="btn btn--secondary" data-tb-schritt="-1" aria-label="Vortag">‹ Vortag</button>
+      <button type="button" class="btn btn--secondary" data-tb-schritt="0" ${versatz === 0 ? "disabled" : ""}>Heute</button>
+      <button type="button" class="btn btn--secondary" data-tb-schritt="1" aria-label="Folgetag">Folgetag ›</button>
+    </div>
     <div class="tagesblatt">${tagesblattHtml(r)}</div>
     <label class="heute-aus"><input type="checkbox" id="heute-aus-cb" ${lsGet(KOMFORT.heuteAus) ? "checked" : ""}> Nicht mehr automatisch zeigen (beim Start und um Mitternacht)</label>
     <div class="tour-knoepfe"><span></span><button type="button" class="btn btn--primary" data-heute="ok">Schließen</button></div>`, { klasse: "komfort-fenster--heute" });
@@ -249,23 +258,35 @@ async function heuteVorJahrenZeigen({ auchLeer = true, scroll = 0 } = {}) {
   f.querySelector('[data-heute="ok"]').addEventListener("click", komfortFensterZu);
   f.querySelectorAll(".chr-link").forEach((b) => b.addEventListener("click", () => {
     // v465: Rücksprung merken – „Zurück“ bzw. Schließen der Person führt wieder ins Tagesblatt (an dieselbe Stelle)
-    tagesblattRueck = { warten: true, scroll: f.scrollTop };
+    tagesblattRueck = { warten: true, scroll: f.scrollTop, versatz };
     komfortFensterZu();
   }));
+  // v468: vor- und zurückblättern – Knöpfe und Wischen nach links/rechts
+  const blaettern = (schritt) => { void heuteVorJahrenZeigen({ versatz: schritt === 0 ? 0 : versatz + schritt }).catch(() => {}); };
+  f.querySelectorAll("[data-tb-schritt]").forEach((b) => b.addEventListener("click", () => blaettern(Number(b.dataset.tbSchritt))));
+  let wisch = null;
+  // Das Fenster-Element wird wiederverwendet → Handler als Eigenschaft setzen (ersetzt den alten, häuft sich nicht an)
+  f.ontouchstart = (e) => { const t = e.touches[0]; wisch = e.touches.length === 1 ? { x: t.clientX, y: t.clientY } : null; };
+  f.ontouchend = (e) => {
+    if (!wisch) return;
+    const t = e.changedTouches[0], dx = t.clientX - wisch.x, dy = t.clientY - wisch.y;
+    wisch = null;
+    if (Math.abs(dx) > 70 && Math.abs(dx) > 2 * Math.abs(dy)) blaettern(dx < 0 ? 1 : -1);
+  };
   if (scroll) requestAnimationFrame(() => { f.scrollTop = scroll; });
   return true;
 }
 // v465: Rückkehr ins Tagesblatt nach dem Öffnen einer Person daraus
 let tagesblattRueck = null;
-function tagesblattWiederZeigen(scroll = 0) {
+function tagesblattWiederZeigen(scroll = 0, versatz = 0) {
   tagesblattRueck = null;
-  void heuteVorJahrenZeigen({ scroll }).catch(() => {});
+  void heuteVorJahrenZeigen({ scroll, versatz }).catch(() => {});
 }
 function tagesblattNachPersonPruefen() {
   setTimeout(() => {
     if (!tagesblattRueck?.warten) return;
     if (!document.getElementById("person-view-overlay")?.hidden || komfortFensterOffen()) return;
-    tagesblattWiederZeigen(tagesblattRueck.scroll);
+    tagesblattWiederZeigen(tagesblattRueck.scroll, tagesblattRueck.versatz || 0);
   }, 0);
 }
 document.getElementById("pv-close")?.addEventListener("click", tagesblattNachPersonPruefen);
@@ -326,7 +347,7 @@ document.addEventListener("click", (e) => {
   const vorher = document.querySelector(".tab-btn.is-active")?.dataset.tab;
   if (!tabWechselDurchZurueck && vorher && vorher !== b.dataset.tab) {
     // v465: kam der Wechsel aus einer Person, die im Tagesblatt angetippt wurde, führt „Zurück“ wieder ins Tagesblatt
-    if (tagesblattRueck?.warten) { tabVerlauf.push({ tab: vorher, tagesblatt: tagesblattRueck.scroll || 0 }); tagesblattRueck = null; }
+    if (tagesblattRueck?.warten) { tabVerlauf.push({ tab: vorher, tagesblatt: tagesblattRueck.scroll || 0, versatz: tagesblattRueck.versatz || 0 }); tagesblattRueck = null; }
     else tabVerlauf.push(vorher);
     if (tabVerlauf.length > 30) tabVerlauf.shift();
   }
@@ -345,7 +366,7 @@ function appZurueck() {
   const ziel = typeof eintrag === "string" ? eintrag : eintrag.tab;
   tabWechselDurchZurueck = true;
   try { document.querySelector(`.tab-btn[data-tab="${ziel}"]`)?.click(); } finally { tabWechselDurchZurueck = false; }
-  if (typeof eintrag === "object" && eintrag.tagesblatt !== undefined) tagesblattWiederZeigen(eintrag.tagesblatt);
+  if (typeof eintrag === "object" && eintrag.tagesblatt !== undefined) tagesblattWiederZeigen(eintrag.tagesblatt, eintrag.versatz || 0);
 }
 document.getElementById("app-zurueck")?.addEventListener("click", appZurueck);
 
@@ -506,9 +527,10 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 467;   // bei jeder Version mit hochzählen
+const APP_VERSION = 468;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [468, ["Tagesblatt: mit „‹ Vortag“ und „Folgetag ›“ blättern – oder einfach nach links/rechts wischen; „Heute“ springt zurück"]],
   [467, ["Hausblätter-Import: Fehler „null value in column partner_ohne_datenblatt“ behoben – Nachtrag Geschwister lässt sich jetzt einspielen"]],
   [466, ["Hausblätter-Import übernimmt jetzt auch Ehepartner und Kinder als Namen ohne Datenblatt – für den Nachtrag der Geschwister aus den Hausblättern"]],
   [465, ["Tagesblatt: Wer daraus eine Person öffnet (auch weiter zu „Wie sind wir verwandt?“), kommt mit „Zurück“ wieder ins Tagesblatt – an dieselbe Stelle"]],
