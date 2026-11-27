@@ -1,5 +1,5 @@
 // Familienspuren – Hausblätter-Import (nur Eigentümer)
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 466
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 467
 
 // ===================== v362: Hausblätter-Import, Stufe 1 (nur Eigentümer) =====================
 // Lädt eine Import-Datei (format „familienspuren-import“), zeigt Abweichungen bei vorhandenen
@@ -492,6 +492,8 @@ const ImportAssistent = (() => {
       // v466: ohne die Spalten für Namen ohne Datenblatt (Paket 8/9) die Namen in die Notiz schreiben statt abzubrechen
       if (plan.personen.some((x) => x.partner_ohne_datenblatt || x.kinder_ohne_datenblatt)) {
         const { error: spErr } = await sb.from("personen").select("partner_ohne_datenblatt, kinder_ohne_datenblatt").limit(1);
+        // v467: alle Zeilen eines Pakets brauchen dieselben Spalten – sonst schreibt Supabase bei den übrigen NULL (Spalte ist NOT NULL)
+        if (!spErr) for (const x of plan.personen) { x.partner_ohne_datenblatt = x.partner_ohne_datenblatt || []; x.kinder_ohne_datenblatt = x.kinder_ohne_datenblatt || []; }
         if (spErr) for (const x of plan.personen) {
           const namen = [...(x.partner_ohne_datenblatt || []).map((n) => `∞ ${n.name}`), ...(x.kinder_ohne_datenblatt || []).map((n) => `Kind ${n.name}${n.geburt ? ` (${n.geburt})` : ""}`)];
           if (namen.length) x.Notiz = [x.Notiz, `Laut Hausblatt: ${namen.join(", ")}`].filter(Boolean).join("\n");
