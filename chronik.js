@@ -711,7 +711,8 @@ const MOND = (() => {
     const mz = durchgaenge(hMond, beginn, 0.125 - 0.583 - 0.27 + 0.27);   // Oberrand, Refraktion
     const sz = durchgaenge(hSonne, beginn, -0.833);
     const beleuchtet = Math.round((1 - Math.cos(p * RAD)) / 2 * 100);
-    return { zeichen: z, wechsel, ereignis, zunehmend, aufsteigend, beleuchtet, mondAuf: mz.auf, mondUnter: mz.unter, sonneAuf: sz.auf, sonneUnter: sz.unter, laenge: m.lon };
+    return { zeichen: z, wechsel, ereignis, zunehmend, aufsteigend, beleuchtet, mondAuf: mz.auf, mondUnter: mz.unter, sonneAuf: sz.auf, sonneUnter: sz.unter, laenge: m.lon,
+      alter: p / 360 * 29.530589 };   // v470: Mondalter in Tagen seit Neumond
   }
   // v464: Ereignisse eines Tages wie im Bauernkalender – Mondphasen (auch Viertel), „über sich“/„unter sich“
   // (tiefster/höchster Mondstand = Wende der Deklination), auf-/absteigender Knoten (Mond quert die Ekliptik),
@@ -798,7 +799,22 @@ const MOND = (() => {
     for (const e of liste) if (e.typ === "sonne") { const z = zeichenVon(rev(sonnenLaengeScheinbar(new Date(e.zeit.getTime() + 60000)))); e.art = `Sonne tritt in ${z.name}`; e.symbol = z.bild; e.zeichen = z; }
     return liste.sort((a, b) => a.zeit - b.zeit);
   }
-  return { tag, ZEICHEN, phase, ereignisse, deklination, mondLaenge: (date) => mond(tage(date)).lon };
+  // v470: alle Vollmonde eines Jahres (für „3 Tage vor dem 11. Vollmond“); Ergebnis je Jahr zwischengespeichert
+  const vollmondCache = new Map();
+  function vollmonde(jahr) {
+    if (vollmondCache.has(jahr)) return vollmondCache.get(jahr);
+    const liste = [];
+    let nahe = new Date(Date.UTC(jahr, 0, 1) - 20 * 86400000);
+    for (let i = 0; i < 16; i++) {
+      const t = phaseGenau(2, nahe);
+      const j = Number(t.toLocaleString("en-CA", { timeZone: "Europe/Vienna", year: "numeric" }));
+      if (j === jahr && !liste.some((x) => Math.abs(x - t) < 86400000)) liste.push(t);
+      nahe = new Date(t.getTime() + 29.530589 * 86400000);
+    }
+    vollmondCache.set(jahr, liste);
+    return liste;
+  }
+  return { tag, ZEICHEN, phase, ereignisse, deklination, vollmonde, mondLaenge: (date) => mond(tage(date)).lon };
 })();
 // Namenstage: Hauptfest des Namenspatrons nach dem katholischen Kalender in Österreich (je Name ein Tag).
 // Schlüssel "MM-TT" -> [Patron, [Vornamen-Varianten im Bestand]]
@@ -1010,6 +1026,7 @@ function tagesblattAuswerten(d, opt = {}) {
       verwandte: opt.beziehung ? traeger.map((p) => ({ p, rel: opt.beziehung(p.id) })).filter((x) => x.rel).slice(0, 3) : [] };
   }
   r.regel = BAUERNREGELN[heute.md] || null;
+  try { r.holz = holzRegelnFuer(heute, r.mond, r.kirche); } catch { r.holz = []; }   // v470
   const P = new Map(d.personen.map((p) => [p.id, p]));
   const ereignisse = [];
   const md = heute.md;
@@ -1045,6 +1062,7 @@ function tagesblattHtml(r) {
     ${mondZeileHtml(r.mond, r.mondEreignisse || [])}
     ${namenstagZeileHtml(nt)}
     ${r.regel ? `<p class="tb-regel">🌾 <em>${chrEsc(r.regel)}</em></p>` : ""}
+    ${holzRegelnHtml(r.holz)}
     ${r.hundert ? `<p class="tb-hundert">🌦️ <strong>Hundertjähriger Kalender (${chrEsc(new Date(Date.UTC(r.datum.jahr, r.datum.monat - 1, 1)).toLocaleDateString("de-AT", { month: "long", timeZone: "UTC" }))}):</strong> ${chrEsc(r.hundert)}</p>` : ""}
     <h3 class="tb-titel">${r.istHeute === false ? "An diesem Tag vor … Jahren" : "Heute vor … Jahren"}</h3>
     ${r.ereignisse.length ? `<ul class="heute-liste tb-liste">${r.ereignisse.map(zeile).join("")}</ul>` : `<p class="tb-klein">${r.istHeute === false ? "An diesem Tag" : "Heute"} gibt es im Bestand keinen Geburts-, Todes- oder Hochzeitstag.</p>`}
@@ -1142,6 +1160,102 @@ function kirchenZeileHtml(k) {
   if (!k || (!k.feste.length && !k.sonntag)) return "";
   const teile = [k.sonntag, ...k.feste].filter((x, i, a) => x && a.indexOf(x) === i);
   return `<p class="tb-kirche${k.feiertag ? " tb-kirche--fest" : ""}">⛪ ${teile.map((x, i) => i === 0 ? `<strong>${chrEsc(x)}</strong>` : chrEsc(x)).join(" · ")}</p>`;
+}
+
+/* ===================== v470: Überlieferte Holz- und Mondregeln (Aufzeichnung aus dem Silbertal) ===================== */
+// Jede Regel prüft den Tag (Datum, Mondphase, Mondalter, Tierkreiszeichen, ob-/nidsigend, Frauentag).
+// Ergebnis: [{ gruppe: "Holz"|"Haus & Garten", art: "gut"|"nicht", text }]. Überliefertes Brauchtum – keine Empfehlung.
+const FRAUENTAGE = new Set(["01-01", "02-02", "03-25", "07-02", "08-15", "09-08", "09-12", "12-08"]);   // Marienfeste
+function holzRegelnFuer(datum, m, kirche) {
+  if (!m || !m.zeichen) return [];
+  const md = datum.md, mon = datum.monat, tg = datum.tag;
+  const z = m.zeichen.name, zu = m.zunehmend, ab = !m.zunehmend;
+  const neu = m.ereignis === "Neumond", voll = m.ereignis === "Vollmond";
+  const obsich = m.aufsteigend, untersich = !m.aufsteigend;
+  const alter = typeof m.alter === "number" ? m.alter : null;
+  const frauentag = FRAUENTAGE.has(md);
+  const nachbar = (d) => { const t = new Date(Date.UTC(datum.jahr, mon - 1, tg + d, 11)); return MOND.tag(t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()); };
+  const vorNeumond = nachbar(1).ereignis === "Neumond";
+  const nachVollmond = nachbar(-1).ereignis === "Vollmond";
+  const tageImMonat = new Date(Date.UTC(datum.jahr, mon, 0)).getUTCDate();
+  const toterMond = neu && z === "Waage";
+  const liste = [];
+  const holz = (art, text) => liste.push({ gruppe: "Holz", art, text });
+  const haus = (art, text) => liste.push({ gruppe: "Haus & Garten", art, text });
+  // --- Holz schlagen ---
+  if (md === "04-03" || md === "07-30" || md === "06-22") holz("gut", `Schwendtag${md === "06-22" ? " (Achazitag)" : ""}${ab ? " – im abnehmenden Mond besonders gut" : ""}${frauentag ? ", dazu Frauentag" : ""}; auch gut für Kugel- und Schrotgießer`);
+  if (mon === 12 && zu && alter !== null && alter <= 8) holz("gut", "In den ersten 8 Tagen nach dem Dezember-Neumond geschlagen, bleibt das Holz fest und gleimhart (am besten in einem weichen Zeichen)");
+  if (neu && z === "Skorpion") holz("gut", "Krecht- oder Machelholz (Buche u. a.) schlagen – wird hart und fest");
+  if (mon === 3 && tg >= 30 && ab && z === "Fische") holz("gut", "Holz schlagen, damit es nicht fault (letzte Märztage im abnehmenden Fisch)");
+  if (md === "03-01") holz("gut", "Holz schlagen, damit es nicht verbrennt – am besten nach Sonnenuntergang; wer alles Bauholz an diesem Tag schlägt, dessen Stadel widersteht den Flammen");
+  if ((mon === 10 || mon === 11) && neu && z === "Waage") holz("gut", "Neumond in der Waage im Oktober/November: Holz widersteht dem Feuer (versuchen bei Linde, Ahorn oder Esche)");
+  if (md === "09-27" && alter !== null && alter >= 2.5 && alter < 3.5) holz("gut", "Holz schlagen, damit es nicht schwindet (Mond drei Tage alt)");
+  if (frauentag && z === "Krebs") holz("gut", "Frauentag im Krebs: Holz schwindet nicht");
+  if (voll && z === "Fische") holz("gut", "Zur Stunde des Vollmonds im Fisch geschlagen, schwindet das Holz nicht");
+  if (neu && z === "Steinbock") holz("gut", "Neumond im Steinbock: Holz schwindet nicht");
+  if (mon === 10 && zu && alter !== null && alter <= 7.4) holz("gut", "Brennholz arbeiten, damit es gut nachwächst (erstes Viertel im Oktober)");
+  if (zu && (z === "Fische" || z === "Krebs")) holz("gut", "Sägehölzer schlagen (aufnehmender Fisch oder Krebs)");
+  if (mon === 11 && vorNeumond) holz("gut", "Tag vor dem November-Neumond: Holz wird nicht kluftig und rissig");
+  if (z === "Skorpion" && mon === 8 && nachVollmond) holz("gut", "Holz wird leicht (Skorpion im August, Mond einen Tag abgenommen)");
+  else if (z === "Skorpion") holz("gut", "Im Skorpion geschlagen wird das Holz leicht");
+  if (zu && z === "Löwe") holz("gut", "Aufnehmender Mond im Löwen: Holz wird leicht");
+  if (z === "Stier") holz("nicht", "Im Stier geschlagen bleibt das Holz schwer");
+  if (md === "06-24") holz("gut", "Zwischen 11 und 12 Uhr geschlagen, zerreißt das Holz nicht");
+  if (md === "02-26" && ab) holz("gut", `Krecht- oder Machelholz schlagen (abnehmender Mond)${z === "Krebs" ? " – noch besser, weil der Krebs darauf fällt" : ""}`);
+  if (vorNeumond && ab && (z === "Krebs" || z === "Skorpion")) holz("gut", "Kiefer schlagen, damit sie nicht verblaut (letzter Tag vor Neumond, Krebs oder Skorpion)");
+  if (ab && (z === "Fische" || z === "Krebs")) holz("gut", "Holz für Archen und Brücken schlagen (abnehmender Fisch oder Krebs)");
+  if (toterMond) holz("gut", "Toter Mond (Neumond in der Waage): Holz schwindet nicht, kann grün verarbeitet werden; Zaunsäulen setzen – werden von selbst fest, Nägel bleiben im Holz");
+  if (md === "12-21") holz("gut", "Zwischen 11 und 12 Uhr geschlagen, wird das Holz wie Stein, fault nicht und verzieht sich nicht");
+  if (md === "01-31" || md === "02-01" || md === "02-02") holz("gut", "Holz von diesem Tag verfault und verwurmt nicht und wird je älter je härter");
+  if (md === "03-25" || md === "06-29" || md === "12-31") holz("gut", `Holz schwindet nicht mehr${md === "12-31" ? " – der Silvestertag ist der beste" : ""}`);
+  if ((mon === 12 && tg >= 29) || md === "01-01") holz("gut", "Bauholz fault und wurmt nicht, wird wie ein Stein – der Wipfel muss aber gegen Tal fallen");
+  if (md === "01-29") holz("gut", "Vierter Tag nach Pauli Bekehrung: Holz fault nicht und wird hart");
+  if (mon === 3 && ab) holz("gut", "Buchenholz für Sapin- und Hackenstiele schneiden (abnehmender Mond, talwärts, über den Sommer liegen lassen)");
+  if (z === "Fische") holz("gut", "Für weiches, biegsames Holz (z. B. Fassreifen) im Fisch schlagen");
+  // 11. Vollmond: Christbäume
+  const vm11 = MOND.vollmonde(datum.jahr)[10];
+  if (vm11) {
+    const v = tagesMonatTag(new Date(vm11.getTime() - 3 * 86400000));
+    if (v.md === md) holz("gut", "Drei Tage vor dem 11. Vollmond: Christbäume schlagen – die Nadeln fallen nicht ab");
+  }
+  if (z === "Krebs" && ab && (mon === 11 || mon === 12)) holz("gut", "Christbäume: Krebs, unter sich gehender und abnehmender Mond ist sehr gut");
+  if (voll) holz("nicht", "Bei Vollmond gefälltes Holz trocknet sehr schlecht (voller Saft)");
+  if (z === "Jungfrau" || z === "Löwe") holz("nicht", "Im Löwen oder in der Jungfrau gefälltes Holz trocknet leicht und wird gelb – kein Holz fällen, auch kein Brennholz");
+  // Holz lagern
+  if (obsich) holz("gut", "Holz aufschichten und in die Holzhütte bringen (übersichgehender Mond)");
+  else holz("nicht", "Kein Holz aufschichten – bei untersichgehendem Mond wird es schimmlig und schwer");
+  if (z === "Steinbock") holz("gut", "Bretter aufspannen, Bauholz aufschichten: wird trocken, beim Hobeln glänzend");
+  // Schwenden
+  if (mon === 2 && tg > tageImMonat - 3 && ab) holz("gut", "Schwenden: Was jetzt abgehackt wird, kommt nicht mehr, sogar die Wurzel verfault");
+  if (md === "06-21" || md === "06-22" || md === "06-23") holz("gut", "Stauden, Heiden und Unkraut vor Mittag ausreißen – wachsen nicht mehr");
+  // --- Haus & Garten ---
+  // Gartenarbeiten nur in der passenden Jahreszeit anzeigen
+  const zeit = (...monate) => monate.includes(mon);
+  if (zu && z === "Fische" && zeit(3, 4, 5, 10, 11)) haus("gut", "Junge Bäume setzen (wachsender Mond im Fisch) – am besten nach Sonnenuntergang");
+  if (ab && (z === "Steinbock" || z === "Widder" || z === "Stier")) haus("gut", "Fässer reinigen, Kleider waschen, Holzböden und Kästen spülen (abnehmender Mond, trockenes Zeichen)");
+  if (ab) haus("gut", "Matratzen klopfen; Fundamente setzen; Möbel zusammenstellen, Holzböden legen, Fässer binden, verputzen und weißen");
+  if (z === "Zwillinge" && zeit(4, 5, 6)) haus("gut", "Bohnen stecken, besonders Stangenbohnen");
+  if (z === "Steinbock" && zeit(4, 5, 6)) haus("nicht", "Keine Bohnen stecken (hartes Zeichen)");
+  if (z === "Steinbock" && zeit(3, 4, 5, 6)) haus("gut", "Zwiebel, Knoblauch und Kraut setzen");
+  if (z === "Steinbock" && zeit(9, 10, 11)) haus("gut", "Kraut einhobeln");
+  if ((z === "Fische" || z === "Löwe") && zeit(9, 10, 11)) haus("nicht", "Kein Kraut einhobeln");
+  if (zu) haus("gut", "Dem Jungvieh die Hörner richten; Brunnenleitung reparieren");
+  if (zu && z === "Wassermann") haus("gut", "Wasserquellen fassen");
+  if (untersich && zeit(6, 7, 8, 9)) haus("gut", "Heustöcke ansetzen (untergehender Mond)");
+  if (zu && z !== "Löwe" && z !== "Skorpion" && zeit(5, 6, 7, 8, 9)) haus("gut", "Mähen (wachsender Mond)");
+  if ((z === "Löwe" || z === "Skorpion") && zeit(3, 4, 5, 6, 7, 8, 9, 10)) haus("nicht", "Nicht mähen, nicht jauchen und nicht düngen");
+  return liste;
+}
+function holzRegelnHtml(liste) {
+  if (!liste || !liste.length) return "";
+  const gruppe = (g) => {
+    const l = liste.filter((x) => x.gruppe === g);
+    if (!l.length) return "";
+    return `<p class="tb-holz__g">${g === "Holz" ? "🪓 Holz" : "🏡 Haus & Garten"}</p><ul class="tb-holz__l">${l.map((x) =>
+      `<li class="tb-holz--${x.art}"><span aria-hidden="true">${x.art === "gut" ? "✓" : "✗"}</span> ${chrEsc(x.text)}</li>`).join("")}</ul>`;
+  };
+  return `<details class="tb-holz"><summary>Nach alter Regel heute (${liste.length})</summary>${gruppe("Holz")}${gruppe("Haus & Garten")}
+    <p class="tb-klein">Überlieferte Holz- und Mondregeln aus dem Silbertal – Brauchtum, keine Empfehlung.</p></details>`;
 }
 
 /* ===================== v429: Allgemeine Suche („Alles durchsuchen“) ===================== */

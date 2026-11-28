@@ -2433,3 +2433,13 @@ body.offline-modus .person-card__audio-toggle,body.offline-modus .person-card__a
 /* v468: Tagesblatt blättern */
 .tb-blaettern { display: flex; gap: .5rem; justify-content: center; margin: .25rem 0 .75rem; }
 .tb-blaettern .btn { flex: 1 1 0; max-width: 11rem; padding: .45rem .6rem; touch-action: manipulation; }
+
+/* v470: alte Holz- und Mondregeln im Tagesblatt */
+.tb-holz { margin: 10px 0; border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 6px 10px; }
+.tb-holz summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.tb-holz__g { margin: 8px 0 2px; font-weight: 600; }
+.tb-holz__l { list-style: none; margin: 0; padding: 0; }
+.tb-holz__l li { margin: 3px 0; line-height: 1.4; }
+.tb-holz--gut span { color: #2f6b3a; font-weight: 700; }
+.tb-holz--nicht { color: #7a4a2a; }
+.tb-holz--nicht span { color: #a33; font-weight: 700; }

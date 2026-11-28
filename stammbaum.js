@@ -1,5 +1,5 @@
 // Familienspuren – Stammbaum: Ansichten, Verwandtschaft (Gebirge), Cousins, Lücken & Inseln, Plausibilität, 3D
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 468
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 470
 
 // ===================== Stammbaum v31 =====================
 let treeZoom = 1;
@@ -56,7 +56,7 @@ function treeAnzeigeName(p) {
   const nachname = String(p.nachname || "").trim();
   const ledig = String(p.Ledigenname || p.ledigenname || p.geburtsname || "").trim();
   let name = [vorname, nachname].filter(Boolean).join(" ").trim();
-  if (vorname && nachname && ledig && treeNormalizeName(nachname) !== treeNormalizeName(ledig) && treeNamensgleichMitPartner(p, nachname)) name = vorname;
+  // v469: Familienname immer zeigen (z. B. „Emilie Mangeng geb. Ganahl“) – früher fiel er weg, wenn er gleich dem des Ehepartners war
   return { name: name || "(ohne Namen)", ledig };
 }
 function treeKompaktLabel(p) {
@@ -3085,7 +3085,7 @@ async function renderBaum3D(rootId) {
   try {
     if (!treeModul3D) {
       stage.innerHTML = '<div class="tree-empty">3D-Ansicht wird geladen …</div>';
-      treeModul3D = await import("./tree3d.js?v=468");
+      treeModul3D = await import("./tree3d.js?v=470");
     }
     if (lauf !== tree3dLadeLauf || treeViewMode !== "tree3d") return;
     await treeModul3D.baumZeigen(stage, { rootId, gens, knoten, titel }, {

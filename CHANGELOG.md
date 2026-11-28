@@ -2,6 +2,8 @@
 
 Neueste zuerst. Früher stand diese Liste als Kommentar am Anfang von app.js.
 
+- v470: Tagesblatt: holzRegelnFuer/holzRegelnHtml – Regeln aus der Silbertaler Aufzeichnung (Datum, zu-/abnehmend, Mondalter, Zeichen, ob-/nidsigend, Frauentag, Toter Mond = Neumond in der Waage, 3 Tage vor dem 11. Vollmond über MOND.vollmonde), Gartenregeln nur in passenden Monaten; aufklappbar; neuer Test holzregeln_test.py.
+- v469: Stammbaum: treeAnzeigeName lässt den Familiennamen nicht mehr weg, wenn er gleich dem des Ehepartners ist (betraf alle Ansichten); neuer Test stammbaum_name_test.py.
 - v468: Tagesblatt blättern: tagesblattAuswerten(d, { datum }), heuteVorJahrenZeigen({ versatz }) mit Knöpfen Vortag/Heute/Folgetag und Wischgeste (ontouchstart/ontouchend am Fenster, werden bei jedem komfortFenster zurückgesetzt); Texte „An diesem Tag vor … Jahren“; Rücksprung aus einer Person merkt den Tag; neuer Test tagesblatt_blaettern_test.py.
 - v467: Hausblätter-Import: Sammel-Insert setzte bei Personen ohne Namensliste partner_ohne_datenblatt/kinder_ohne_datenblatt auf NULL (NOT NULL) → Abbruch. Jetzt bekommen alle Zeilen beide Listen (leer, wenn nichts da). Test nachtrag_import_test.py prüft das.
 - v466: Hausblätter-Import: neuePersonZeile übernimmt partner_ohne_datenblatt/kinder_ohne_datenblatt aus der Datei (Namen, optional geburt/heirat), Vorschau zählt sie; fehlen die Spalten (Paket 8/9), kommen die Namen in die Notiz. Grundlage für den Nachtrag „Geschwister“ (Variante B) aus den Abschriften; neuer Test nachtrag_import_test.py.

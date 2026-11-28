@@ -1,4 +1,4 @@
-// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 468
+// Familienspuren – Partezettel automatisch auswerten (nur Eigentümer). Version 470
 // Ablauf: Foto der Todesanzeige → KI liest Namen, Daten, Angehörige und findet Porträt/Anzeige
 // (Supabase Edge Function „partezettel-lesen“) → passende Person im Bestand suchen (Name, Geburtsdatum,
 // Ehepartner, Kinder) → Vorschlag prüfen → erst nach Bestätigung speichern.

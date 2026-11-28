@@ -1,5 +1,5 @@
 // Familienspuren – Komfort: Das bin ich, Vorlesen, Einführung, Tagesblatt, Zurück, Anmeldeprotokoll, Neuerungen, Papierkorb, Start
-// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 468
+// Teil der App-Logik (früher app.js). Reihenfolge der Dateien siehe index.html. Version 470
 
 /* =====================================================================
    v418: Komfort für weniger Geübte
@@ -527,9 +527,11 @@ document.getElementById("tree-relationship-open")?.addEventListener("click", ver
 
 
 // ---------- v435: Neue Version erkennen und Neuerungen zeigen ----------
-const APP_VERSION = 468;   // bei jeder Version mit hochzählen
+const APP_VERSION = 470;   // bei jeder Version mit hochzählen
 // Kurz und verständlich für alle Nutzer; neueste zuerst. Nur Dinge, die man bemerkt.
 const APP_NEUERUNGEN = [
+  [470, ["Tagesblatt: „Nach alter Regel heute“ – überlieferte Holz- und Mondregeln aus dem Silbertal (Holz schlagen, aufschichten, Schwendtage, Christbäume) sowie Haus- und Gartenarbeiten, passend zu Mond, Zeichen und Datum"]],
+  [469, ["Stammbaum: Bei verheirateten Frauen steht jetzt immer auch der Familienname, z. B. „Emilie Mangeng geb. Ganahl“"]],
   [468, ["Tagesblatt: mit „‹ Vortag“ und „Folgetag ›“ blättern – oder einfach nach links/rechts wischen; „Heute“ springt zurück"]],
   [467, ["Hausblätter-Import: Fehler „null value in column partner_ohne_datenblatt“ behoben – Nachtrag Geschwister lässt sich jetzt einspielen"]],
   [466, ["Hausblätter-Import übernimmt jetzt auch Ehepartner und Kinder als Namen ohne Datenblatt – für den Nachtrag der Geschwister aus den Hausblättern"]],
